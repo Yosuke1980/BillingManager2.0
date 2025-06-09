@@ -309,6 +309,11 @@ class MasterTab(QWidget):
         save_button.clicked.connect(self.save_direct_edit)
         button_box_layout.addWidget(save_button)
 
+        # 編集フィールドにEnterキーイベントを追加
+        for field_key, widget in self.edit_entries.items():
+            if hasattr(widget, 'returnPressed'):
+                widget.returnPressed.connect(self.save_direct_edit)
+
         # 初期状態では編集フォームを非表示
         self.edit_frame.hide()
 

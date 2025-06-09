@@ -400,6 +400,11 @@ class ExpenseTab(QWidget):
         save_button.clicked.connect(self.save_direct_edit)
         edit_button_layout.addWidget(save_button)
 
+        # 編集フィールドにEnterキーイベントを追加
+        for field_key, widget in self.edit_entries.items():
+            if hasattr(widget, 'returnPressed'):
+                widget.returnPressed.connect(self.save_direct_edit)
+
         # 初期状態では編集エリアは非表示
         edit_frame.hide()
         self.edit_frame = edit_frame
