@@ -115,127 +115,39 @@ class RadioBillingApp(QMainWindow):
         self.expense_tab.refresh_data()
         self.master_tab.refresh_data()
 
-        self.apply_stylesheet()
+        self.apply_stylesheet()  # 基本的な視認性を確保
 
     def apply_stylesheet(self):
+        # PC標準の配色でシンプルに
         style = """
             QTreeWidget {
-                font-size: 9pt;
+                font-size: 13px;
                 gridline-color: #d0d0d0;
-                selection-background-color: #CDEFFF;
-                /* alternate-background-colorを削除またはコメントアウト */
-                /* alternate-background-color: #f8f8f8; */
-            }
-            QTreeWidget::item {
-                padding: 2px;
-                border-bottom: 1px solid #e8e8e8;
-                height: 20px;
+                alternate-background-color: #f5f5f5;
             }
             QTreeWidget::item:selected {
-                background-color: #CDEFFF !important;
-                color: #000000;
-            }
-            QTreeWidget::header {
-                font-size: 9pt;
-                font-weight: bold;
-                background-color: #f0f0f0;
-                border: 1px solid #d0d0d0;
-                padding: 3px;
-            }
-            QGroupBox {
-                font-size: 10pt;
-                border: 2px solid #a0a0a0;
-                border-radius: 8px;
-                margin-top: 15px;
-                padding-top: 10px;
-                background-color: #fafafa;
-            }
-            QGroupBox:title {
-                subcontrol-origin: margin;
-                left: 15px;
-                padding: 0 8px 0 8px;
-                font-weight: bold;
-                color: #2c3e50;
-                background-color: white;
-            }
-            QPushButton {
-                font-size: 9pt;
-                padding: 8px 16px;
-                min-height: 18px;
-                border: 1px solid #bdc3c7;
-                border-radius: 4px;
-                background-color: #ecf0f1;
-            }
-            QPushButton:hover {
-                background-color: #d5dbdb;
-                border-color: #85929e;
-            }
-            QPushButton:pressed {
-                background-color: #bdc3c7;
+                background-color: #3399ff;
+                color: white;
             }
             QLabel {
-                font-size: 9pt;
+                font-size: 13px;
+            }
+            QPushButton {
+                font-size: 13px;
+                padding: 6px 12px;
+                min-height: 20px;
             }
             QLineEdit {
-                font-size: 9pt;
-                padding: 6px;
-                border: 1px solid #bdc3c7;
-                border-radius: 3px;
-            }
-            QLineEdit:focus {
-                border-color: #3498db;
+                font-size: 13px;
+                padding: 4px;
             }
             QComboBox {
-                font-size: 9pt;
-                padding: 6px;
-                border: 1px solid #bdc3c7;
-                border-radius: 3px;
-                background-color: white;
-            }
-            QComboBox:focus {
-                border-color: #3498db;
+                font-size: 13px;
+                padding: 4px;
             }
             QDateEdit {
-                font-size: 9pt;
-                padding: 6px;
-                border: 1px solid #bdc3c7;
-                border-radius: 3px;
-            }
-            QDateEdit:focus {
-                border-color: #3498db;
-            }
-            QFrame {
-                border: 1px solid #e8e8e8;
-                border-radius: 4px;
-                background-color: white;
-                margin: 2px;
-            }
-            QTabBar::tab {
-                font-size: 11pt;
-                font-weight: bold;
-                padding-top: 18px;      
-                padding-bottom: 18px;   
-                padding-left: 25px;
-                padding-right: 25px;
-                min-width: 220px;  
-                border: 1px solid #C4C4C3;
-                border-bottom-color: transparent;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                margin-right: 2px;
-                background-color: #F0F0F0;
-            }
-            QTabBar::tab:selected {
-                background-color: #FFFFFF;
-                border-bottom-color: #FFFFFF;
-                color: #0066CC;
-            }
-            QTabBar::tab:hover {
-                background-color: #E8E8E8;
-            }
-            QTabWidget::pane {
-                border: 1px solid gray;
-                border-radius: 3px;
+                font-size: 13px;
+                padding: 4px;
             }
         """
         self.setStyleSheet(style)

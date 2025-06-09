@@ -41,7 +41,7 @@ class MasterTab(QWidget):
         # 色分け設定
         self.monthly_color = QColor(173, 216, 230)  # ライトブルー（月額固定）
         self.count_based_color = QColor(255, 182, 193)  # ライトピンク（回数ベース）
-        self.default_color = QColor(255, 255, 255)  # 白（デフォルト）
+        self.default_color = QColor(248, 248, 248)  # オフホワイト（デフォルト）
 
         # レイアウト設定
         self.setup_ui()
@@ -324,11 +324,16 @@ class MasterTab(QWidget):
         """行に色を適用する共通メソッド"""
         background_color = self.get_color_for_payment_type(payment_type)
         brush = QBrush(background_color)
+        
+        # 明示的にテキスト色を黒に設定
+        text_brush = QBrush(QColor(0, 0, 0))  # 黒色
 
         for i in range(column_count):
             item.setBackground(i, brush)
+            item.setForeground(i, text_brush)  # テキスト色を明示的に設定
             # さらに確実にするため、データも設定
             item.setData(i, Qt.BackgroundRole, background_color)
+            item.setData(i, Qt.ForegroundRole, QColor(0, 0, 0))
 
     def filter_by_type(self):
         """種別でフィルタリング"""

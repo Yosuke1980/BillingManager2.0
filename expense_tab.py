@@ -79,7 +79,7 @@ class ExpenseTab(QWidget):
         # 色分け設定（より明確な色を使用）
         self.matched_color = QColor(144, 238, 144)  # ライトグリーン（照合済み）
         self.processing_color = QColor(255, 255, 153)  # 薄い黄色（処理中）
-        self.unprocessed_color = QColor(255, 255, 255)  # 白（未処理）
+        self.unprocessed_color = QColor(248, 248, 248)  # オフホワイト（未処理）
         self.completed_color = QColor(173, 216, 230)  # ライトブルー（完了）
 
         # レイアウト設定
@@ -421,11 +421,16 @@ class ExpenseTab(QWidget):
         """行に色を適用する共通メソッド"""
         background_color = self.get_color_for_status(status)
         brush = QBrush(background_color)
+        
+        # 明示的にテキスト色を黒に設定
+        text_brush = QBrush(QColor(0, 0, 0))  # 黒色
 
         for i in range(column_count):
             item.setBackground(i, brush)
+            item.setForeground(i, text_brush)  # テキスト色を明示的に設定
             # さらに確実にするため、データも設定
             item.setData(i, Qt.BackgroundRole, background_color)
+            item.setData(i, Qt.ForegroundRole, QColor(0, 0, 0))
 
         # 照合済みの場合は太字
         if status == "照合済":
