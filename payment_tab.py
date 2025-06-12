@@ -187,6 +187,9 @@ class PaymentTab(QWidget):
         # 複数選択を可能に
         self.tree.setSelectionMode(QTreeWidget.ExtendedSelection)
         self.tree.setAlternatingRowColors(False)  # 交互背景色を無効化（色分けのため）
+        
+        # ソート機能を有効化
+        self.tree.setSortingEnabled(True)
 
         # ヘッダークリックでソート機能（PyQt5対応版）
         self.tree.header().sectionClicked.connect(self.on_header_clicked)
@@ -701,42 +704,33 @@ class PaymentTab(QWidget):
     def match_with_expenses(self):
         """支払いテーブルと費用テーブルを照合する"""
         try:
-            # 確認ダイアログ
-            reply = QMessageBox.question(
-                self,
-                "確認",
-                "支払いデータと費用データの照合を実行しますか？\n\n"
-                "この処理により、金額・支払先コード・支払月が一致するデータが自動的に照合済みとしてマークされます。",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
-            )
-
-            if reply != QMessageBox.Yes:
-                return
-
+            # 現在のフィルター状態を保存
+            current_status = self.status_filter.currentText()
+            current_search = self.search_entry.text()
+            
             # 照合処理を実行
             self.app.status_label.setText("照合処理を実行中...")
             matched_count, not_matched_count = (
                 self.db_manager.match_expenses_with_payments()
             )
 
-            if matched_count == 0 and not_matched_count == 0:
-                QMessageBox.information(self, "情報", "照合対象のデータがありません")
-                return
-
             # データを更新表示
             self.refresh_data()  # 支払いデータを更新
             if hasattr(self.app, "expense_tab"):
                 self.app.expense_tab.refresh_data()  # 費用データも更新
-
-            # 結果メッセージ
-            result_msg = f"照合処理完了\n\n✅ 照合成功: {matched_count}件\n❌ 照合失敗: {not_matched_count}件"
+            
+            # フィルター状態を復元
+            if current_status:
+                self.status_filter.setCurrentText(current_status)
+            if current_search:
+                self.search_entry.setText(current_search)
+                
+            # フィルターを再適用
+            self.filter_by_status()
 
             self.app.status_label.setText(
                 f"照合完了: {matched_count}件一致、{not_matched_count}件不一致"
             )
-
-            QMessageBox.information(self, "照合完了", result_msg)
 
             log_message(
                 f"支払いと費用の照合: {matched_count}件一致、{not_matched_count}件不一致"

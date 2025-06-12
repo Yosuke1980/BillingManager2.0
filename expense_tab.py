@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QCompleter,
     QSplitter,
+    QDialog,
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, pyqtSlot, QStringListModel
 from PyQt5.QtGui import QColor, QFont, QBrush
@@ -253,6 +254,10 @@ class ExpenseTab(QWidget):
         match_button = QPushButton("💰 支払いと照合")
         match_button.clicked.connect(self.match_with_payments)
         match_group_layout.addWidget(match_button)
+        
+        compare_all_button = QPushButton("📊 全体比較確認")
+        compare_all_button.clicked.connect(self.show_payment_comparison_all)
+        match_group_layout.addWidget(compare_all_button)
 
         export_button = QPushButton("📤 CSVエクスポート")
         export_button.clicked.connect(self.export_to_csv)
@@ -304,14 +309,17 @@ class ExpenseTab(QWidget):
         # 複数選択を可能に
         self.tree.setSelectionMode(QTreeWidget.ExtendedSelection)
         self.tree.setAlternatingRowColors(False)  # 交互背景色を無効化（色分けのため）
-
-        # ヘッダークリックでソート機能（改善版）
-        self.tree.header().sectionClicked.connect(self.on_header_clicked)
-        self.tree.header().setSectionsClickable(True)
+        
+        # ソート機能を有効化
+        self.tree.setSortingEnabled(True)
         self.tree.header().setSectionsMovable(False)
 
         # 選択時イベント
         self.tree.itemSelectionChanged.connect(self.on_tree_select_for_edit)
+        
+        # 右クリックメニュー
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.show_context_menu)
 
         # 下部：レコード編集エリア
         edit_frame = QFrame()
@@ -388,6 +396,18 @@ class ExpenseTab(QWidget):
         edit_button_layout.setContentsMargins(0, 0, 0, 0)
         edit_layout.addWidget(edit_button_widget)
 
+        # 請求書催促管理ボタン
+        view_payments_button = QPushButton("📋 請求書確認")
+        view_payments_button.setFixedSize(120, 35)
+        view_payments_button.clicked.connect(self.show_related_payments)
+        edit_button_layout.addWidget(view_payments_button)
+        
+        # 同じ月・同じ支払い先の比較確認ボタン
+        compare_button = QPushButton("🔍 同月同支払い先比較")
+        compare_button.setFixedSize(140, 35)
+        compare_button.clicked.connect(self.show_payment_comparison)
+        edit_button_layout.addWidget(compare_button)
+        
         edit_button_layout.addStretch()
 
         cancel_button = QPushButton("❌ キャンセル")
@@ -1371,41 +1391,32 @@ class ExpenseTab(QWidget):
     def match_with_payments(self):
         """費用テーブルと支払いテーブルを照合し、一致するものをマークする"""
         try:
-            # 確認ダイアログ
-            reply = QMessageBox.question(
-                self,
-                "確認",
-                "費用データと支払いデータの照合を実行しますか？\n\n"
-                "この処理により、金額・支払先コード・支払月が一致するデータが自動的に照合済みとしてマークされます。",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
-            )
-
-            if reply != QMessageBox.Yes:
-                return
-
+            # 現在のフィルター状態を保存
+            current_month = self.payment_month_filter.currentText()
+            current_status = self.status_filter.currentText()
+            
             # 照合処理を実行
             self.app.status_label.setText("照合処理を実行中...")
             matched_count, not_matched_count = (
                 self.db_manager.match_expenses_with_payments()
             )
 
-            if matched_count == 0 and not_matched_count == 0:
-                QMessageBox.information(self, "情報", "照合対象のデータがありません")
-                return
-
             # データを更新表示
             self.refresh_data()  # 費用データを更新
             self.app.payment_tab.refresh_data()  # 支払いデータも更新
-
-            # 結果メッセージ
-            result_msg = f"照合処理完了\n\n✅ 照合成功: {matched_count}件\n❌ 照合失敗: {not_matched_count}件"
+            
+            # フィルター状態を復元
+            if current_month:
+                self.payment_month_filter.setCurrentText(current_month)
+            if current_status:
+                self.status_filter.setCurrentText(current_status)
+            
+            # フィルターを再適用
+            self.apply_all_filters()
 
             self.app.status_label.setText(
                 f"照合完了: {matched_count}件一致、{not_matched_count}件不一致"
             )
-
-            QMessageBox.information(self, "照合完了", result_msg)
 
             log_message(
                 f"費用と支払いの照合: {matched_count}件一致、{not_matched_count}件不一致"
@@ -1624,5 +1635,1105 @@ class ExpenseTab(QWidget):
             QMessageBox.critical(
                 self, "エラー", f"費用データのインポートに失敗しました: {e}"
             )
+
+    def show_context_menu(self, position):
+        """右クリックメニューを表示"""
+        item = self.tree.itemAt(position)
+        if not item:
+            return
+            
+        menu = QWidget()
+        menu.setWindowFlags(Qt.Popup)
+        menu.setStyleSheet("""
+            QWidget {
+                background-color: white;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+            }
+            QPushButton {
+                text-align: left;
+                padding: 8px 16px;
+                border: none;
+                background-color: transparent;
+            }
+            QPushButton:hover {
+                background-color: #e3f2fd;
+            }
+        """)
+        
+        layout = QVBoxLayout(menu)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # 関連支払いデータを表示
+        view_payments_btn = QPushButton("👁️ 同じ支払い先の支払いデータを表示")
+        view_payments_btn.clicked.connect(lambda: self.show_related_payments_for_item(item))
+        layout.addWidget(view_payments_btn)
+        
+        # 同月同支払い先比較
+        compare_btn = QPushButton("🔍 同月同支払い先比較")
+        compare_btn.clicked.connect(lambda: self.show_payment_comparison_dialog(item))
+        layout.addWidget(compare_btn)
+        
+        # 支払いタブに移動してフィルタ
+        goto_payments_btn = QPushButton("🔗 支払いタブで同じ支払い先を表示")
+        goto_payments_btn.clicked.connect(lambda: self.goto_payments_tab_filtered(item))
+        layout.addWidget(goto_payments_btn)
+        
+        # メニューを表示
+        global_position = self.tree.mapToGlobal(position)
+        menu.move(global_position)
+        menu.show()
+        
+        # メニューの外をクリックしたら閉じる
+        def close_menu():
+            menu.close()
+        
+        menu.mousePressEvent = lambda event: close_menu() if not menu.rect().contains(event.pos()) else None
+
+    def show_related_payments(self):
+        """編集中の費用データの関連支払いデータを表示"""
+        current_item = self.tree.currentItem()
+        if not current_item:
+            QMessageBox.information(self, "情報", "費用データを選択してください")
+            return
+        
+        self.show_related_payments_for_item(current_item)
+
+    def show_related_payments_for_item(self, item):
+        """指定された費用データの関連支払いデータを表示"""
+        try:
+            payee = item.text(2)  # 支払い先
+            payee_code = item.text(3)  # 支払い先コード
+            payment_date = item.text(5)  # 支払日
+            amount = item.text(4)  # 金額
+            
+            if not payee and not payee_code:
+                QMessageBox.information(self, "情報", "支払い先情報が不足しています")
+                return
+            
+            # 同じ月の支払いデータを検索
+            payment_month = payment_date[:7] if len(payment_date) >= 7 else ""
+            
+            # データベースから関連支払いデータを取得
+            conn = sqlite3.connect('billing.db')
+            cursor = conn.cursor()
+            
+            query = """
+                SELECT subject, project_name, payee, payee_code, amount, payment_date, status
+                FROM payments
+                WHERE (payee = ? OR payee_code = ?)
+            """
+            params = [payee, payee_code]
+            
+            if payment_month:
+                query += " AND substr(payment_date, 1, 7) = ?"
+                params.append(payment_month)
+                
+            query += " ORDER BY payment_date DESC, amount DESC"
+            
+            cursor.execute(query, params)
+            payment_rows = cursor.fetchall()
+            conn.close()
+            
+            if not payment_rows:
+                QMessageBox.information(self, "情報", 
+                    f"支払い先「{payee}」({payee_code})の関連支払いデータが見つかりません")
+                return
+            
+            # 関連支払いデータ表示ダイアログ
+            self.show_related_payments_dialog(payee, payee_code, payment_month, amount, payment_rows)
+            
+        except Exception as e:
+            log_message(f"関連支払いデータ表示エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"関連支払いデータの表示に失敗しました: {e}")
+
+    def show_related_payments_dialog(self, payee, payee_code, payment_month, selected_amount, payment_rows):
+        """請求書催促管理用の比較ダイアログ"""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTreeWidget, QTreeWidgetItem, QTextEdit, QSplitter
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"📋 請求書確認・催促管理 - {payee}")
+        dialog.setModal(True)
+        dialog.resize(1000, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # ヘッダー情報
+        header = QFrame()
+        header.setStyleSheet("background-color: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 10px;")
+        header_layout = QVBoxLayout(header)
+        
+        title_label = QLabel(f"📋 請求書確認・催促管理")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1976d2; margin-bottom: 5px;")
+        header_layout.addWidget(title_label)
+        
+        info_label = QLabel(f"💼 支払い先: {payee} ({payee_code})　|　📅 対象月: {payment_month}　|　💰 費用金額: {selected_amount}")
+        info_label.setStyleSheet("font-size: 12px; color: #424242;")
+        header_layout.addWidget(info_label)
+        
+        layout.addWidget(header)
+        
+        # メインエリア - 左右分割
+        splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(splitter)
+        
+        # 左側：支払いデータ一覧
+        left_frame = QFrame()
+        left_layout = QVBoxLayout(left_frame)
+        
+        left_title = QLabel("📄 同じ支払い先の支払いデータ")
+        left_title.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 5px;")
+        left_layout.addWidget(left_title)
+        
+        tree = QTreeWidget()
+        tree.setHeaderLabels(["金額", "支払日", "状態", "件名", "案件名"])
+        tree.setAlternatingRowColors(True)
+        left_layout.addWidget(tree)
+        
+        # 右側：催促管理エリア
+        right_frame = QFrame()
+        right_layout = QVBoxLayout(right_frame)
+        
+        right_title = QLabel("📞 催促管理")
+        right_title.setStyleSheet("font-weight: bold; font-size: 14px; margin-bottom: 5px;")
+        right_layout.addWidget(right_title)
+        
+        # 催促状況の判定と表示
+        催促_info = self.analyze_payment_status(selected_amount, payment_rows)
+        status_label = QLabel(催促_info["message"])
+        status_label.setStyleSheet(f"padding: 10px; background-color: {催促_info['color']}; border-radius: 4px; margin-bottom: 10px;")
+        status_label.setWordWrap(True)
+        right_layout.addWidget(status_label)
+        
+        # メモエリア
+        memo_label = QLabel("📝 催促メモ:")
+        memo_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        right_layout.addWidget(memo_label)
+        
+        memo_text = QTextEdit()
+        memo_text.setMaximumHeight(150)
+        memo_text.setPlaceholderText("催促の進捗や連絡内容をメモしてください...")
+        right_layout.addWidget(memo_text)
+        
+        # 催促アクションボタン
+        action_layout = QHBoxLayout()
+        
+        if 催促_info["needs_followup"]:
+            followup_button = QPushButton("📞 催促要")
+            followup_button.setStyleSheet("background-color: #ff9800; color: white; font-weight: bold; padding: 8px;")
+        else:
+            followup_button = QPushButton("✅ 請求済み")
+            followup_button.setStyleSheet("background-color: #4caf50; color: white; font-weight: bold; padding: 8px;")
+        
+        action_layout.addWidget(followup_button)
+        right_layout.addLayout(action_layout)
+        
+        right_layout.addStretch()
+        
+        splitter.addWidget(left_frame)
+        splitter.addWidget(right_frame)
+        splitter.setSizes([600, 400])
+        
+        # データを追加（金額順にソート）
+        sorted_rows = sorted(payment_rows, key=lambda x: float(str(x[4]).replace("¥", "").replace(",", "")) if x[4] else 0, reverse=True)
+        
+        selected_amount_float = 0
+        try:
+            selected_amount_float = float(selected_amount.replace("¥", "").replace(",", ""))
+        except:
+            pass
+        
+        for row in sorted_rows:
+            item = QTreeWidgetItem()
+            # 金額、支払日、状態、件名、案件名の順
+            item.setText(0, format_amount(row[4]) if row[4] else "")  # 金額
+            item.setText(1, str(row[5]) if row[5] else "")  # 支払日
+            item.setText(2, str(row[6]) if row[6] else "")  # 状態
+            item.setText(3, str(row[0]) if row[0] else "")  # 件名
+            item.setText(4, str(row[1]) if row[1] else "")  # 案件名
+            
+            # 金額による色分け
+            try:
+                row_amount = float(str(row[4]).replace("¥", "").replace(",", ""))
+                diff = abs(row_amount - selected_amount_float)
+                
+                if diff == 0:
+                    # 完全一致 - 緑
+                    item.setBackground(0, QColor("#c8e6c9"))
+                    item.setBackground(1, QColor("#c8e6c9"))
+                elif diff <= 1000:
+                    # 1000円以内の差 - 黄
+                    item.setBackground(0, QColor("#fff9c4"))
+                    item.setBackground(1, QColor("#fff9c4"))
+                elif diff <= 5000:
+                    # 5000円以内の差 - オレンジ
+                    item.setBackground(0, QColor("#ffe0b2"))
+                    item.setBackground(1, QColor("#ffe0b2"))
+                
+                # 金額を太字で強調
+                font = QFont()
+                font.setBold(True)
+                item.setFont(0, font)
+                
+            except:
+                pass
+                
+            tree.addTopLevelItem(item)
+        
+        # 列幅調整
+        tree.resizeColumnToContents(0)  # 金額
+        tree.resizeColumnToContents(1)  # 支払日
+        tree.resizeColumnToContents(2)  # 状態
+        
+        # ボタンエリア
+        button_layout = QHBoxLayout()
+        
+        goto_button = QPushButton("🔗 支払いタブで詳細確認")
+        goto_button.clicked.connect(lambda: self.goto_payments_tab_with_filter(payee, payee_code, payment_month))
+        button_layout.addWidget(goto_button)
+        
+        button_layout.addStretch()
+        
+        close_button = QPushButton("閉じる")
+        close_button.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_button)
+        
+        layout.addLayout(button_layout)
+        
+        dialog.exec_()
+    
+    def analyze_payment_status(self, selected_amount, payment_rows):
+        """請求状況を分析して催促の必要性を判定"""
+        try:
+            selected_amount_float = float(selected_amount.replace("¥", "").replace(",", ""))
+        except:
+            return {
+                "message": "❓ 金額の解析ができませんでした",
+                "color": "#f5f5f5",
+                "needs_followup": True
+            }
+        
+        if not payment_rows:
+            return {
+                "message": "⚠️ 請求書未着\n同じ支払い先からの請求が見つかりません。\n催促が必要です。",
+                "color": "#ffebee",
+                "needs_followup": True
+            }
+        
+        # 完全一致チェック
+        exact_matches = []
+        close_matches = []  # 1000円以内
+        
+        for row in payment_rows:
+            try:
+                row_amount = float(str(row[4]).replace("¥", "").replace(",", ""))
+                diff = abs(row_amount - selected_amount_float)
+                
+                if diff == 0:
+                    exact_matches.append(row)
+                elif diff <= 1000:
+                    close_matches.append(row)
+            except:
+                continue
+        
+        if exact_matches:
+            return {
+                "message": f"✅ 請求書到着済み\n同じ金額（{selected_amount}）の請求が{len(exact_matches)}件見つかりました。\n催促は不要です。",
+                "color": "#e8f5e8",
+                "needs_followup": False
+            }
+        elif close_matches:
+            amounts = [format_amount(row[4]) for row in close_matches]
+            return {
+                "message": f"⚡ 金額変更の可能性\n近い金額の請求が見つかりました：{', '.join(amounts)}\n金額変更について確認が必要です。",
+                "color": "#fff8e1",
+                "needs_followup": True
+            }
+        else:
+            return {
+                "message": f"📞 催促要\n同じ支払い先から{len(payment_rows)}件の請求がありますが、\n該当金額（{selected_amount}）の請求が見つかりません。\n催促が必要です。",
+                "color": "#ffebee",
+                "needs_followup": True
+            }
+
+    def goto_payments_tab_filtered(self, item):
+        """支払いタブに移動して同じ支払い先でフィルタ"""
+        payee = item.text(2)  # 支払い先
+        payee_code = item.text(3)  # 支払い先コード
+        payment_date = item.text(5)  # 支払日
+        payment_month = payment_date[:7] if len(payment_date) >= 7 else ""
+        
+        self.goto_payments_tab_with_filter(payee, payee_code, payment_month)
+
+    def goto_payments_tab_with_filter(self, payee, payee_code, payment_month):
+        """支払いタブに移動してフィルタを適用"""
+        try:
+            # 支払いタブに切り替え
+            self.app.tab_control.setCurrentWidget(self.app.payment_tab)
+            
+            # 検索条件を設定
+            if payee:
+                self.app.payment_tab.search_entry.setText(payee)
+            elif payee_code:
+                self.app.payment_tab.search_entry.setText(payee_code)
+            
+            # 検索実行
+            self.app.payment_tab.search_records()
+            
+            # 確認メッセージ
+            self.app.status_label.setText(f"支払いタブに移動しました: {payee} ({payee_code})")
+            
+        except Exception as e:
+            log_message(f"支払いタブへの移動エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"支払いタブへの移動に失敗しました: {e}")
+
+    def show_payment_comparison(self):
+        """同月同支払い先比較モーダルを表示"""
+        current_item = self.tree.currentItem()
+        if not current_item:
+            QMessageBox.information(self, "情報", "費用データを選択してください")
+            return
+        
+        self.show_payment_comparison_dialog(current_item)
+
+    def show_payment_comparison_dialog(self, item):
+        """同月同支払い先比較ダイアログ（2つのリスト表示版）"""
+        from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+                                   QPushButton, QTreeWidget, QTreeWidgetItem, 
+                                   QFrame, QSplitter, QGroupBox)
+        
+        payee = item.text(2)  # 支払い先
+        payee_code = item.text(3)  # 支払い先コード
+        payment_date = item.text(5)  # 支払日
+        amount = item.text(4)  # 金額
+        project_name = item.text(1)  # 案件名
+        
+        if not payee and not payee_code:
+            QMessageBox.information(self, "情報", "支払い先情報が不足しています")
+            return
+        
+        # 同じ月の検索条件（日付フォーマットを統一）
+        payment_month = payment_date[:7] if len(payment_date) >= 7 else ""
+        # 支払いデータ用の月フォーマット（2025/04形式）
+        payment_month_slash = payment_month.replace("-", "/") if payment_month else ""
+        
+        try:
+            # 支払いデータを取得（billing.db）
+            payment_conn = sqlite3.connect('billing.db')
+            payment_cursor = payment_conn.cursor()
+            
+            if payee_code and payee_code.strip():
+                # 支払いテーブル検索（支払い先コード優先）- 日付フォーマット2025/04/30
+                payment_cursor.execute("""
+                    SELECT subject, project_name, payee, payee_code, amount, payment_date, status
+                    FROM payments
+                    WHERE payee_code = ? AND substr(payment_date, 1, 7) = ?
+                    ORDER BY amount DESC, payment_date DESC
+                """, (payee_code.strip(), payment_month_slash))
+                payment_rows = payment_cursor.fetchall()
+            else:
+                # 支払いテーブル検索（支払い先名）- 日付フォーマット2025/04/30
+                payment_cursor.execute("""
+                    SELECT subject, project_name, payee, payee_code, amount, payment_date, status
+                    FROM payments
+                    WHERE payee LIKE ? AND substr(payment_date, 1, 7) = ?
+                    ORDER BY amount DESC, payment_date DESC
+                """, (f"%{payee.strip()}%", payment_month_slash))
+                payment_rows = payment_cursor.fetchall()
+            
+            payment_conn.close()
+            
+            # 費用データを取得（expenses.db）
+            expense_conn = sqlite3.connect('expenses.db')
+            expense_cursor = expense_conn.cursor()
+            
+            if payee_code and payee_code.strip():
+                # 費用テーブル検索（支払い先コード優先）
+                expense_cursor.execute("""
+                    SELECT id, project_name, payee, payee_code, amount, payment_date, status
+                    FROM expenses
+                    WHERE payee_code = ? AND substr(payment_date, 1, 7) = ?
+                    ORDER BY amount DESC, payment_date DESC
+                """, (payee_code.strip(), payment_month))
+                expense_rows = expense_cursor.fetchall()
+            else:
+                # 費用テーブル検索（支払い先名）
+                expense_cursor.execute("""
+                    SELECT id, project_name, payee, payee_code, amount, payment_date, status
+                    FROM expenses
+                    WHERE payee LIKE ? AND substr(payment_date, 1, 7) = ?
+                    ORDER BY amount DESC, payment_date DESC
+                """, (f"%{payee.strip()}%", payment_month))
+                expense_rows = expense_cursor.fetchall()
+            
+            expense_conn.close()
+            
+            # ダイアログ作成
+            dialog = QDialog(self)
+            dialog.setWindowTitle(f"🔍 同月同支払い先比較 - {payee}")
+            dialog.setModal(True)
+            dialog.resize(1400, 700)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # ヘッダー情報
+            header = QFrame()
+            header.setStyleSheet("background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #2196f3;")
+            header_layout = QVBoxLayout(header)
+            
+            title_label = QLabel("🔍 同月同支払い先比較")
+            title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1565c0; margin-bottom: 5px;")
+            header_layout.addWidget(title_label)
+            
+            info_label = QLabel(f"💼 選択費用: {project_name} | 🏢 支払い先: {payee} ({payee_code}) | 📅 月: {payment_month} | 💰 金額: {amount}")
+            info_label.setStyleSheet("font-size: 12px; color: #1565c0;")
+            header_layout.addWidget(info_label)
+            
+            result_label = QLabel(f"📊 検索結果: 支払い{len(payment_rows)}件 | 費用{len(expense_rows)}件")
+            result_label.setStyleSheet("font-size: 11px; color: #666; margin-top: 5px;")
+            header_layout.addWidget(result_label)
+            
+            layout.addWidget(header)
+            
+            # 目視確認用の説明
+            help_label = QLabel("💡 目視確認用: 左右のリストを比較して、請求書の到着状況や金額の一致を確認してください")
+            help_label.setStyleSheet("font-size: 12px; color: #666; margin-bottom: 10px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;")
+            layout.addWidget(help_label)
+            
+            # メインエリア（左右分割）
+            splitter = QSplitter(Qt.Horizontal)
+            layout.addWidget(splitter)
+            
+            # 左側：支払いテーブル
+            payment_frame = QGroupBox("💳 支払いテーブル")
+            payment_frame.setStyleSheet("QGroupBox { font-weight: bold; color: #1976d2; }")
+            payment_layout = QVBoxLayout(payment_frame)
+            
+            payment_tree = QTreeWidget()
+            payment_tree.setHeaderLabels(["金額", "支払日", "状態", "件名", "案件名", "支払い先コード"])
+            payment_tree.setAlternatingRowColors(True)
+            payment_layout.addWidget(payment_tree)
+            
+            # 右側：費用テーブル
+            expense_frame = QGroupBox("💰 費用テーブル")
+            expense_frame.setStyleSheet("QGroupBox { font-weight: bold; color: #d32f2f; }")
+            expense_layout = QVBoxLayout(expense_frame)
+            
+            expense_tree = QTreeWidget()
+            expense_tree.setHeaderLabels(["金額", "支払日", "状態", "案件名", "支払い先コード", "ID"])
+            expense_tree.setAlternatingRowColors(True)
+            expense_layout.addWidget(expense_tree)
+            
+            # スプリッターに追加
+            splitter.addWidget(payment_frame)
+            splitter.addWidget(expense_frame)
+            splitter.setSizes([700, 700])  # 左右同じサイズ
+            
+            # 選択された費用の金額（比較用）
+            selected_amount_float = 0
+            try:
+                selected_amount_float = float(amount.replace("¥", "").replace(",", ""))
+            except:
+                pass
+            
+            # 支払いデータを追加
+            for row in payment_rows:
+                payment_item = QTreeWidgetItem()
+                
+                row_amount_str = format_amount(row[4]) if row[4] else ""
+                payment_item.setText(0, row_amount_str)  # 金額
+                payment_item.setText(1, str(row[5]) if row[5] else "")  # 支払日
+                payment_item.setText(2, str(row[6]) if row[6] else "")  # 状態
+                payment_item.setText(3, str(row[0]) if row[0] else "")  # 件名
+                payment_item.setText(4, str(row[1]) if row[1] else "")  # 案件名
+                payment_item.setText(5, str(row[3]) if row[3] else "")  # 支払い先コード
+                
+                # 金額による色分け
+                try:
+                    row_amount = float(str(row[4]).replace("¥", "").replace(",", ""))
+                    diff = abs(row_amount - selected_amount_float)
+                    
+                    if diff == 0:
+                        # 完全一致 - 緑
+                        payment_item.setBackground(0, QColor("#c8e6c9"))
+                        payment_item.setBackground(1, QColor("#c8e6c9"))
+                    elif diff <= 1000:
+                        # 1000円以内の差 - 黄
+                        payment_item.setBackground(0, QColor("#fff9c4"))
+                        payment_item.setBackground(1, QColor("#fff9c4"))
+                except:
+                    pass
+                
+                payment_tree.addTopLevelItem(payment_item)
+            
+            # 費用データを追加
+            for row in expense_rows:
+                expense_item = QTreeWidgetItem()
+                
+                row_amount_str = format_amount(row[4]) if row[4] else ""
+                expense_item.setText(0, row_amount_str)  # 金額
+                expense_item.setText(1, str(row[5]) if row[5] else "")  # 支払日
+                expense_item.setText(2, str(row[6]) if row[6] else "")  # 状態
+                expense_item.setText(3, str(row[1]) if row[1] else "")  # 案件名
+                expense_item.setText(4, str(row[3]) if row[3] else "")  # 支払い先コード
+                expense_item.setText(5, str(row[0]) if row[0] else "")  # ID
+                
+                # 選択された項目を強調表示
+                if (str(row[1]) == project_name and 
+                    str(row[3]) == payee_code and 
+                    str(row[5]) == payment_date):
+                    expense_item.setBackground(0, QColor("#ffeb3b"))  # 選択項目は黄色
+                    expense_item.setBackground(1, QColor("#ffeb3b"))
+                    expense_item.setBackground(2, QColor("#ffeb3b"))
+                    font = QFont()
+                    font.setBold(True)
+                    for i in range(6):
+                        expense_item.setFont(i, font)
+                
+                expense_tree.addTopLevelItem(expense_item)
+            
+            # 列幅調整
+            for tree in [payment_tree, expense_tree]:
+                for i in range(tree.columnCount()):
+                    tree.resizeColumnToContents(i)
+            
+            # ボタンエリア
+            button_layout = QHBoxLayout()
+            
+            goto_button = QPushButton("🔗 支払いタブで詳細確認")
+            goto_button.clicked.connect(lambda: self.goto_payments_tab_with_filter(payee, payee_code, payment_month))
+            button_layout.addWidget(goto_button)
+            
+            button_layout.addStretch()
+            
+            close_button = QPushButton("閉じる")
+            close_button.clicked.connect(dialog.accept)
+            button_layout.addWidget(close_button)
+            
+            layout.addLayout(button_layout)
+            
+            dialog.exec_()
+            
+        except Exception as e:
+            log_message(f"同月同支払い先比較エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"同月同支払い先比較の表示に失敗しました: {e}")
+
+    def analyze_missing_invoice(self, selected_amount, payment_rows):
+        """請求書未着を分析"""
+        try:
+            selected_amount_float = float(selected_amount.replace("¥", "").replace(",", ""))
+        except:
+            return {
+                "message": "❓ 金額の解析ができませんでした",
+                "color": "#f5f5f5",
+                "is_missing": True
+            }
+        
+        if not payment_rows:
+            return {
+                "message": "❌ 請求書未着\n同じ支払い先・同じ月の支払いデータが見つかりません。\n催促が必要です。",
+                "color": "#f8d7da",
+                "is_missing": True
+            }
+        
+        # 完全一致チェック
+        exact_matches = []
+        close_matches = []  # 1000円以内
+        
+        for row in payment_rows:
+            try:
+                row_amount = float(str(row[4]).replace("¥", "").replace(",", ""))
+                diff = abs(row_amount - selected_amount_float)
+                
+                if diff == 0:
+                    exact_matches.append(row)
+                elif diff <= 1000:
+                    close_matches.append(row)
+            except:
+                continue
+        
+        if exact_matches:
+            return {
+                "message": f"✅ 請求書到着済み\n同じ金額（{selected_amount}）の請求が{len(exact_matches)}件見つかりました。\n催促は不要です。",
+                "color": "#d4edda",
+                "is_missing": False
+            }
+        elif close_matches:
+            amounts = [format_amount(row[4]) for row in close_matches]
+            return {
+                "message": f"⚡ 金額変更の可能性\n近い金額の請求が見つかりました：{', '.join(amounts)}\n金額変更について確認が必要です。",
+                "color": "#fff3cd",
+                "is_missing": True
+            }
+        else:
+            return {
+                "message": f"❌ 請求書未着\n同じ支払い先から{len(payment_rows)}件の請求がありますが、\n該当金額（{selected_amount}）の請求が見つかりません。\n催促が必要です。",
+                "color": "#f8d7da",
+                "is_missing": True
+            }
+
+    def show_missing_invoice_check_all(self):
+        """未処理項目の請求書未着確認一括表示"""
+        try:
+            # 未処理の費用データを取得
+            expense_rows, _ = self.db_manager.get_expense_data()
+            unprocessed_items = [row for row in expense_rows if row[6] == "未処理"]
+            
+            if not unprocessed_items:
+                QMessageBox.information(self, "情報", "未処理の費用データがありません")
+                return
+            
+            from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTreeWidget, QTreeWidgetItem, QScrollArea, QFrame
+            
+            # ダイアログ作成
+            dialog = QDialog(self)
+            dialog.setWindowTitle("🔍 未処理項目の請求書未着確認")
+            dialog.setModal(True)
+            dialog.resize(1400, 800)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # ヘッダー情報
+            header = QFrame()
+            header.setStyleSheet("background-color: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #ffc107;")
+            header_layout = QVBoxLayout(header)
+            
+            title_label = QLabel("🔍 未処理項目の請求書未着確認（一括確認）")
+            title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #856404; margin-bottom: 5px;")
+            header_layout.addWidget(title_label)
+            
+            info_label = QLabel(f"📊 対象: {len(unprocessed_items)}件の未処理費用データ")
+            info_label.setStyleSheet("font-size: 12px; color: #856404;")
+            header_layout.addWidget(info_label)
+            
+            layout.addWidget(header)
+            
+            # 一覧表示
+            tree = QTreeWidget()
+            tree.setHeaderLabels([
+                "判定", "案件名", "支払い先", "金額", "支払日", 
+                "一致件数", "近似件数", "対応状況"
+            ])
+            tree.setAlternatingRowColors(True)
+            layout.addWidget(tree)
+            
+            # 未着分析結果の統計
+            missing_count = 0
+            confirmed_count = 0
+            need_check_count = 0
+            
+            # 各未処理項目を分析
+            for expense_row in unprocessed_items:
+                payee = expense_row[2]  # 支払い先
+                payee_code = expense_row[3]  # 支払い先コード
+                amount = expense_row[4]  # 金額
+                payment_date = expense_row[5]  # 支払日
+                payment_month = payment_date[:7] if len(payment_date) >= 7 else ""
+                
+                # 関連支払いデータを取得（直接データベース検索）
+                conn = sqlite3.connect('billing.db')
+                cursor = conn.cursor()
+                
+                search_conditions = []
+                params = []
+                
+                # 支払い先コードがある場合は優先
+                if payee_code and str(payee_code).strip():
+                    search_conditions.append("payee_code = ?")
+                    params.append(str(payee_code).strip())
+                
+                # 支払い先名でも検索
+                if payee and str(payee).strip():
+                    search_conditions.append("payee LIKE ?")
+                    params.append(f"%{str(payee).strip()}%")
+                
+                if not search_conditions:
+                    payment_rows = []
+                else:
+                    query = """
+                        SELECT subject, project_name, payee, payee_code, amount, payment_date, status
+                        FROM payments
+                        WHERE ({})
+                    """.format(" OR ".join(search_conditions))
+                    
+                    # 月フィルタを追加
+                    if payment_month:
+                        query += " AND substr(payment_date, 1, 7) = ?"
+                        params.append(payment_month)
+                    
+                    query += " ORDER BY amount DESC, payment_date DESC"
+                    
+                    cursor.execute(query, params)
+                    payment_rows = cursor.fetchall()
+                
+                conn.close()
+                
+                # 分析
+                analysis = self.analyze_missing_invoice(format_amount(amount), payment_rows)
+                
+                # 統計を更新
+                if analysis["is_missing"]:
+                    if not payment_rows:
+                        missing_count += 1
+                    else:
+                        need_check_count += 1
+                else:
+                    confirmed_count += 1
+                
+                # 一致件数と近似件数をカウント
+                exact_matches = 0
+                close_matches = 0
+                
+                try:
+                    amount_float = float(str(amount))
+                    for payment_row in payment_rows:
+                        try:
+                            payment_amount = float(str(payment_row[4]).replace("¥", "").replace(",", ""))
+                            diff = abs(payment_amount - amount_float)
+                            if diff == 0:
+                                exact_matches += 1
+                            elif diff <= 1000:
+                                close_matches += 1
+                        except:
+                            continue
+                except:
+                    pass
+                
+                # ツリーアイテム作成
+                item = QTreeWidgetItem()
+                
+                # 判定結果
+                if analysis["is_missing"]:
+                    if not payment_rows:
+                        item.setText(0, "❌ 未着")
+                        item.setBackground(0, QColor("#f8d7da"))
+                        item.setText(7, "催促要")
+                    else:
+                        item.setText(0, "⚡ 要確認")
+                        item.setBackground(0, QColor("#fff3cd"))
+                        item.setText(7, "金額確認要")
+                else:
+                    item.setText(0, "✅ 到着済み")
+                    item.setBackground(0, QColor("#d4edda"))
+                    item.setText(7, "対応不要")
+                
+                # 基本情報
+                item.setText(1, expense_row[1])  # 案件名
+                item.setText(2, payee)  # 支払い先
+                item.setText(3, format_amount(amount))  # 金額
+                item.setText(4, payment_date)  # 支払日
+                item.setText(5, str(exact_matches))  # 一致件数
+                item.setText(6, str(close_matches))  # 近似件数
+                
+                # データを保存（ダブルクリック用）
+                item.setData(0, Qt.UserRole, expense_row)
+                
+                tree.addTopLevelItem(item)
+            
+            # 列幅調整
+            for i in range(tree.columnCount()):
+                tree.resizeColumnToContents(i)
+            
+            # 統計情報
+            stats_frame = QFrame()
+            stats_frame.setStyleSheet("background-color: #f8f9fa; padding: 10px; border-radius: 4px; margin-top: 10px;")
+            stats_layout = QHBoxLayout(stats_frame)
+            
+            stats_layout.addWidget(QLabel(f"❌ 未着・催促要: {missing_count}件"))
+            stats_layout.addWidget(QLabel(f"⚡ 金額確認要: {need_check_count}件"))
+            stats_layout.addWidget(QLabel(f"✅ 到着済み: {confirmed_count}件"))
+            stats_layout.addStretch()
+            
+            layout.addWidget(stats_frame)
+            
+            # ダブルクリックで詳細表示
+            def on_double_click(item, column):
+                expense_row = item.data(0, Qt.UserRole)
+                if expense_row:
+                    # 詳細ダイアログを表示
+                    temp_item = QTreeWidgetItem()
+                    temp_item.setText(1, expense_row[1])  # 案件名
+                    temp_item.setText(2, expense_row[2])  # 支払い先
+                    temp_item.setText(3, expense_row[3])  # 支払い先コード
+                    temp_item.setText(4, format_amount(expense_row[4]))  # 金額
+                    temp_item.setText(5, expense_row[5])  # 支払日
+                    temp_item.setText(6, expense_row[6])  # 状態
+                    
+                    self.show_missing_invoice_dialog(temp_item)
+            
+            tree.itemDoubleClicked.connect(on_double_click)
+            
+            # 説明
+            help_label = QLabel("💡 ダブルクリックで詳細確認ができます")
+            help_label.setStyleSheet("font-size: 11px; color: #666; margin-top: 5px;")
+            layout.addWidget(help_label)
+            
+            # ボタンエリア
+            button_layout = QHBoxLayout()
+            
+            close_button = QPushButton("閉じる")
+            close_button.clicked.connect(dialog.accept)
+            button_layout.addWidget(close_button)
+            
+            layout.addLayout(button_layout)
+            
+            dialog.exec_()
+            
+        except Exception as e:
+            log_message(f"一括請求書未着確認エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"一括請求書未着確認の表示に失敗しました: {e}")
+
+    def show_payment_comparison_all(self):
+        """全費用データの支払い比較を表示"""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTreeWidget, QTreeWidgetItem, QFrame, QProgressBar, QApplication
+        from PyQt5.QtCore import Qt
+        
+        try:
+            # 現在の表示データを取得
+            expense_data = []
+            for i in range(self.tree.topLevelItemCount()):
+                item = self.tree.topLevelItem(i)
+                if item:
+                    expense_data.append({
+                        'subject': item.text(0),
+                        'project_name': item.text(1),
+                        'payee': item.text(2),
+                        'payee_code': item.text(3),
+                        'amount': item.text(4),
+                        'payment_date': item.text(5),
+                        'status': item.text(6)
+                    })
+            
+            if not expense_data:
+                QMessageBox.information(self, "情報", "表示される費用データがありません")
+                return
+            
+            # ダイアログ作成
+            dialog = QDialog(self)
+            dialog.setWindowTitle("📊 全体支払い比較確認")
+            dialog.setModal(True)
+            dialog.resize(1200, 700)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # ヘッダー情報
+            header = QFrame()
+            header.setStyleSheet("background-color: #e8f5e8; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #4caf50;")
+            header_layout = QVBoxLayout(header)
+            
+            title_label = QLabel("📊 全体支払い比較確認")
+            title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #2e7d32; margin-bottom: 5px;")
+            header_layout.addWidget(title_label)
+            
+            info_label = QLabel(f"📋 対象件数: {len(expense_data)}件の費用データを分析中...")
+            info_label.setStyleSheet("font-size: 12px; color: #2e7d32;")
+            header_layout.addWidget(info_label)
+            
+            layout.addWidget(header)
+            
+            # プログレスバー
+            progress = QProgressBar()
+            progress.setMaximum(len(expense_data))
+            progress.setValue(0)
+            layout.addWidget(progress)
+            
+            # 結果表示ツリー
+            tree = QTreeWidget()
+            tree.setHeaderLabels(["件名", "案件名", "支払い先", "金額", "支払日", "状態", "比較結果", "同月件数"])
+            tree.setAlternatingRowColors(True)
+            layout.addWidget(tree)
+            
+            # データベース接続
+            conn = sqlite3.connect('billing.db')
+            cursor = conn.cursor()
+            
+            # 各費用データに対して支払い比較を実行
+            for idx, expense in enumerate(expense_data):
+                QApplication.processEvents()  # UIの応答性を維持
+                progress.setValue(idx + 1)
+                
+                payee = expense['payee']
+                payee_code = expense['payee_code']
+                payment_date = expense['payment_date']
+                amount = expense['amount']
+                
+                # 同じ月の支払いデータを検索
+                payment_month = payment_date[:7] if len(payment_date) >= 7 else ""
+                
+                try:
+                    # 支払い先コードを優先して検索
+                    if payee_code and payee_code.strip():
+                        cursor.execute("""
+                            SELECT COUNT(*) as count, 
+                                   GROUP_CONCAT(DISTINCT amount) as amounts,
+                                   GROUP_CONCAT(DISTINCT status) as statuses
+                            FROM payments
+                            WHERE payee_code = ? AND substr(payment_date, 1, 7) = ?
+                        """, (payee_code.strip(), payment_month))
+                    else:
+                        cursor.execute("""
+                            SELECT COUNT(*) as count,
+                                   GROUP_CONCAT(DISTINCT amount) as amounts,
+                                   GROUP_CONCAT(DISTINCT status) as statuses
+                            FROM payments
+                            WHERE payee LIKE ? AND substr(payment_date, 1, 7) = ?
+                        """, (f"%{payee.strip()}%", payment_month))
+                    
+                    result = cursor.fetchone()
+                    payment_count = result[0] if result else 0
+                    payment_amounts = result[1] if result and result[1] else ""
+                    payment_statuses = result[2] if result and result[2] else ""
+                    
+                    # 比較結果を判定
+                    if payment_count == 0:
+                        comparison_result = "❌ 支払いデータなし"
+                        item_color = "#ffebee"
+                    elif payment_count == 1:
+                        comparison_result = "✅ 1件一致"
+                        item_color = "#e8f5e8"
+                    else:
+                        comparison_result = f"⚠️ {payment_count}件存在"
+                        item_color = "#fff3e0"
+                    
+                    # ツリーアイテムを作成
+                    tree_item = QTreeWidgetItem()
+                    tree_item.setText(0, expense['subject'])
+                    tree_item.setText(1, expense['project_name'])
+                    tree_item.setText(2, expense['payee'])
+                    tree_item.setText(3, expense['amount'])
+                    tree_item.setText(4, expense['payment_date'])
+                    tree_item.setText(5, expense['status'])
+                    tree_item.setText(6, comparison_result)
+                    tree_item.setText(7, str(payment_count))
+                    
+                    # 背景色を設定
+                    for col in range(8):
+                        tree_item.setBackground(col, QColor(item_color))
+                    
+                    # 元のデータを保存（ダブルクリック用）
+                    tree_item.setData(0, Qt.UserRole, expense)
+                    
+                    tree.addTopLevelItem(tree_item)
+                    
+                except Exception as e:
+                    log_message(f"支払い比較エラー ({expense['subject']}): {e}")
+                    continue
+            
+            conn.close()
+            
+            # プログレスバーを非表示
+            progress.hide()
+            
+            # 統計情報を更新
+            total_items = tree.topLevelItemCount()
+            no_payment_count = 0
+            single_match_count = 0
+            multiple_match_count = 0
+            
+            for i in range(total_items):
+                item = tree.topLevelItem(i)
+                result_text = item.text(6)
+                if "支払いデータなし" in result_text:
+                    no_payment_count += 1
+                elif "1件一致" in result_text:
+                    single_match_count += 1
+                elif "件存在" in result_text:
+                    multiple_match_count += 1
+            
+            # 統計情報を表示
+            stats_frame = QFrame()
+            stats_frame.setStyleSheet("background-color: #f5f5f5; padding: 10px; border-radius: 4px; margin-top: 10px;")
+            stats_layout = QHBoxLayout(stats_frame)
+            
+            stats_label = QLabel(f"📊 統計: 総件数 {total_items}件 | ✅ 一致 {single_match_count}件 | ❌ 未払い {no_payment_count}件 | ⚠️ 複数 {multiple_match_count}件")
+            stats_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+            stats_layout.addWidget(stats_label)
+            
+            layout.addWidget(stats_frame)
+            
+            # ダブルクリックで詳細表示
+            def on_double_click(item, column):
+                expense_data = item.data(0, Qt.UserRole)
+                if expense_data:
+                    # 詳細比較ダイアログを表示
+                    temp_item = QTreeWidgetItem()
+                    temp_item.setText(0, expense_data['subject'])
+                    temp_item.setText(1, expense_data['project_name'])
+                    temp_item.setText(2, expense_data['payee'])
+                    temp_item.setText(3, expense_data['payee_code'])
+                    temp_item.setText(4, expense_data['amount'])
+                    temp_item.setText(5, expense_data['payment_date'])
+                    temp_item.setText(6, expense_data['status'])
+                    
+                    self.show_payment_comparison_dialog(temp_item)
+            
+            tree.itemDoubleClicked.connect(on_double_click)
+            
+            # 説明
+            help_label = QLabel("💡 ダブルクリックで個別の詳細比較を表示できます | ❌赤: 支払いなし | ✅緑: 正常 | ⚠️オレンジ: 複数支払い")
+            help_label.setStyleSheet("font-size: 11px; color: #666; margin-top: 5px;")
+            layout.addWidget(help_label)
+            
+            # ボタンエリア
+            button_layout = QHBoxLayout()
+            
+            # CSVエクスポートボタン
+            export_button = QPushButton("📤 結果をCSVエクスポート")
+            export_button.clicked.connect(lambda: self.export_comparison_results(tree))
+            button_layout.addWidget(export_button)
+            
+            button_layout.addStretch()
+            
+            close_button = QPushButton("閉じる")
+            close_button.clicked.connect(dialog.accept)
+            button_layout.addWidget(close_button)
+            
+            layout.addLayout(button_layout)
+            
+            dialog.exec_()
+            
+        except Exception as e:
+            log_message(f"全体支払い比較エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"全体支払い比較の表示に失敗しました: {e}")
+
+    def export_comparison_results(self, tree):
+        """比較結果をCSVにエクスポート"""
+        try:
+            from PyQt5.QtWidgets import QFileDialog
+            import csv
+            from datetime import datetime
+            
+            # ファイル保存ダイアログ
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "比較結果をCSVで保存",
+                f"payment_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                "CSV files (*.csv)"
+            )
+            
+            if filename:
+                with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    
+                    # ヘッダーを書き込み
+                    headers = []
+                    for col in range(tree.columnCount()):
+                        headers.append(tree.headerItem().text(col))
+                    writer.writerow(headers)
+                    
+                    # データを書き込み
+                    for i in range(tree.topLevelItemCount()):
+                        item = tree.topLevelItem(i)
+                        row_data = []
+                        for col in range(tree.columnCount()):
+                            row_data.append(item.text(col))
+                        writer.writerow(row_data)
+                
+                QMessageBox.information(self, "完了", f"比較結果を保存しました:\n{filename}")
+                
+        except Exception as e:
+            log_message(f"比較結果エクスポートエラー: {e}")
+            QMessageBox.critical(self, "エラー", f"比較結果のエクスポートに失敗しました: {e}")
 
     # ファイル終了確認用のコメント - expense_tab.py完了

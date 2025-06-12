@@ -197,6 +197,9 @@ class MasterTab(QWidget):
         # 複数選択を可能に
         self.tree.setSelectionMode(QTreeWidget.ExtendedSelection)
         self.tree.setAlternatingRowColors(False)  # 交互背景色を無効化（色分けのため）
+        
+        # ソート機能を有効化
+        self.tree.setSortingEnabled(True)
 
         # ヘッダークリックでソート機能（PyQt5バージョン互換対応）
         self.tree.header().sectionClicked.connect(self.on_header_clicked)
