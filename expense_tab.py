@@ -449,20 +449,22 @@ class ExpenseTab(QWidget):
         selected_status = self.status_filter.currentText()
 
         if selected_status == "すべて":
-            self.refresh_data()
+            # すべて表示する場合は、他のフィルタも適用されるよう改善
+            self.apply_all_filters()
             return
 
         # 現在表示されている項目をフィルタリング
         root = self.tree.invisibleRootItem()
+        visible_count = 0
         for i in range(root.childCount()):
             item = root.child(i)
             status = item.text(6)  # 状態列
-            item.setHidden(status != selected_status)
+            should_show = (status == selected_status)
+            item.setHidden(not should_show)
+            if should_show:
+                visible_count += 1
 
         # 表示件数を更新
-        visible_count = sum(
-            1 for i in range(root.childCount()) if not root.child(i).isHidden()
-        )
         self.app.status_label.setText(
             f"{selected_status}の費用データ: {visible_count}件"
         )
@@ -846,7 +848,7 @@ class ExpenseTab(QWidget):
 
         if selected_month_text == "すべて表示":
             log_message("すべて表示が選択されました")
-            self.refresh_data()
+            self.apply_all_filters()
             return
 
         # 現在選択されているアイテムのデータを取得
@@ -878,7 +880,11 @@ class ExpenseTab(QWidget):
             log_message("選択された月のデータが取得できませんでした")
             return
 
-        # 選択された年月でデータを絞り込み
+        # 月フィルタを適用
+        self.apply_month_filter(selected_month, selected_month_text)
+
+    def apply_month_filter(self, selected_month, selected_month_text):
+        """指定された月でフィルタリングを実行"""
         try:
             import sqlite3
 
@@ -935,10 +941,28 @@ class ExpenseTab(QWidget):
 
                 self.tree.addTopLevelItem(item)
 
-            # 状態表示の更新
-            self.app.status_label.setText(
-                f"{selected_month_text}の費用データ: {len(expense_rows)}件、照合済み: {matched_count}件"
-            )
+            # 状態フィルタを追加適用
+            status_filter = self.status_filter.currentText()
+            if status_filter and status_filter != "すべて":
+                root = self.tree.invisibleRootItem()
+                visible_count = 0
+                for i in range(root.childCount()):
+                    item = root.child(i)
+                    status = item.text(6)  # 状態列
+                    should_show = (status == status_filter)
+                    item.setHidden(not should_show)
+                    if should_show:
+                        visible_count += 1
+                
+                # 状態表示の更新
+                self.app.status_label.setText(
+                    f"{selected_month_text}の{status_filter}費用データ: {visible_count}件"
+                )
+            else:
+                # 状態表示の更新
+                self.app.status_label.setText(
+                    f"{selected_month_text}の費用データ: {len(expense_rows)}件、照合済み: {matched_count}件"
+                )
 
             log_message(
                 f"月フィルタ完了: {selected_month_text} - {len(expense_rows)}件表示"
@@ -952,6 +976,42 @@ class ExpenseTab(QWidget):
             self.app.status_label.setText(
                 f"エラー: データのフィルタリングに失敗しました"
             )
+
+    def apply_all_filters(self):
+        """すべてのフィルタを適用（検索、月、状態）"""
+        search_term = self.search_entry.text().strip()
+        selected_month_text = self.payment_month_filter.currentText()
+        selected_status = self.status_filter.currentText()
+
+        # まずデータをリフレッシュ
+        self.refresh_data()
+
+        # 検索フィルタを適用
+        if search_term:
+            self.search_records()
+            return
+
+        # 月フィルタを適用
+        if selected_month_text and selected_month_text != "すべて表示":
+            current_index = self.payment_month_filter.currentIndex()
+            selected_month = self.payment_month_filter.itemData(current_index)
+            
+            if not selected_month and "年" in selected_month_text and "月" in selected_month_text:
+                try:
+                    parts = selected_month_text.replace("年", "-").replace("月", "")
+                    year_month = parts.split("-")
+                    if len(year_month) == 2:
+                        selected_month = f"{year_month[0]}-{year_month[1].zfill(2)}"
+                except:
+                    pass
+            
+            if selected_month:
+                self.apply_month_filter(selected_month, selected_month_text)
+                return
+
+        # 状態フィルタを適用
+        if selected_status and selected_status != "すべて":
+            self.filter_by_status()
 
     def reset_search(self):
         """検索とフィルタをリセットしてすべてのデータを表示（改善版）"""
