@@ -204,6 +204,11 @@ class RadioBillingApp(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    
+    # Windows高DPI対応
+    app.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    
     window = RadioBillingApp()
     window.show()
     sys.exit(app.exec_())
