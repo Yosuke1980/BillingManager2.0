@@ -1238,11 +1238,13 @@ class DatabaseManager:
                 try:
                     normalized = date_str.replace("/", "-").replace(".", "-").split("-")
                     if len(normalized) >= 2:
-                        year = (
-                            normalized[0].zfill(4)
-                            if len(normalized[0]) == 2
-                            else normalized[0]
-                        )
+                        # 年の処理を修正：2桁の場合は20XXとして扱う
+                        if len(normalized[0]) == 2:
+                            year = "20" + normalized[0]
+                        elif len(normalized[0]) == 4:
+                            year = normalized[0]
+                        else:
+                            return None
                         month = normalized[1].zfill(2)
                         return f"{year}-{month}"
                 except:
@@ -1282,6 +1284,13 @@ class DatabaseManager:
                     amount_match = abs(expense_amount - payment_amount) < 0.01
                     code_match = expense_payee_code == payment_payee_code
                     month_match = expense_year_month == payment_year_month
+
+                    # デバッグ情報をログに出力
+                    if expense_payee_code == payment_payee_code or expense_amount == payment_amount:
+                        log_message(f"照合チェック - 費用ID:{expense_id}, 支払ID:{payment_id}")
+                        log_message(f"  コード: {expense_payee_code} vs {payment_payee_code} -> {code_match}")
+                        log_message(f"  金額: {expense_amount} vs {payment_amount} -> {amount_match}")
+                        log_message(f"  月: {expense_year_month} vs {payment_year_month} -> {month_match}")
 
                     if amount_match and code_match and month_match:
                         best_match = payment_id
