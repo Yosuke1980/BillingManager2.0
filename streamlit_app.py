@@ -34,6 +34,13 @@ st.markdown("""
         border-radius: 0.5rem;
         border-left: 4px solid #1f77b4;
     }
+    /* データテーブルの見やすさ改善 */
+    div[data-testid="stDataFrame"] {
+        font-size: 14px;
+    }
+    div[data-testid="stDataFrame"] table {
+        font-size: 14px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -145,15 +152,32 @@ class StreamlitBillingApp:
             st.warning("支払いデータがありません")
             return
         
+        # フィルター状態をセッション状態で管理
+        if 'payment_status_filter' not in st.session_state:
+            st.session_state.payment_status_filter = "すべて"
+        if 'payment_search_term' not in st.session_state:
+            st.session_state.payment_search_term = ""
+        
         # フィルター
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col1:
             status_options = ["すべて"] + df['status'].unique().tolist()
-            selected_status = st.selectbox("状態フィルター", status_options)
+            selected_status = st.selectbox(
+                "状態フィルター", 
+                status_options,
+                index=status_options.index(st.session_state.payment_status_filter) if st.session_state.payment_status_filter in status_options else 0,
+                key="payment_status_selectbox"
+            )
+            st.session_state.payment_status_filter = selected_status
         
         with col2:
-            search_term = st.text_input("検索（件名・支払い先）", "")
+            search_term = st.text_input(
+                "検索（件名・支払い先）", 
+                value=st.session_state.payment_search_term,
+                key="payment_search_input"
+            )
+            st.session_state.payment_search_term = search_term
         
         with col3:
             st.metric("総件数", len(df))
@@ -212,7 +236,12 @@ class StreamlitBillingApp:
                 display_df[columns_to_show],
                 use_container_width=True,
                 hide_index=True,
+                height=600,
                 column_config={
+                    "件名": st.column_config.TextColumn("件名", width="large"),
+                    "案件名": st.column_config.TextColumn("案件名", width="medium"), 
+                    "支払い先": st.column_config.TextColumn("支払い先", width="medium"),
+                    "コード": st.column_config.TextColumn("コード", width="small"),
                     "金額": st.column_config.TextColumn("金額", width="small"),
                     "支払日": st.column_config.DateColumn("支払日", width="small"),
                     "状態": st.column_config.TextColumn("状態", width="small")
@@ -228,6 +257,10 @@ class StreamlitBillingApp:
             st.warning("費用データがありません")
             return
         
+        # 月別フィルター状態をセッション状態で管理
+        if 'expense_month_filter' not in st.session_state:
+            st.session_state.expense_month_filter = "すべて"
+        
         # 月別フィルター
         df['payment_date'] = pd.to_datetime(df['payment_date'], errors='coerce')
         df['year_month'] = df['payment_date'].dt.strftime('%Y年%m月')
@@ -237,7 +270,13 @@ class StreamlitBillingApp:
             # NaN値を除外してからソート
             unique_months = df['year_month'].dropna().unique().tolist()
             month_options = ["すべて"] + sorted(unique_months, reverse=True)
-            selected_month = st.selectbox("月フィルター", month_options)
+            selected_month = st.selectbox(
+                "月フィルター", 
+                month_options,
+                index=month_options.index(st.session_state.expense_month_filter) if st.session_state.expense_month_filter in month_options else 0,
+                key="expense_month_selectbox"
+            )
+            st.session_state.expense_month_filter = selected_month
         
         # フィルタリング
         if selected_month != "すべて":
@@ -274,7 +313,16 @@ class StreamlitBillingApp:
             st.dataframe(
                 display_df[columns_to_show],
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
+                height=600,
+                column_config={
+                    "支払日": st.column_config.DateColumn("支払日", width="small"),
+                    "支払い先": st.column_config.TextColumn("支払い先", width="medium"),
+                    "コード": st.column_config.TextColumn("コード", width="small"),
+                    "案件名": st.column_config.TextColumn("案件名", width="medium"),
+                    "金額": st.column_config.TextColumn("金額", width="small"),
+                    "状態": st.column_config.TextColumn("状態", width="small")
+                }
             )
     
     def show_master_tab(self):
@@ -317,12 +365,30 @@ class StreamlitBillingApp:
             st.dataframe(
                 display_df[columns_to_show],
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
+                height=600,
+                column_config={
+                    "支払い先": st.column_config.TextColumn("支払い先", width="medium"),
+                    "コード": st.column_config.TextColumn("コード", width="small"),
+                    "案件名": st.column_config.TextColumn("案件名", width="medium"),
+                    "金額": st.column_config.TextColumn("金額", width="small"),
+                    "支払タイプ": st.column_config.TextColumn("支払タイプ", width="small"),
+                    "放送曜日": st.column_config.TextColumn("放送曜日", width="small"),
+                    "開始日": st.column_config.DateColumn("開始日", width="small"),
+                    "終了日": st.column_config.DateColumn("終了日", width="small")
+                }
             )
 
 def main():
     # タイトル
     st.markdown('<h1 class="main-header">📻 ラジオ局支払い・費用管理システム</h1>', unsafe_allow_html=True)
+    
+    # 照合完了メッセージを表示（一回のみ）
+    if st.session_state.get('matching_completed', False):
+        st.success(st.session_state.matching_result)
+        # フラグをリセット
+        st.session_state.matching_completed = False
+        del st.session_state.matching_result
     
     app = StreamlitBillingApp()
     
@@ -375,7 +441,9 @@ def main():
             try:
                 matched_count, not_matched_count = app.db_manager.match_expenses_with_payments()
                 if matched_count > 0:
-                    st.sidebar.success(f"照合完了: {matched_count}件一致、{not_matched_count}件未一致")
+                    # 照合完了フラグをセット
+                    st.session_state.matching_completed = True
+                    st.session_state.matching_result = f"照合完了: {matched_count}件一致、{not_matched_count}件未一致"
                     st.rerun()  # ページを再読み込み
                 else:
                     st.sidebar.info(f"照合結果: 新しい一致なし、{not_matched_count}件未一致")
