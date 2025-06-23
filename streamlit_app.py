@@ -19,10 +19,10 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2rem;
+        font-size: 1.5rem;
         font-weight: bold;
         color: #1f77b4;
-        margin-bottom: 1rem;
+        margin-bottom: 0.5rem;
     }
     .status-matched { background-color: #90EE90; padding: 2px 8px; border-radius: 4px; }
     .status-processing { background-color: #FFFF99; padding: 2px 8px; border-radius: 4px; }
@@ -30,16 +30,68 @@ st.markdown("""
     .status-unprocessed { background-color: #F8F8F8; padding: 2px 8px; border-radius: 4px; }
     .metric-card {
         background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
+        padding: 0.5rem;
+        border-radius: 0.3rem;
+        border-left: 3px solid #1f77b4;
     }
     /* データテーブルの見やすさ改善 */
     div[data-testid="stDataFrame"] {
-        font-size: 14px;
+        font-size: 12px;
     }
     div[data-testid="stDataFrame"] table {
-        font-size: 14px !important;
+        font-size: 12px !important;
+    }
+    /* Streamlitコンポーネントのサイズ最適化 */
+    .stSelectbox > div > div {
+        font-size: 12px !important;
+        padding: 0.25rem 0.5rem !important;
+    }
+    .stTextInput > div > div > input {
+        font-size: 12px !important;
+        padding: 0.25rem 0.5rem !important;
+        height: 2rem !important;
+    }
+    .stButton > button {
+        font-size: 12px !important;
+        padding: 0.25rem 0.75rem !important;
+        height: 2.2rem !important;
+        line-height: 1.2 !important;
+    }
+    .stRadio > div {
+        font-size: 12px !important;
+    }
+    .stRadio > div > label > div {
+        font-size: 12px !important;
+    }
+    /* メトリクス表示の最適化 */
+    div[data-testid="metric-container"] {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+    }
+    div[data-testid="metric-container"] > div {
+        font-size: 12px !important;
+    }
+    /* サイドバーの最適化 */
+    .css-1d391kg {
+        font-size: 12px !important;
+    }
+    .stSidebar .stSelectbox label {
+        font-size: 12px !important;
+    }
+    /* ヘッダーサイズ調整 */
+    h1, .stTitle {
+        font-size: 1.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    h2, .stHeader {
+        font-size: 1.25rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    h3, .stSubheader {
+        font-size: 1.1rem !important;
+        margin-bottom: 0.3rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
