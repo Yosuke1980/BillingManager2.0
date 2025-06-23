@@ -32,6 +32,12 @@ class PaymentTab(QWidget):
 
         # 動的フォントサイズを取得
         self.font_size = app.base_font_size
+        self.title_font_size = app.title_font_size
+        
+        # 動的サイズ計算
+        self.widget_min_width = max(80, int(self.font_size * 6))
+        self.button_min_width = max(60, int(self.font_size * 5))
+        self.search_min_width = max(200, int(self.font_size * 15))
 
         # ソート情報
         self.sort_info = {"column": None, "reverse": False}
@@ -90,13 +96,13 @@ class PaymentTab(QWidget):
         search_layout.addWidget(QLabel("📊 状態:"))
         self.status_filter = QComboBox()
         self.status_filter.addItems(["すべて", "未処理", "処理中", "処理済", "照合済"])
-        self.status_filter.setFixedWidth(100)
+        self.status_filter.setMinimumWidth(self.widget_min_width)
         self.status_filter.currentTextChanged.connect(self.filter_by_status)
         search_layout.addWidget(self.status_filter)
 
         search_layout.addWidget(QLabel("🔍 検索:"))
         self.search_entry = QLineEdit()
-        self.search_entry.setFixedWidth(300)
+        self.search_entry.setMinimumWidth(self.search_min_width)
         self.search_entry.setPlaceholderText("件名、案件名、支払い先で検索...")
         self.search_entry.returnPressed.connect(self.search_records)  # Enterキーで検索
         search_layout.addWidget(self.search_entry)
@@ -159,22 +165,15 @@ class PaymentTab(QWidget):
 
         # テーブルタイトル
         table_title = QLabel("💰 支払い情報一覧")
-        title_font_size = max(10, int(self.font_size * 0.8))
-        table_title.setFont(QFont("", title_font_size, QFont.Bold))
+        table_title.setFont(QFont("", self.title_font_size, QFont.Bold))
         table_title.setStyleSheet("color: #2c3e50; margin-bottom: 5px;")
         tree_layout.addWidget(table_title)
 
-        # ツリーウィジェットの作成
+        # ツリーウィジェットの作成（スタイルシートでフォントサイズ設定されるため重複削除）
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(
             ["件名", "案件名", "支払い先", "コード", "金額", "支払日", "状態"]
         )
-        
-        # ツリーウィジェットのフォントサイズを設定
-        tree_font = QFont()
-        tree_font.setPointSize(self.font_size)
-        self.tree.setFont(tree_font)
-        
         tree_layout.addWidget(self.tree)
 
         # 列の設定
@@ -233,7 +232,8 @@ class PaymentTab(QWidget):
             detail_layout.addWidget(QLabel(f"{field}:"), row, col)
 
             value_label = QLabel("")
-            value_label.setFixedWidth(150)
+            detail_label_width = max(120, int(self.font_size * 10))
+            value_label.setMinimumWidth(detail_label_width)
             value_label.setStyleSheet(
                 "background-color: #f8f9fa; padding: 2px; border: 1px solid #dee2e6;"
             )

@@ -76,6 +76,13 @@ class ExpenseTab(QWidget):
 
         # 動的フォントサイズを取得
         self.font_size = app.base_font_size
+        self.title_font_size = app.title_font_size
+        
+        # 動的サイズ計算
+        self.widget_min_width = max(80, int(self.font_size * 6))
+        self.button_min_width = max(60, int(self.font_size * 5))
+        self.search_min_width = max(150, int(self.font_size * 12))
+        self.button_min_size = max(30, int(self.font_size * 2.5))
 
         # ソート情報
         self.sort_info = {"column": None, "reverse": False}
@@ -144,7 +151,7 @@ class ExpenseTab(QWidget):
         search_layout.addWidget(QLabel("📅 支払い月:"))
         self.payment_month_filter = QComboBox()
         self.payment_month_filter.addItem("すべて表示")
-        self.payment_month_filter.setFixedWidth(120)
+        self.payment_month_filter.setMinimumWidth(self.widget_min_width + 20)
         self.payment_month_filter.currentTextChanged.connect(self.filter_by_month)
         search_layout.addWidget(self.payment_month_filter)
 
@@ -152,27 +159,27 @@ class ExpenseTab(QWidget):
         search_layout.addWidget(QLabel("📊 状態:"))
         self.status_filter = QComboBox()
         self.status_filter.addItems(["すべて", "未処理", "処理中", "照合済", "完了"])
-        self.status_filter.setFixedWidth(100)
+        self.status_filter.setMinimumWidth(self.widget_min_width)
         self.status_filter.currentTextChanged.connect(self.filter_by_status)
         search_layout.addWidget(self.status_filter)
 
         # 検索フィールド
         search_layout.addWidget(QLabel("🔍 検索:"))
         self.search_entry = QLineEdit()
-        self.search_entry.setFixedWidth(200)
+        self.search_entry.setMinimumWidth(self.search_min_width)
         self.search_entry.setPlaceholderText("案件名、支払い先で検索...")
         self.search_entry.returnPressed.connect(self.search_records)  # Enterキーで検索
         search_layout.addWidget(self.search_entry)
 
         # 検索ボタン
         search_button = QPushButton("検索")
-        search_button.setFixedSize(60, 30)
+        search_button.setMinimumSize(self.button_min_width, self.button_min_size)
         search_button.clicked.connect(self.search_records)
         search_layout.addWidget(search_button)
 
         # リセットボタン
         reset_button = QPushButton("リセット")
-        reset_button.setFixedSize(60, 30)
+        reset_button.setMinimumSize(self.button_min_width, self.button_min_size)
         reset_button.clicked.connect(self.reset_search)
         search_layout.addWidget(reset_button)
 
@@ -196,7 +203,7 @@ class ExpenseTab(QWidget):
         for year in range(current_year - 1, current_year + 3):
             self.target_year_combo.addItem(str(year))
         self.target_year_combo.setCurrentText(str(current_year))
-        self.target_year_combo.setFixedWidth(80)
+        self.target_year_combo.setMinimumWidth(max(60, int(self.font_size * 4)))
         master_group_layout.addWidget(self.target_year_combo)
 
         master_group_layout.addWidget(QLabel("年"))
@@ -206,7 +213,7 @@ class ExpenseTab(QWidget):
             self.target_month_combo.addItem(f"{month:02d}")
         current_month = datetime.now().month
         self.target_month_combo.setCurrentText(f"{current_month:02d}")
-        self.target_month_combo.setFixedWidth(60)
+        self.target_month_combo.setMinimumWidth(max(50, int(self.font_size * 3.5)))
         master_group_layout.addWidget(self.target_month_combo)
 
         master_group_layout.addWidget(QLabel("月"))
@@ -283,21 +290,15 @@ class ExpenseTab(QWidget):
 
         # テーブルタイトル
         table_title = QLabel("💼 費用管理一覧")
-        title_font_size = max(10, int(self.font_size * 0.8))
-        table_title.setFont(QFont("", title_font_size, QFont.Bold))
+        table_title.setFont(QFont("", self.title_font_size, QFont.Bold))
         table_title.setStyleSheet("color: #2c3e50; margin-bottom: 5px;")
         table_layout.addWidget(table_title)
 
-        # ツリーウィジェットの作成
+        # ツリーウィジェットの作成（スタイルシートでフォントサイズ設定されるため重複削除）
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(
             ["ID", "案件名", "支払い先", "コード", "金額", "支払日", "状態"]
         )
-        
-        # ツリーウィジェットのフォントサイズを設定
-        tree_font = QFont()
-        tree_font.setPointSize(self.font_size)
-        self.tree.setFont(tree_font)
         table_layout.addWidget(self.tree)
 
         # 列の設定
@@ -340,8 +341,7 @@ class ExpenseTab(QWidget):
 
         # 編集エリアタイトル
         edit_title = QLabel("✏️ レコード編集")
-        edit_title_font_size = max(10, int(self.font_size * 0.8))
-        edit_title.setFont(QFont("", edit_title_font_size, QFont.Bold))
+        edit_title.setFont(QFont("", self.title_font_size, QFont.Bold))
         edit_title.setStyleSheet("color: #2c3e50; margin-bottom: 8px;")
         edit_layout.addWidget(edit_title)
 
@@ -408,25 +408,28 @@ class ExpenseTab(QWidget):
 
         # 請求書催促管理ボタン
         view_payments_button = QPushButton("📋 請求書確認")
-        view_payments_button.setFixedSize(120, 35)
+        button_width = max(100, int(self.font_size * 8))
+        button_height = max(30, int(self.font_size * 2.5))
+        view_payments_button.setMinimumSize(button_width, button_height)
         view_payments_button.clicked.connect(self.show_related_payments)
         edit_button_layout.addWidget(view_payments_button)
         
         # 同じ月・同じ支払い先の比較確認ボタン
         compare_button = QPushButton("🔍 同月同支払い先比較")
-        compare_button.setFixedSize(140, 35)
+        compare_button_width = max(120, int(self.font_size * 10))
+        compare_button.setMinimumSize(compare_button_width, button_height)
         compare_button.clicked.connect(self.show_payment_comparison)
         edit_button_layout.addWidget(compare_button)
         
         edit_button_layout.addStretch()
 
         cancel_button = QPushButton("❌ キャンセル")
-        cancel_button.setFixedSize(100, 35)
+        cancel_button.setMinimumSize(self.button_min_width + 20, button_height)
         cancel_button.clicked.connect(self.cancel_direct_edit)
         edit_button_layout.addWidget(cancel_button)
 
         save_button = QPushButton("💾 保存")
-        save_button.setFixedSize(100, 35)
+        save_button.setMinimumSize(self.button_min_width + 20, button_height)
         save_button.clicked.connect(self.save_direct_edit)
         edit_button_layout.addWidget(save_button)
 

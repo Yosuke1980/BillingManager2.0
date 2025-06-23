@@ -37,6 +37,13 @@ class MasterTab(QWidget):
 
         # 動的フォントサイズを取得
         self.font_size = app.base_font_size
+        self.title_font_size = app.title_font_size
+        
+        # 動的サイズ計算
+        self.widget_min_width = max(80, int(self.font_size * 6))
+        self.button_min_width = max(60, int(self.font_size * 5))
+        self.search_min_width = max(150, int(self.font_size * 12))
+        self.button_min_size = max(30, int(self.font_size * 2.5))
 
         # ソート情報
         self.sort_info = {"column": None, "reverse": False}
@@ -92,14 +99,14 @@ class MasterTab(QWidget):
         search_layout.addWidget(QLabel("📊 種別:"))
         self.type_filter = QComboBox()
         self.type_filter.addItems(["すべて", "月額固定", "回数ベース"])
-        self.type_filter.setFixedWidth(120)
+        self.type_filter.setMinimumWidth(self.widget_min_width + 20)
         self.type_filter.currentTextChanged.connect(self.filter_by_type)
         search_layout.addWidget(self.type_filter)
 
         # 検索フィールド
         search_layout.addWidget(QLabel("🔍 検索:"))
         self.search_entry = QLineEdit()
-        self.search_entry.setFixedWidth(200)
+        self.search_entry.setMinimumWidth(self.search_min_width)
         self.search_entry.setPlaceholderText("案件名、支払い先で検索...")
         self.search_entry.returnPressed.connect(self.search_records)
         search_layout.addWidget(self.search_entry)
@@ -158,12 +165,11 @@ class MasterTab(QWidget):
 
         # テーブルタイトル
         table_title = QLabel("🏗️ 費用マスター一覧")
-        title_font_size = max(10, int(self.font_size * 0.8))
-        table_title.setFont(QFont("", title_font_size, QFont.Bold))
+        table_title.setFont(QFont("", self.title_font_size, QFont.Bold))
         table_title.setStyleSheet("color: #2c3e50; margin-bottom: 5px;")
         tree_layout.addWidget(table_title)
 
-        # ツリーウィジェットの作成
+        # ツリーウィジェットの作成（スタイルシートでフォントサイズ設定されるため重複削除）
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(
             [
@@ -178,12 +184,6 @@ class MasterTab(QWidget):
                 "放送曜日",
             ]
         )
-        
-        # ツリーウィジェットのフォントサイズを設定
-        tree_font = QFont()
-        tree_font.setPointSize(self.font_size)
-        self.tree.setFont(tree_font)
-        
         tree_layout.addWidget(self.tree)
 
         # 列の設定
@@ -260,29 +260,30 @@ class MasterTab(QWidget):
             label.setStyleSheet("font-weight: bold; color: #34495e;")
             form_layout.addWidget(label, row, col)
 
-            # 入力ウィジェット
+            # 入力ウィジェット（動的幅）
+            dynamic_width = max(80, int(self.font_size * width))
             if field_name == "id":
                 # IDは読み取り専用
                 entry = QLineEdit()
-                entry.setFixedWidth(width * 10)
+                entry.setMinimumWidth(dynamic_width)
                 entry.setReadOnly(True)
                 entry.setStyleSheet("background-color: #f8f9fa;")
             elif field_name == "payment_type":
                 # 種別はドロップダウン
                 entry = QComboBox()
                 entry.addItems(["月額固定", "回数ベース"])
-                entry.setFixedWidth(width * 10)
+                entry.setMinimumWidth(dynamic_width)
                 entry.currentIndexChanged.connect(self.on_payment_type_change)
             elif field_name in ["start_date", "end_date"]:
                 # 日付選択
                 entry = QDateEdit()
                 entry.setCalendarPopup(True)
-                entry.setFixedWidth(width * 10)
+                entry.setMinimumWidth(dynamic_width)
                 entry.setDate(QDate.currentDate())
             else:
                 # 通常のテキスト入力
                 entry = QLineEdit()
-                entry.setFixedWidth(width * 10)
+                entry.setMinimumWidth(dynamic_width)
 
             form_layout.addWidget(entry, row, col + 1)
             self.edit_entries[field_name] = entry
@@ -313,12 +314,14 @@ class MasterTab(QWidget):
         button_box_layout.addStretch()
 
         cancel_button = QPushButton("❌ キャンセル")
-        cancel_button.setFixedSize(100, 35)
+        button_width = max(80, int(self.font_size * 6))
+        button_height = max(30, int(self.font_size * 2.5))
+        cancel_button.setMinimumSize(button_width, button_height)
         cancel_button.clicked.connect(self.cancel_direct_edit)
         button_box_layout.addWidget(cancel_button)
 
         save_button = QPushButton("💾 保存")
-        save_button.setFixedSize(100, 35)
+        save_button.setMinimumSize(button_width, button_height)
         save_button.clicked.connect(self.save_direct_edit)
         button_box_layout.addWidget(save_button)
 
