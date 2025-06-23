@@ -78,11 +78,12 @@ class ExpenseTab(QWidget):
         self.font_size = app.base_font_size
         self.title_font_size = app.title_font_size
         
-        # 動的サイズ計算（コンパクト版）
-        self.widget_min_width = max(70, int(self.font_size * 5))
-        self.button_min_width = max(50, int(self.font_size * 4))
-        self.search_min_width = max(130, int(self.font_size * 10))
-        self.button_min_size = max(20, int(self.font_size * 1.6))
+        # 動的サイズ計算（統一版）
+        self.widget_min_width = max(80, int(self.font_size * 8))  # ドロップダウン対応
+        self.button_min_width = max(70, int(self.font_size * 7))  # 文字+パディング余裕
+        self.search_min_width = max(150, int(self.font_size * 15))  # 検索フィールド
+        self.button_min_height = max(24, int(self.font_size * 2.2))  # app.pyと統一
+        self.detail_label_width = max(100, int(self.font_size * 10))  # 詳細ラベル
 
         # ソート情報
         self.sort_info = {"column": None, "reverse": False}
@@ -173,13 +174,13 @@ class ExpenseTab(QWidget):
 
         # 検索ボタン
         search_button = QPushButton("検索")
-        search_button.setMinimumSize(self.button_min_width, self.button_min_size)
+        search_button.setMinimumSize(self.button_min_width, self.button_min_height)
         search_button.clicked.connect(self.search_records)
         search_layout.addWidget(search_button)
 
         # リセットボタン
         reset_button = QPushButton("リセット")
-        reset_button.setMinimumSize(self.button_min_width, self.button_min_size)
+        reset_button.setMinimumSize(self.button_min_width, self.button_min_height)
         reset_button.clicked.connect(self.reset_search)
         search_layout.addWidget(reset_button)
 
@@ -220,14 +221,17 @@ class ExpenseTab(QWidget):
 
         # マスター生成ボタン
         reflect_new_button = QPushButton("🆕 新規マスター項目を今月反映")
+        reflect_new_button.setMinimumHeight(self.button_min_height)
         reflect_new_button.clicked.connect(self.reflect_new_master_to_current_month)
         master_group_layout.addWidget(reflect_new_button)
 
         generate_next_button = QPushButton("➡️ 来月分生成")
+        generate_next_button.setMinimumHeight(self.button_min_height)
         generate_next_button.clicked.connect(self.generate_next_month_expenses)
         master_group_layout.addWidget(generate_next_button)
 
         generate_button = QPushButton("📋 選択月生成")
+        generate_button.setMinimumHeight(self.button_min_height)
         generate_button.clicked.connect(self.generate_selected_month_expenses)
         master_group_layout.addWidget(generate_button)
 
@@ -244,14 +248,17 @@ class ExpenseTab(QWidget):
         action_layout.addWidget(record_group)
 
         create_button = QPushButton("➕ 新規作成")
+        create_button.setMinimumSize(self.button_min_width, self.button_min_height)
         create_button.clicked.connect(self.create_record)
         record_group_layout.addWidget(create_button)
 
         delete_button = QPushButton("🗑️ 削除")
+        delete_button.setMinimumSize(self.button_min_width, self.button_min_height)
         delete_button.clicked.connect(self.delete_record)
         record_group_layout.addWidget(delete_button)
 
         duplicate_button = QPushButton("📄 複製")
+        duplicate_button.setMinimumSize(self.button_min_width, self.button_min_height)
         duplicate_button.clicked.connect(self.duplicate_record)
         record_group_layout.addWidget(duplicate_button)
 
@@ -262,18 +269,22 @@ class ExpenseTab(QWidget):
         action_layout.addWidget(match_group)
 
         match_button = QPushButton("💰 支払いと照合")
+        match_button.setMinimumSize(self.button_min_width, self.button_min_height)
         match_button.clicked.connect(self.match_with_payments)
         match_group_layout.addWidget(match_button)
         
         compare_all_button = QPushButton("📊 全体比較確認")
+        compare_all_button.setMinimumHeight(self.button_min_height)
         compare_all_button.clicked.connect(self.show_payment_comparison_all)
         match_group_layout.addWidget(compare_all_button)
 
         export_button = QPushButton("📤 CSVエクスポート")
+        export_button.setMinimumHeight(self.button_min_height)
         export_button.clicked.connect(self.export_to_csv)
         match_group_layout.addWidget(export_button)
 
         import_button = QPushButton("📥 CSVインポート")
+        import_button.setMinimumHeight(self.button_min_height)
         import_button.clicked.connect(self.import_from_csv)
         match_group_layout.addWidget(import_button)
 
@@ -390,7 +401,7 @@ class ExpenseTab(QWidget):
             else:
                 widget = QLineEdit()
 
-            widget.setMinimumWidth(150)
+            widget.setMinimumWidth(self.detail_label_width)
             edit_grid_layout.addWidget(widget, row, col + 1)
             self.edit_entries[field_key] = widget
 
@@ -408,27 +419,26 @@ class ExpenseTab(QWidget):
 
         # 請求書催促管理ボタン
         view_payments_button = QPushButton("📋 請求書確認")
-        button_width = max(80, int(self.font_size * 6))
-        view_payments_button.setMinimumSize(button_width, self.button_min_size)
+        view_payments_button.setMinimumSize(self.button_min_width, self.button_min_height)
         view_payments_button.clicked.connect(self.show_related_payments)
         edit_button_layout.addWidget(view_payments_button)
         
         # 同じ月・同じ支払い先の比較確認ボタン
         compare_button = QPushButton("🔍 同月同支払い先比較")
-        compare_button_width = max(100, int(self.font_size * 8))
-        compare_button.setMinimumSize(compare_button_width, self.button_min_size)
+        # 長いテキストのボタンは特別に幅を広げる
+        compare_button.setMinimumSize(max(120, int(self.font_size * 12)), self.button_min_height)
         compare_button.clicked.connect(self.show_payment_comparison)
         edit_button_layout.addWidget(compare_button)
         
         edit_button_layout.addStretch()
 
         cancel_button = QPushButton("❌ キャンセル")
-        cancel_button.setMinimumSize(self.button_min_width + 15, self.button_min_size)
+        cancel_button.setMinimumSize(self.button_min_width, self.button_min_height)
         cancel_button.clicked.connect(self.cancel_direct_edit)
         edit_button_layout.addWidget(cancel_button)
 
         save_button = QPushButton("💾 保存")
-        save_button.setMinimumSize(self.button_min_width + 15, self.button_min_size)
+        save_button.setMinimumSize(self.button_min_width, self.button_min_height)
         save_button.clicked.connect(self.save_direct_edit)
         edit_button_layout.addWidget(save_button)
 

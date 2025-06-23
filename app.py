@@ -146,21 +146,21 @@ class RadioBillingApp(QMainWindow):
             
             # Windowsの場合は追加の補正を適用
             if platform.system() == "Windows":
-                # Windows環境では文字が小さく見える傾向があるため補正（調整）
-                scale_factor *= 1.1
+                # Windows環境では文字が小さく見える傾向があるため補正（微調整）
+                scale_factor *= 1.05
                 
                 # Windows DPIスケーリング設定も考慮
                 device_pixel_ratio = screen.devicePixelRatio()
                 if device_pixel_ratio > 1.0:
                     scale_factor *= device_pixel_ratio * 0.8  # 過度な拡大を抑制
             
-            # 基本フォントサイズ（12px）にスケールファクターを適用（調整）
-            base_size = 12
+            # 基本フォントサイズ（11px）にスケールファクターを適用（全体縮小）
+            base_size = 11
             calculated_size = int(base_size * scale_factor)
             
             # 最小・最大値を設定（可読性を確保）
-            min_size = 10
-            max_size = 24
+            min_size = 9
+            max_size = 20
             font_size = max(min_size, min(max_size, calculated_size))
             
             log_message(f"フォントサイズ計算: DPI={dpi}, scale={scale_factor:.2f}, 結果={font_size}px")
@@ -171,12 +171,13 @@ class RadioBillingApp(QMainWindow):
             return 13  # エラー時はデフォルト値
 
     def apply_stylesheet(self):
-        # PC標準の配色でシンプルに（コンパクト版）
+        # PC標準の配色でシンプルに（バランス修正版）
         font_size = self.base_font_size
-        button_padding_v = max(2, int(font_size * 0.2))
-        button_padding_h = max(6, int(font_size * 0.5))
-        button_min_height = max(20, int(font_size * 1.6))
-        input_padding = max(2, int(font_size * 0.2))
+        button_padding_v = max(3, int(font_size * 0.3))
+        button_padding_h = max(8, int(font_size * 0.8))
+        button_min_height = max(24, int(font_size * 2.2))
+        input_padding = max(3, int(font_size * 0.3))
+        input_min_height = button_min_height  # 統一
         
         style = f"""
             QTreeWidget {{
@@ -195,21 +196,24 @@ class RadioBillingApp(QMainWindow):
                 font-size: {font_size}px;
                 padding: {button_padding_v}px {button_padding_h}px;
                 min-height: {button_min_height}px;
+                min-width: {int(font_size * 3)}px;
             }}
             QLineEdit {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
-                min-height: {button_min_height - 2}px;
+                min-height: {input_min_height}px;
             }}
             QComboBox {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
-                min-height: {button_min_height}px;
+                min-height: {input_min_height}px;
+                min-width: {int(font_size * 4)}px;
             }}
             QDateEdit {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
-                min-height: {button_min_height}px;
+                min-height: {input_min_height}px;
+                min-width: {int(font_size * 6)}px;
             }}
         """
         self.setStyleSheet(style)
