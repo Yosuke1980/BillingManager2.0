@@ -43,7 +43,7 @@ class MasterTab(QWidget):
         self.widget_min_width = max(80, int(self.font_size * 8))  # ドロップダウン対応
         self.button_min_width = max(70, int(self.font_size * 7))  # 文字+パディング余裕
         self.search_min_width = max(150, int(self.font_size * 15))  # 検索フィールド
-        self.button_min_height = max(24, int(self.font_size * 2.2))  # app.pyと統一
+        self.button_min_height = max(20, int(self.font_size * 1.8))  # app.pyと統一
         self.detail_label_width = max(100, int(self.font_size * 10))  # 詳細ラベル
 
         # ソート情報
