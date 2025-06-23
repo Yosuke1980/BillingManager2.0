@@ -35,6 +35,9 @@ class MasterTab(QWidget):
         self.db_manager = app.db_manager
         self.status_label = app.status_label
 
+        # 動的フォントサイズを取得
+        self.font_size = app.base_font_size
+
         # ソート情報
         self.sort_info = {"column": None, "reverse": False}
 
@@ -155,7 +158,8 @@ class MasterTab(QWidget):
 
         # テーブルタイトル
         table_title = QLabel("🏗️ 費用マスター一覧")
-        table_title.setFont(QFont("", 10, QFont.Bold))
+        title_font_size = max(10, int(self.font_size * 0.8))
+        table_title.setFont(QFont("", title_font_size, QFont.Bold))
         table_title.setStyleSheet("color: #2c3e50; margin-bottom: 5px;")
         tree_layout.addWidget(table_title)
 
@@ -174,6 +178,12 @@ class MasterTab(QWidget):
                 "放送曜日",
             ]
         )
+        
+        # ツリーウィジェットのフォントサイズを設定
+        tree_font = QFont()
+        tree_font.setPointSize(self.font_size)
+        self.tree.setFont(tree_font)
+        
         tree_layout.addWidget(self.tree)
 
         # 列の設定
