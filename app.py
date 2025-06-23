@@ -192,6 +192,14 @@ class RadioBillingApp(QMainWindow):
             QLabel {{
                 font-size: {font_size}px;
             }}
+            QGroupBox {{
+                font-size: {font_size}px;
+                font-weight: bold;
+            }}
+            QGroupBox::title {{
+                font-size: {font_size}px;
+                font-weight: bold;
+            }}
             QPushButton {{
                 font-size: {font_size}px;
                 padding: {button_padding_v}px {button_padding_h}px;
