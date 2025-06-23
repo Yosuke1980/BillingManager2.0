@@ -34,10 +34,11 @@ class PaymentTab(QWidget):
         self.font_size = app.base_font_size
         self.title_font_size = app.title_font_size
         
-        # 動的サイズ計算
-        self.widget_min_width = max(80, int(self.font_size * 6))
-        self.button_min_width = max(60, int(self.font_size * 5))
-        self.search_min_width = max(200, int(self.font_size * 15))
+        # 動的サイズ計算（コンパクト版）
+        self.widget_min_width = max(70, int(self.font_size * 5))
+        self.button_min_width = max(50, int(self.font_size * 4))
+        self.search_min_width = max(180, int(self.font_size * 12))
+        self.button_min_height = max(20, int(self.font_size * 1.6))
 
         # ソート情報
         self.sort_info = {"column": None, "reverse": False}
@@ -232,7 +233,7 @@ class PaymentTab(QWidget):
             detail_layout.addWidget(QLabel(f"{field}:"), row, col)
 
             value_label = QLabel("")
-            detail_label_width = max(120, int(self.font_size * 10))
+            detail_label_width = max(100, int(self.font_size * 8))
             value_label.setMinimumWidth(detail_label_width)
             value_label.setStyleSheet(
                 "background-color: #f8f9fa; padding: 2px; border: 1px solid #dee2e6;"

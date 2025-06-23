@@ -171,12 +171,12 @@ class RadioBillingApp(QMainWindow):
             return 13  # エラー時はデフォルト値
 
     def apply_stylesheet(self):
-        # PC標準の配色でシンプルに（バランス調整版）
+        # PC標準の配色でシンプルに（コンパクト版）
         font_size = self.base_font_size
-        button_padding_v = max(4, int(font_size * 0.4))
-        button_padding_h = max(8, int(font_size * 0.7))
-        button_min_height = max(24, int(font_size * 2.0))
-        input_padding = max(3, int(font_size * 0.25))
+        button_padding_v = max(2, int(font_size * 0.2))
+        button_padding_h = max(6, int(font_size * 0.5))
+        button_min_height = max(20, int(font_size * 1.6))
+        input_padding = max(2, int(font_size * 0.2))
         
         style = f"""
             QTreeWidget {{
@@ -199,17 +199,17 @@ class RadioBillingApp(QMainWindow):
             QLineEdit {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
-                min-height: {button_min_height - 4}px;
+                min-height: {button_min_height - 2}px;
             }}
             QComboBox {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
-                min-height: {button_min_height - 2}px;
+                min-height: {button_min_height}px;
             }}
             QDateEdit {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
-                min-height: {button_min_height - 2}px;
+                min-height: {button_min_height}px;
             }}
         """
         self.setStyleSheet(style)

@@ -78,11 +78,11 @@ class ExpenseTab(QWidget):
         self.font_size = app.base_font_size
         self.title_font_size = app.title_font_size
         
-        # 動的サイズ計算
-        self.widget_min_width = max(80, int(self.font_size * 6))
-        self.button_min_width = max(60, int(self.font_size * 5))
-        self.search_min_width = max(150, int(self.font_size * 12))
-        self.button_min_size = max(30, int(self.font_size * 2.5))
+        # 動的サイズ計算（コンパクト版）
+        self.widget_min_width = max(70, int(self.font_size * 5))
+        self.button_min_width = max(50, int(self.font_size * 4))
+        self.search_min_width = max(130, int(self.font_size * 10))
+        self.button_min_size = max(20, int(self.font_size * 1.6))
 
         # ソート情報
         self.sort_info = {"column": None, "reverse": False}
@@ -203,7 +203,7 @@ class ExpenseTab(QWidget):
         for year in range(current_year - 1, current_year + 3):
             self.target_year_combo.addItem(str(year))
         self.target_year_combo.setCurrentText(str(current_year))
-        self.target_year_combo.setMinimumWidth(max(60, int(self.font_size * 4)))
+        self.target_year_combo.setMinimumWidth(max(50, int(self.font_size * 3.5)))
         master_group_layout.addWidget(self.target_year_combo)
 
         master_group_layout.addWidget(QLabel("年"))
@@ -213,7 +213,7 @@ class ExpenseTab(QWidget):
             self.target_month_combo.addItem(f"{month:02d}")
         current_month = datetime.now().month
         self.target_month_combo.setCurrentText(f"{current_month:02d}")
-        self.target_month_combo.setMinimumWidth(max(50, int(self.font_size * 3.5)))
+        self.target_month_combo.setMinimumWidth(max(40, int(self.font_size * 3)))
         master_group_layout.addWidget(self.target_month_combo)
 
         master_group_layout.addWidget(QLabel("月"))
@@ -408,28 +408,27 @@ class ExpenseTab(QWidget):
 
         # 請求書催促管理ボタン
         view_payments_button = QPushButton("📋 請求書確認")
-        button_width = max(100, int(self.font_size * 8))
-        button_height = max(30, int(self.font_size * 2.5))
-        view_payments_button.setMinimumSize(button_width, button_height)
+        button_width = max(80, int(self.font_size * 6))
+        view_payments_button.setMinimumSize(button_width, self.button_min_size)
         view_payments_button.clicked.connect(self.show_related_payments)
         edit_button_layout.addWidget(view_payments_button)
         
         # 同じ月・同じ支払い先の比較確認ボタン
         compare_button = QPushButton("🔍 同月同支払い先比較")
-        compare_button_width = max(120, int(self.font_size * 10))
-        compare_button.setMinimumSize(compare_button_width, button_height)
+        compare_button_width = max(100, int(self.font_size * 8))
+        compare_button.setMinimumSize(compare_button_width, self.button_min_size)
         compare_button.clicked.connect(self.show_payment_comparison)
         edit_button_layout.addWidget(compare_button)
         
         edit_button_layout.addStretch()
 
         cancel_button = QPushButton("❌ キャンセル")
-        cancel_button.setMinimumSize(self.button_min_width + 20, button_height)
+        cancel_button.setMinimumSize(self.button_min_width + 15, self.button_min_size)
         cancel_button.clicked.connect(self.cancel_direct_edit)
         edit_button_layout.addWidget(cancel_button)
 
         save_button = QPushButton("💾 保存")
-        save_button.setMinimumSize(self.button_min_width + 20, button_height)
+        save_button.setMinimumSize(self.button_min_width + 15, self.button_min_size)
         save_button.clicked.connect(self.save_direct_edit)
         edit_button_layout.addWidget(save_button)
 

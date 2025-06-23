@@ -39,11 +39,11 @@ class MasterTab(QWidget):
         self.font_size = app.base_font_size
         self.title_font_size = app.title_font_size
         
-        # 動的サイズ計算
-        self.widget_min_width = max(80, int(self.font_size * 6))
-        self.button_min_width = max(60, int(self.font_size * 5))
-        self.search_min_width = max(150, int(self.font_size * 12))
-        self.button_min_size = max(30, int(self.font_size * 2.5))
+        # 動的サイズ計算（コンパクト版）
+        self.widget_min_width = max(70, int(self.font_size * 5))
+        self.button_min_width = max(50, int(self.font_size * 4))
+        self.search_min_width = max(130, int(self.font_size * 10))
+        self.button_min_size = max(20, int(self.font_size * 1.6))
 
         # ソート情報
         self.sort_info = {"column": None, "reverse": False}
@@ -260,8 +260,8 @@ class MasterTab(QWidget):
             label.setStyleSheet("font-weight: bold; color: #34495e;")
             form_layout.addWidget(label, row, col)
 
-            # 入力ウィジェット（動的幅）
-            dynamic_width = max(80, int(self.font_size * width))
+            # 入力ウィジェット（動的幅コンパクト版）
+            dynamic_width = max(70, int(self.font_size * width * 0.8))
             if field_name == "id":
                 # IDは読み取り専用
                 entry = QLineEdit()
@@ -314,14 +314,13 @@ class MasterTab(QWidget):
         button_box_layout.addStretch()
 
         cancel_button = QPushButton("❌ キャンセル")
-        button_width = max(80, int(self.font_size * 6))
-        button_height = max(30, int(self.font_size * 2.5))
-        cancel_button.setMinimumSize(button_width, button_height)
+        button_width = max(70, int(self.font_size * 5))
+        cancel_button.setMinimumSize(button_width, self.button_min_size)
         cancel_button.clicked.connect(self.cancel_direct_edit)
         button_box_layout.addWidget(cancel_button)
 
         save_button = QPushButton("💾 保存")
-        save_button.setMinimumSize(button_width, button_height)
+        save_button.setMinimumSize(button_width, self.button_min_size)
         save_button.clicked.connect(self.save_direct_edit)
         button_box_layout.addWidget(save_button)
 
