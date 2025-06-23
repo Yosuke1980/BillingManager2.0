@@ -1,4 +1,5 @@
 import sys
+import platform
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -10,7 +11,7 @@ from PyQt5.QtWidgets import (
     QFrame,
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QFontMetrics
 import os
 from datetime import datetime
 
@@ -25,6 +26,10 @@ class RadioBillingApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ラジオ局支払い・費用管理システム")
+        
+        # フォントサイズを動的に計算
+        self.base_font_size = self.calculate_optimal_font_size()
+        
         # ウィンドウサイズを大きくする
         self.setGeometry(100, 100, 1400, 1600)  # x, y, width, height を調整
 
@@ -116,39 +121,87 @@ class RadioBillingApp(QMainWindow):
         self.master_tab.refresh_data()
 
         self.apply_stylesheet()  # 基本的な視認性を確保
+    
+    def calculate_optimal_font_size(self):
+        """システムのDPI設定に基づいて最適なフォントサイズを計算"""
+        try:
+            # アプリケーションのインスタンスを取得
+            app = QApplication.instance()
+            if app is None:
+                return 13  # デフォルト値
+            
+            # プライマリスクリーンのDPIを取得
+            screen = app.primaryScreen()
+            if screen is None:
+                return 13
+                
+            dpi = screen.logicalDotsPerInch()
+            
+            # 基準DPI（96 DPI）に対する倍率を計算
+            scale_factor = dpi / 96.0
+            
+            # Windowsの場合は追加の補正を適用
+            if platform.system() == "Windows":
+                # Windows環境では文字が小さく見える傾向があるため補正
+                scale_factor *= 1.2
+                
+                # Windows DPIスケーリング設定も考慮
+                device_pixel_ratio = screen.devicePixelRatio()
+                if device_pixel_ratio > 1.0:
+                    scale_factor *= device_pixel_ratio * 0.8  # 過度な拡大を抑制
+            
+            # 基本フォントサイズ（13px）にスケールファクターを適用
+            base_size = 13
+            calculated_size = int(base_size * scale_factor)
+            
+            # 最小・最大値を設定（可読性を確保）
+            min_size = 10
+            max_size = 24
+            font_size = max(min_size, min(max_size, calculated_size))
+            
+            log_message(f"フォントサイズ計算: DPI={dpi}, scale={scale_factor:.2f}, 結果={font_size}px")
+            return font_size
+            
+        except Exception as e:
+            log_message(f"フォントサイズ計算でエラー: {e}")
+            return 13  # エラー時はデフォルト値
 
     def apply_stylesheet(self):
-        # PC標準の配色でシンプルに
-        style = """
-            QTreeWidget {
-                font-size: 13px;
+        # PC標準の配色でシンプルに（動的フォントサイズ対応）
+        font_size = self.base_font_size
+        button_padding = max(6, int(font_size * 0.5))
+        min_height = max(20, int(font_size * 1.5))
+        
+        style = f"""
+            QTreeWidget {{
+                font-size: {font_size}px;
                 gridline-color: #d0d0d0;
                 alternate-background-color: #f5f5f5;
-            }
-            QTreeWidget::item:selected {
+            }}
+            QTreeWidget::item:selected {{
                 background-color: #3399ff;
                 color: white;
-            }
-            QLabel {
-                font-size: 13px;
-            }
-            QPushButton {
-                font-size: 13px;
-                padding: 6px 12px;
-                min-height: 20px;
-            }
-            QLineEdit {
-                font-size: 13px;
+            }}
+            QLabel {{
+                font-size: {font_size}px;
+            }}
+            QPushButton {{
+                font-size: {font_size}px;
+                padding: {button_padding}px 12px;
+                min-height: {min_height}px;
+            }}
+            QLineEdit {{
+                font-size: {font_size}px;
                 padding: 4px;
-            }
-            QComboBox {
-                font-size: 13px;
+            }}
+            QComboBox {{
+                font-size: {font_size}px;
                 padding: 4px;
-            }
-            QDateEdit {
-                font-size: 13px;
+            }}
+            QDateEdit {{
+                font-size: {font_size}px;
                 padding: 4px;
-            }
+            }}
         """
         self.setStyleSheet(style)
 
@@ -205,9 +258,22 @@ class RadioBillingApp(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     
-    # Windows高DPI対応
+    # Windows高DPI対応（強化版）
     app.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    
+    # Windowsでの追加DPI対応設定
+    if platform.system() == "Windows":
+        try:
+            # Qt 5.14以降で利用可能
+            app.setAttribute(Qt.AA_DisableWindowContextHelpButton, True)
+            # スケーリング動作を改善
+            if hasattr(Qt, 'AA_EnableHighDpiScaling'):
+                app.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+            if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
+                app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+        except AttributeError:
+            pass  # 古いバージョンでは無視
     
     window = RadioBillingApp()
     window.show()
