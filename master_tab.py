@@ -232,74 +232,121 @@ class MasterTab(QWidget):
         # 選択時イベント
         self.tree.itemSelectionChanged.connect(self.on_tree_select_for_edit)
 
-        # 編集フォームの作成
+        # 編集フォームの作成（スクロール対応）
         self.edit_frame = QGroupBox("✏️ マスターレコード編集")
+        self.edit_frame.setMaximumHeight(450)  # 高さ制限
         edit_layout = QVBoxLayout(self.edit_frame)
         main_layout.addWidget(self.edit_frame)
 
-        # 編集フォームの内部レイアウト
-        form_widget = QWidget()
-        form_layout = QGridLayout(form_widget)
-        form_layout.setContentsMargins(5, 5, 5, 5)
-        edit_layout.addWidget(form_widget)
+        # スクロールエリアの作成
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        edit_layout.addWidget(scroll_area)
 
-        # 編集フォームのフィールド定義
-        master_fields = [
-            ("ID", "id", 5),
-            ("案件名", "project_name", 20),
-            ("支払い先", "payee", 15),
-            ("支払い先コード", "payee_code", 10),
-            ("金額", "amount", 10),
-            ("種別", "payment_type", 10),
-            ("開始日", "start_date", 10),
-            ("終了日", "end_date", 10),
-        ]
+        # スクロール可能なウィジェット
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setContentsMargins(8, 8, 8, 8)
+        scroll_layout.setSpacing(12)
+        scroll_area.setWidget(scroll_widget)
+
+        # 基本情報グループ
+        basic_group = QGroupBox("📋 基本情報")
+        basic_layout = QGridLayout(basic_group)
+        basic_layout.setSpacing(8)
+        scroll_layout.addWidget(basic_group)
 
         # 編集フィールドの作成
         self.edit_entries = {}
 
-        # フィールドを3列で配置
-        for i, (label_text, field_name, width) in enumerate(master_fields):
-            row = i // 3
-            col = (i % 3) * 2
+        # 基本情報フィールド
+        basic_fields = [
+            ("ID:", "id", 0, 0, True),  # 読み取り専用
+            ("案件名:", "project_name", 0, 2, False),
+            ("支払い先:", "payee", 1, 0, False),
+            ("支払い先コード:", "payee_code", 1, 2, False),
+            ("金額:", "amount", 2, 0, False),
+            ("種別:", "payment_type", 2, 2, False),
+            ("開始日:", "start_date", 3, 0, False),
+            ("終了日:", "end_date", 3, 2, False),
+        ]
 
+        for label_text, field_name, row, col, readonly in basic_fields:
             # ラベル
-            label = QLabel(f"{label_text}:")
+            label = QLabel(label_text)
             label.setStyleSheet("font-weight: bold; color: #34495e;")
-            form_layout.addWidget(label, row, col)
+            basic_layout.addWidget(label, row, col)
 
-            # 入力ウィジェット（統一版）
-            dynamic_width = max(100, int(self.font_size * 10))  # 統一幅
+            # 入力ウィジェット
             if field_name == "id":
                 # IDは読み取り専用
                 entry = QLineEdit()
-                entry.setMinimumWidth(dynamic_width)
                 entry.setReadOnly(True)
                 entry.setStyleSheet("background-color: #f8f9fa;")
             elif field_name == "payment_type":
                 # 種別はドロップダウン
                 entry = QComboBox()
                 entry.addItems(["月額固定", "回数ベース"])
-                entry.setMinimumWidth(dynamic_width)
                 entry.currentIndexChanged.connect(self.on_payment_type_change)
             elif field_name in ["start_date", "end_date"]:
                 # 日付選択
                 entry = QDateEdit()
                 entry.setCalendarPopup(True)
-                entry.setMinimumWidth(dynamic_width)
                 entry.setDate(QDate.currentDate())
             else:
                 # 通常のテキスト入力
                 entry = QLineEdit()
-                entry.setMinimumWidth(dynamic_width)
 
-            form_layout.addWidget(entry, row, col + 1)
+            basic_layout.addWidget(entry, row, col + 1)
+            self.edit_entries[field_name] = entry
+
+        # 案件情報グループ
+        project_group = QGroupBox("🏢 案件情報")
+        project_layout = QGridLayout(project_group)
+        project_layout.setSpacing(8)
+        scroll_layout.addWidget(project_group)
+
+        # 案件情報フィールド
+        project_fields = [
+            ("クライアント:", "client_name", 0, 0, False),
+            ("担当部門:", "department", 0, 2, False),
+            ("案件状況:", "project_status", 1, 0, False),
+            ("緊急度:", "urgency_level", 1, 2, False),
+            ("開始日:", "project_start_date", 2, 0, False),
+            ("完了予定日:", "project_end_date", 2, 2, False),
+            ("予算:", "budget", 3, 0, False),
+            ("承認者:", "approver", 3, 2, False),
+        ]
+
+        for label_text, field_name, row, col, readonly in project_fields:
+            # ラベル
+            label = QLabel(label_text)
+            label.setStyleSheet("font-weight: bold; color: #34495e;")
+            project_layout.addWidget(label, row, col)
+
+            # 入力ウィジェット
+            if field_name == "project_status":
+                entry = QComboBox()
+                entry.addItems(["進行中", "完了", "中止", "保留"])
+            elif field_name == "urgency_level":
+                entry = QComboBox()
+                entry.addItems(["通常", "重要", "緊急"])
+            elif field_name in ["project_start_date", "project_end_date"]:
+                entry = QDateEdit()
+                entry.setCalendarPopup(True)
+                entry.setDate(QDate.currentDate())
+            else:
+                entry = QLineEdit()
+
+            project_layout.addWidget(entry, row, col + 1)
             self.edit_entries[field_name] = entry
 
         # 放送曜日チェックボックス
         broadcast_frame = QGroupBox("📅 放送曜日")
         broadcast_layout = QHBoxLayout(broadcast_frame)
-        edit_layout.addWidget(broadcast_frame)
+        scroll_layout.addWidget(broadcast_frame)
 
         self.weekday_vars = {}
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
@@ -316,7 +363,7 @@ class MasterTab(QWidget):
         # ボタンフレーム
         button_widget = QWidget()
         button_box_layout = QHBoxLayout(button_widget)
-        edit_layout.addWidget(button_widget)
+        scroll_layout.addWidget(button_widget)
 
         # 保存/キャンセルボタン
         button_box_layout.addStretch()
@@ -635,48 +682,72 @@ class MasterTab(QWidget):
                 return
 
             # 編集フォームに値を設定
-            field_names = [
-                "id",
-                "project_name",
-                "payee",
-                "payee_code",
-                "amount",
-                "payment_type",
-                "start_date",
-                "end_date",
-            ]
-
-            for i, field in enumerate(field_names):
-                if field == "id":
-                    # IDフィールド
-                    self.edit_entries[field].setText(str(row[i]))
-                elif field == "payment_type":
-                    # 種別コンボボックス
-                    index = self.edit_entries[field].findText(
-                        row[i] if i < len(row) else "月額固定"
-                    )
-                    if index >= 0:
-                        self.edit_entries[field].setCurrentIndex(index)
-                elif field in ["start_date", "end_date"]:
-                    # 日付フィールド
-                    date_value = row[i] if i < len(row) else ""
-                    try:
+            # 基本情報フィールド (rowのインデックスと順序に注意)
+            self.edit_entries["id"].setText(str(row[0]))
+            self.edit_entries["project_name"].setText(str(row[1]) if row[1] else "")
+            self.edit_entries["payee"].setText(str(row[2]) if row[2] else "")
+            self.edit_entries["payee_code"].setText(str(row[3]) if row[3] else "")
+            self.edit_entries["amount"].setText(str(row[4]) if row[4] else "0")
+            
+            # 種別コンボボックス
+            payment_type = row[5] if row[5] else "月額固定"
+            index = self.edit_entries["payment_type"].findText(payment_type)
+            if index >= 0:
+                self.edit_entries["payment_type"].setCurrentIndex(index)
+            
+            # 開始日、終了日
+            for date_field, date_index in [("start_date", 7), ("end_date", 8)]:
+                date_value = row[date_index] if len(row) > date_index and row[date_index] else ""
+                try:
+                    if date_value:
                         parts = date_value.split("-")
                         if len(parts) >= 3:
                             qdate = QDate(int(parts[0]), int(parts[1]), int(parts[2]))
-                            self.edit_entries[field].setDate(qdate)
+                            self.edit_entries[date_field].setDate(qdate)
                         else:
-                            self.edit_entries[field].setDate(QDate.currentDate())
-                    except (ValueError, IndexError, AttributeError):
-                        self.edit_entries[field].setDate(QDate.currentDate())
-                else:
-                    # 通常のテキストフィールド
-                    self.edit_entries[field].setText(
-                        str(row[i]) if i < len(row) else ""
-                    )
+                            self.edit_entries[date_field].setDate(QDate.currentDate())
+                    else:
+                        self.edit_entries[date_field].setDate(QDate.currentDate())
+                except (ValueError, IndexError, AttributeError):
+                    self.edit_entries[date_field].setDate(QDate.currentDate())
+            
+            # 案件情報フィールド (インデックス 9-16)
+            self.edit_entries["client_name"].setText(str(row[9]) if len(row) > 9 and row[9] else "")
+            self.edit_entries["department"].setText(str(row[10]) if len(row) > 10 and row[10] else "")
+            
+            # 案件状況コンボボックス
+            project_status = row[11] if len(row) > 11 and row[11] else "進行中"
+            index = self.edit_entries["project_status"].findText(project_status)
+            if index >= 0:
+                self.edit_entries["project_status"].setCurrentIndex(index)
+            
+            # 案件開始日、完了予定日
+            for date_field, date_index in [("project_start_date", 12), ("project_end_date", 13)]:
+                date_value = row[date_index] if len(row) > date_index and row[date_index] else ""
+                try:
+                    if date_value:
+                        parts = date_value.split("-")
+                        if len(parts) >= 3:
+                            qdate = QDate(int(parts[0]), int(parts[1]), int(parts[2]))
+                            self.edit_entries[date_field].setDate(qdate)
+                        else:
+                            self.edit_entries[date_field].setDate(QDate.currentDate())
+                    else:
+                        self.edit_entries[date_field].setDate(QDate.currentDate())
+                except (ValueError, IndexError, AttributeError):
+                    self.edit_entries[date_field].setDate(QDate.currentDate())
+            
+            self.edit_entries["budget"].setText(str(row[14]) if len(row) > 14 and row[14] else "0")
+            self.edit_entries["approver"].setText(str(row[15]) if len(row) > 15 and row[15] else "")
+            
+            # 緊急度コンボボックス
+            urgency_level = row[16] if len(row) > 16 and row[16] else "通常"
+            index = self.edit_entries["urgency_level"].findText(urgency_level)
+            if index >= 0:
+                self.edit_entries["urgency_level"].setCurrentIndex(index)
 
-            # 放送曜日チェックボックスの設定
-            broadcast_days_str = row[6] if len(row) > 6 else ""
+            # 放送曜日チェックボックスの設定 (インデックス6)
+            broadcast_days_str = row[6] if len(row) > 6 and row[6] else ""
             selected_days = [
                 day.strip() for day in broadcast_days_str.split(",") if day.strip()
             ]
@@ -763,6 +834,32 @@ class MasterTab(QWidget):
                 QMessageBox.critical(self, "エラー", "金額は数値で入力してください")
                 return
 
+            # 案件情報を取得
+            client_name = self.edit_entries["client_name"].text()
+            department = self.edit_entries["department"].text()
+            project_status = self.edit_entries["project_status"].currentText()
+            urgency_level = self.edit_entries["urgency_level"].currentText()
+            
+            project_start_date = self.edit_entries["project_start_date"].date()
+            project_start_date_str = (
+                f"{project_start_date.year()}-{project_start_date.month():02d}-{project_start_date.day():02d}"
+            )
+            
+            project_end_date = self.edit_entries["project_end_date"].date()
+            project_end_date_str = (
+                f"{project_end_date.year()}-{project_end_date.month():02d}-{project_end_date.day():02d}"
+            )
+            
+            budget_str = self.edit_entries["budget"].text()
+            approver = self.edit_entries["approver"].text()
+            
+            # 予算の変換
+            try:
+                budget_str = budget_str.replace(",", "").replace("円", "").strip()
+                budget = float(budget_str) if budget_str else 0
+            except ValueError:
+                budget = 0
+
             # データの設定
             is_new = master_id == "新規"
             data = {
@@ -774,6 +871,15 @@ class MasterTab(QWidget):
                 "start_date": start_date_str,
                 "end_date": end_date_str,
                 "broadcast_days": broadcast_days,
+                # 案件情報を追加
+                "client_name": client_name,
+                "department": department,
+                "project_status": project_status,
+                "project_start_date": project_start_date_str,
+                "project_end_date": project_end_date_str,
+                "budget": budget,
+                "approver": approver,
+                "urgency_level": urgency_level,
             }
 
             if not is_new:
@@ -816,7 +922,7 @@ class MasterTab(QWidget):
             # 編集フォームの表示
             self.edit_frame.show()
 
-            # フォームのクリア
+            # フォームのクリアとデフォルト値設定
             for field, widget in self.edit_entries.items():
                 if field == "id":
                     widget.setText("新規")
@@ -824,8 +930,18 @@ class MasterTab(QWidget):
                     index = widget.findText("月額固定")
                     if index >= 0:
                         widget.setCurrentIndex(index)
-                elif field in ["start_date", "end_date"]:
+                elif field == "project_status":
+                    index = widget.findText("進行中")
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                elif field == "urgency_level":
+                    index = widget.findText("通常")
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                elif field in ["start_date", "end_date", "project_start_date", "project_end_date"]:
                     widget.setDate(QDate.currentDate())
+                elif field in ["amount", "budget"]:
+                    widget.setText("0")
                 else:
                     widget.setText("")
 

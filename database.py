@@ -21,7 +21,7 @@ class DatabaseManager:
         # payments テーブルを削除して再作成
         cursor.execute("DROP TABLE IF EXISTS payments")
 
-        # 新しいスキーマでテーブルを作成
+        # 新しいスキーマでテーブルを作成（案件管理用フィールド追加）
         cursor.execute(
             """
             CREATE TABLE payments (
@@ -33,7 +33,15 @@ class DatabaseManager:
                 amount REAL,
                 payment_date TEXT,
                 status TEXT DEFAULT '未処理',
-                type TEXT DEFAULT ''
+                type TEXT DEFAULT '',
+                client_name TEXT DEFAULT '',
+                department TEXT DEFAULT '',
+                project_status TEXT DEFAULT '進行中',
+                project_start_date TEXT DEFAULT '',
+                project_end_date TEXT DEFAULT '',
+                budget REAL DEFAULT 0,
+                approver TEXT DEFAULT '',
+                urgency_level TEXT DEFAULT '通常'
             )
         """
         )
@@ -59,6 +67,7 @@ class DatabaseManager:
                 cursor.execute("PRAGMA table_info(expenses)")
                 columns = [column[1] for column in cursor.fetchall()]
 
+                # 既存のカラム追加
                 if "source_type" not in columns:
                     cursor.execute(
                         "ALTER TABLE expenses ADD COLUMN source_type TEXT DEFAULT 'manual'"
@@ -70,6 +79,24 @@ class DatabaseManager:
                         "ALTER TABLE expenses ADD COLUMN master_id INTEGER DEFAULT NULL"
                     )
                     log_message("expenses テーブルに master_id カラムを追加しました")
+
+                # 案件情報カラムを追加
+                project_columns = [
+                    ("client_name", "TEXT DEFAULT ''"),
+                    ("department", "TEXT DEFAULT ''"),
+                    ("project_status", "TEXT DEFAULT '進行中'"),
+                    ("project_start_date", "TEXT DEFAULT ''"),
+                    ("project_end_date", "TEXT DEFAULT ''"),
+                    ("budget", "REAL DEFAULT 0"),
+                    ("approver", "TEXT DEFAULT ''"),
+                    ("urgency_level", "TEXT DEFAULT '通常'")
+                ]
+
+                for col_name, col_def in project_columns:
+                    if col_name not in columns:
+                        cursor.execute(f"ALTER TABLE expenses ADD COLUMN {col_name} {col_def}")
+                        log_message(f"expenses テーブルに {col_name} カラムを追加しました")
+
             else:
                 # テーブルが存在しない場合は新規作成
                 cursor.execute(
@@ -83,11 +110,19 @@ class DatabaseManager:
                         payment_date TEXT,
                         status TEXT DEFAULT '未処理',
                         source_type TEXT DEFAULT 'manual',
-                        master_id INTEGER DEFAULT NULL
+                        master_id INTEGER DEFAULT NULL,
+                        client_name TEXT DEFAULT '',
+                        department TEXT DEFAULT '',
+                        project_status TEXT DEFAULT '進行中',
+                        project_start_date TEXT DEFAULT '',
+                        project_end_date TEXT DEFAULT '',
+                        budget REAL DEFAULT 0,
+                        approver TEXT DEFAULT '',
+                        urgency_level TEXT DEFAULT '通常'
                     )
                 """
                 )
-                log_message("expenses テーブルを新規作成しました")
+                log_message("expenses テーブルを新規作成しました（案件情報フィールド含む）")
 
         except sqlite3.Error as e:
             log_message(f"expenses テーブル初期化エラー: {e}")
@@ -99,7 +134,7 @@ class DatabaseManager:
         conn = sqlite3.connect(self.expense_master_db)
         cursor = conn.cursor()
 
-        # 費用マスターテーブル
+        # 費用マスターテーブル（案件情報フィールド追加）
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS expense_master (
@@ -113,10 +148,42 @@ class DatabaseManager:
                 payment_type TEXT DEFAULT '月額固定',
                 start_date TEXT,
                 end_date TEXT,
-                broadcast_days TEXT
+                broadcast_days TEXT,
+                client_name TEXT DEFAULT '',
+                department TEXT DEFAULT '',
+                project_status TEXT DEFAULT '進行中',
+                project_start_date TEXT DEFAULT '',
+                project_end_date TEXT DEFAULT '',
+                budget REAL DEFAULT 0,
+                approver TEXT DEFAULT '',
+                urgency_level TEXT DEFAULT '通常'
             )
         """
         )
+
+        # 既存のexpense_masterテーブルに案件情報カラムを追加（存在しない場合のみ）
+        try:
+            cursor.execute("PRAGMA table_info(expense_master)")
+            master_columns = [column[1] for column in cursor.fetchall()]
+
+            project_columns = [
+                ("client_name", "TEXT DEFAULT ''"),
+                ("department", "TEXT DEFAULT ''"),
+                ("project_status", "TEXT DEFAULT '進行中'"),
+                ("project_start_date", "TEXT DEFAULT ''"),
+                ("project_end_date", "TEXT DEFAULT ''"),
+                ("budget", "REAL DEFAULT 0"),
+                ("approver", "TEXT DEFAULT ''"),
+                ("urgency_level", "TEXT DEFAULT '通常'")
+            ]
+
+            for col_name, col_def in project_columns:
+                if col_name not in master_columns:
+                    cursor.execute(f"ALTER TABLE expense_master ADD COLUMN {col_name} {col_def}")
+                    log_message(f"expense_master テーブルに {col_name} カラムを追加しました")
+
+        except sqlite3.Error as e:
+            log_message(f"expense_master テーブル案件情報カラム追加エラー: {e}")
 
         conn.commit()
         conn.close()
@@ -513,7 +580,9 @@ class DatabaseManager:
 
         cursor.execute(
             """
-            SELECT id, project_name, payee, payee_code, amount, payment_date, status
+            SELECT id, project_name, payee, payee_code, amount, payment_date, status,
+                   client_name, department, project_status, project_start_date,
+                   project_end_date, budget, approver, urgency_level
             FROM expenses WHERE id = ?
             """,
             (expense_id,),
@@ -543,8 +612,12 @@ class DatabaseManager:
             if is_new:
                 cursor.execute(
                     """
-                    INSERT INTO expenses (project_name, payee, payee_code, amount, payment_date, status, source_type, master_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO expenses (
+                        project_name, payee, payee_code, amount, payment_date, status, 
+                        source_type, master_id, client_name, department, project_status,
+                        project_start_date, project_end_date, budget, approver, urgency_level
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         data["project_name"],
@@ -555,6 +628,14 @@ class DatabaseManager:
                         data["status"],
                         data.get("source_type", "manual"),
                         data.get("master_id", None),
+                        data.get("client_name", ""),
+                        data.get("department", ""),
+                        data.get("project_status", "進行中"),
+                        data.get("project_start_date", ""),
+                        data.get("project_end_date", ""),
+                        data.get("budget", 0),
+                        data.get("approver", ""),
+                        data.get("urgency_level", "通常"),
                     ),
                 )
                 expense_id = cursor.lastrowid
@@ -562,7 +643,9 @@ class DatabaseManager:
                 cursor.execute(
                     """
                     UPDATE expenses
-                    SET project_name = ?, payee = ?, payee_code = ?, amount = ?, payment_date = ?, status = ?
+                    SET project_name = ?, payee = ?, payee_code = ?, amount = ?, payment_date = ?, status = ?,
+                        client_name = ?, department = ?, project_status = ?, project_start_date = ?,
+                        project_end_date = ?, budget = ?, approver = ?, urgency_level = ?
                     WHERE id = ?
                     """,
                     (
@@ -572,6 +655,14 @@ class DatabaseManager:
                         data["amount"],
                         data["payment_date"],
                         data["status"],
+                        data.get("client_name", ""),
+                        data.get("department", ""),
+                        data.get("project_status", "進行中"),
+                        data.get("project_start_date", ""),
+                        data.get("project_end_date", ""),
+                        data.get("budget", 0),
+                        data.get("approver", ""),
+                        data.get("urgency_level", "通常"),
                         data["id"],
                     ),
                 )
@@ -684,7 +775,9 @@ class DatabaseManager:
         cursor.execute(
             """
             SELECT id, project_name, payee, payee_code, amount, payment_type, 
-                broadcast_days, start_date, end_date
+                   broadcast_days, start_date, end_date, client_name, department,
+                   project_status, project_start_date, project_end_date, budget,
+                   approver, urgency_level
             FROM expense_master WHERE id = ?
             """,
             (master_id,),
@@ -716,9 +809,11 @@ class DatabaseManager:
                     """
                     INSERT INTO expense_master (
                         project_name, payee, payee_code, amount, payment_type, 
-                        start_date, end_date, broadcast_days, status
+                        start_date, end_date, broadcast_days, status,
+                        client_name, department, project_status, project_start_date,
+                        project_end_date, budget, approver, urgency_level
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '未処理')
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '未処理', ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         data["project_name"],
@@ -729,6 +824,14 @@ class DatabaseManager:
                         data["start_date"],
                         data["end_date"],
                         data["broadcast_days"],
+                        data.get("client_name", ""),
+                        data.get("department", ""),
+                        data.get("project_status", "進行中"),
+                        data.get("project_start_date", ""),
+                        data.get("project_end_date", ""),
+                        data.get("budget", 0),
+                        data.get("approver", ""),
+                        data.get("urgency_level", "通常"),
                     ),
                 )
                 master_id = cursor.lastrowid
@@ -737,7 +840,9 @@ class DatabaseManager:
                     """
                     UPDATE expense_master
                     SET project_name = ?, payee = ?, payee_code = ?, amount = ?, 
-                        payment_type = ?, start_date = ?, end_date = ?, broadcast_days = ?
+                        payment_type = ?, start_date = ?, end_date = ?, broadcast_days = ?,
+                        client_name = ?, department = ?, project_status = ?, project_start_date = ?,
+                        project_end_date = ?, budget = ?, approver = ?, urgency_level = ?
                     WHERE id = ?
                     """,
                     (
@@ -749,6 +854,14 @@ class DatabaseManager:
                         data["start_date"],
                         data["end_date"],
                         data["broadcast_days"],
+                        data.get("client_name", ""),
+                        data.get("department", ""),
+                        data.get("project_status", "進行中"),
+                        data.get("project_start_date", ""),
+                        data.get("project_end_date", ""),
+                        data.get("budget", 0),
+                        data.get("approver", ""),
+                        data.get("urgency_level", "通常"),
                         data["id"],
                     ),
                 )
@@ -1341,6 +1454,201 @@ class DatabaseManager:
         finally:
             expenses_conn.close()
             billing_conn.close()
+
+    def get_project_filter_data(self, filters=None):
+        """案件絞込み用のデータを取得"""
+        conn = sqlite3.connect(self.billing_db)
+        cursor = conn.cursor()
+
+        try:
+            # 基本クエリ
+            base_query = """
+                SELECT DISTINCT project_name, client_name, department, project_status, 
+                       project_start_date, project_end_date, budget,
+                       COUNT(*) as payment_count,
+                       SUM(amount) as total_amount
+                FROM payments 
+                WHERE project_name IS NOT NULL AND project_name != ''
+            """
+            
+            params = []
+            conditions = []
+
+            # フィルター条件を追加
+            if filters:
+                if filters.get('search_term'):
+                    conditions.append("(project_name LIKE ? OR client_name LIKE ?)")
+                    search_param = f"%{filters['search_term']}%"
+                    params.extend([search_param, search_param])
+                
+                if filters.get('project_status'):
+                    conditions.append("project_status = ?")
+                    params.append(filters['project_status'])
+                
+                if filters.get('department'):
+                    conditions.append("department = ?")
+                    params.append(filters['department'])
+                
+                if filters.get('client_name'):
+                    conditions.append("client_name = ?")
+                    params.append(filters['client_name'])
+                
+                if filters.get('payment_month'):
+                    conditions.append("strftime('%Y-%m', REPLACE(payment_date, '/', '-')) = ?")
+                    params.append(filters['payment_month'])
+
+            # 条件を結合
+            if conditions:
+                base_query += " AND " + " AND ".join(conditions)
+            
+            base_query += " GROUP BY project_name, client_name, department, project_status"
+            base_query += " ORDER BY project_name"
+
+            cursor.execute(base_query, params)
+            project_rows = cursor.fetchall()
+
+            return project_rows
+
+        except Exception as e:
+            log_message(f"案件データ取得エラー: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_payments_by_project(self, project_name, payment_month=None):
+        """指定案件の支払いデータを取得"""
+        from utils import format_payee_code
+        
+        conn = sqlite3.connect(self.billing_db)
+        cursor = conn.cursor()
+
+        try:
+            base_query = """
+                SELECT id, subject, project_name, payee, payee_code, amount, 
+                       payment_date, status, urgency_level, approver
+                FROM payments
+                WHERE project_name = ?
+            """
+            params = [project_name]
+            
+            # 支払い月フィルターを追加（日付形式変換対応）
+            if payment_month:
+                base_query += " AND strftime('%Y-%m', REPLACE(payment_date, '/', '-')) = ?"
+                params.append(payment_month)
+            
+            base_query += " ORDER BY payment_date DESC"
+            
+            cursor.execute(base_query, params)
+
+            payment_rows = cursor.fetchall()
+
+            # 支払い先コードの0埋め処理
+            formatted_rows = []
+            for row in payment_rows:
+                row_list = list(row)
+                if row_list[4]:  # payee_code が存在する場合
+                    row_list[4] = format_payee_code(row_list[4])
+                formatted_rows.append(tuple(row_list))
+
+            return formatted_rows
+
+        except Exception as e:
+            log_message(f"案件支払いデータ取得エラー: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_filter_options(self):
+        """絞込み用の選択肢を取得"""
+        conn = sqlite3.connect(self.billing_db)
+        cursor = conn.cursor()
+
+        try:
+            # 進行状況の選択肢
+            cursor.execute("SELECT DISTINCT project_status FROM payments WHERE project_status IS NOT NULL AND project_status != ''")
+            status_options = [row[0] for row in cursor.fetchall()]
+
+            # 担当部門の選択肢
+            cursor.execute("SELECT DISTINCT department FROM payments WHERE department IS NOT NULL AND department != ''")
+            department_options = [row[0] for row in cursor.fetchall()]
+
+            # クライアントの選択肢
+            cursor.execute("SELECT DISTINCT client_name FROM payments WHERE client_name IS NOT NULL AND client_name != ''")
+            client_options = [row[0] for row in cursor.fetchall()]
+            
+            # 支払い月の選択肢（日付形式変換対応）
+            cursor.execute("""
+                SELECT DISTINCT strftime('%Y-%m', REPLACE(payment_date, '/', '-')) as payment_month
+                FROM payments 
+                WHERE payment_date IS NOT NULL AND payment_date != ''
+                AND strftime('%Y-%m', REPLACE(payment_date, '/', '-')) IS NOT NULL
+                ORDER BY payment_month DESC
+            """)
+            payment_month_options = [row[0] for row in cursor.fetchall() if row[0]]
+            
+            # デバッグログ出力
+            log_message(f"フィルターオプション取得結果:")
+            log_message(f"  進行状況: {len(status_options)}件")
+            log_message(f"  担当部門: {len(department_options)}件")
+            log_message(f"  クライアント: {len(client_options)}件")
+            log_message(f"  支払い月: {len(payment_month_options)}件 - {payment_month_options[:5]}")
+
+            return {
+                'status_options': status_options,
+                'department_options': department_options,
+                'client_options': client_options,
+                'payment_month_options': payment_month_options
+            }
+
+        except Exception as e:
+            log_message(f"フィルターオプション取得エラー: {e}")
+            import traceback
+            log_message(f"エラー詳細: {traceback.format_exc()}")
+            return {
+                'status_options': [],
+                'department_options': [],
+                'client_options': [],
+                'payment_month_options': []  # キーを追加
+            }
+        finally:
+            conn.close()
+
+    def update_payment_project_info(self, payment_id, project_info):
+        """支払いデータの案件情報を更新"""
+        conn = sqlite3.connect(self.billing_db)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                """
+                UPDATE payments
+                SET client_name = ?, department = ?, project_status = ?, 
+                    project_start_date = ?, project_end_date = ?, budget = ?, 
+                    approver = ?, urgency_level = ?
+                WHERE id = ?
+                """,
+                (
+                    project_info.get('client_name', ''),
+                    project_info.get('department', ''),
+                    project_info.get('project_status', '進行中'),
+                    project_info.get('project_start_date', ''),
+                    project_info.get('project_end_date', ''),
+                    project_info.get('budget', 0),
+                    project_info.get('approver', ''),
+                    project_info.get('urgency_level', '通常'),
+                    payment_id
+                )
+            )
+
+            conn.commit()
+            return cursor.rowcount > 0
+
+        except Exception as e:
+            log_message(f"案件情報更新エラー: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
 
 
 # ファイル終了確認用のコメント - database.py完了

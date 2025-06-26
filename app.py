@@ -19,6 +19,7 @@ from database import DatabaseManager
 from payment_tab import PaymentTab
 from expense_tab import ExpenseTab
 from master_tab import MasterTab
+from project_filter_tab import ProjectFilterTab
 from utils import get_latest_csv_file, log_message
 
 
@@ -31,8 +32,8 @@ class RadioBillingApp(QMainWindow):
         self.base_font_size = self.calculate_optimal_font_size()
         
         # UI要素用のサイズも計算
-        self.title_font_size = max(10, int(self.base_font_size * 1.1))
-        self.small_font_size = max(9, int(self.base_font_size * 0.9))
+        self.title_font_size = max(14, int(self.base_font_size * 1.2))
+        self.small_font_size = max(10, int(self.base_font_size * 0.85))
         
         # ウィンドウサイズを大きくする
         self.setGeometry(100, 100, 1400, 1600)  # x, y, width, height を調整
@@ -119,6 +120,10 @@ class RadioBillingApp(QMainWindow):
         self.master_tab = MasterTab(self.tab_control, self)
         self.tab_control.addTab(self.master_tab, "費用マスター")
 
+        # 案件絞込みタブを追加
+        self.project_filter_tab = ProjectFilterTab(self.tab_control, self)
+        self.tab_control.addTab(self.project_filter_tab, "案件絞込み・管理")
+
         # データを読み込み
         self.import_latest_csv()
         self.expense_tab.refresh_data()
@@ -154,13 +159,13 @@ class RadioBillingApp(QMainWindow):
                 if device_pixel_ratio > 1.0:
                     scale_factor *= device_pixel_ratio * 0.8  # 過度な拡大を抑制
             
-            # 基本フォントサイズ（9px）にスケールファクターを適用（全体縮小）
-            base_size = 9
+            # 基本フォントサイズ（12px）にスケールファクターを適用
+            base_size = 12
             calculated_size = int(base_size * scale_factor)
             
             # 最小・最大値を設定（可読性を確保）
-            min_size = 8
-            max_size = 16
+            min_size = 10
+            max_size = 18
             font_size = max(min_size, min(max_size, calculated_size))
             
             log_message(f"フォントサイズ計算: DPI={dpi}, scale={scale_factor:.2f}, 結果={font_size}px")
@@ -171,57 +176,267 @@ class RadioBillingApp(QMainWindow):
             return 13  # エラー時はデフォルト値
 
     def apply_stylesheet(self):
-        # PC標準の配色でシンプルに（コンパクト修正版）
+        # 包括的なスタイルシート（改善版）
         font_size = self.base_font_size
-        button_padding_v = max(2, int(font_size * 0.2))
-        button_padding_h = max(6, int(font_size * 0.6))
-        button_min_height = max(20, int(font_size * 1.8))
-        input_padding = max(2, int(font_size * 0.2))
-        input_min_height = max(18, int(font_size * 1.6))  # より小さく
+        title_font_size = self.title_font_size
+        small_font_size = self.small_font_size
+        
+        # サイズ計算の改善
+        button_padding_v = max(6, int(font_size * 0.4))
+        button_padding_h = max(12, int(font_size * 0.8))
+        button_min_height = max(32, int(font_size * 2.4))
+        button_min_width = max(80, int(font_size * 6))
+        
+        input_padding = max(4, int(font_size * 0.3))
+        input_min_height = max(28, int(font_size * 2.0))
+        input_min_width = max(120, int(font_size * 8))
+        
+        # スプリッターのサイズ
+        splitter_width = max(6, int(font_size * 0.4))
         
         style = f"""
-            QTreeWidget {{
+            /* 基本フォント設定 */
+            QWidget {{
+                font-family: "Segoe UI", "Meiryo", sans-serif;
                 font-size: {font_size}px;
-                gridline-color: #d0d0d0;
-                alternate-background-color: #f5f5f5;
             }}
-            QTreeWidget::item:selected {{
-                background-color: #3399ff;
-                color: white;
-            }}
+            
+            /* ラベル */
             QLabel {{
                 font-size: {font_size}px;
+                color: #2c3e50;
             }}
+            
+            /* 小さなラベル */
+            QLabel[small="true"] {{
+                font-size: {small_font_size}px;
+                color: #6c757d;
+            }}
+            
+            /* タイトル用ラベル */
+            QLabel[title="true"] {{
+                font-size: {title_font_size}px;
+                font-weight: bold;
+                color: #2c3e50;
+            }}
+            
+            /* グループボックス */
             QGroupBox {{
                 font-size: {font_size}px;
                 font-weight: bold;
+                color: #495057;
+                border: 2px solid #dee2e6;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
             }}
             QGroupBox::title {{
                 font-size: {font_size}px;
                 font-weight: bold;
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 8px 0 8px;
+                background-color: white;
             }}
+            
+            /* ボタン */
             QPushButton {{
                 font-size: {font_size}px;
                 padding: {button_padding_v}px {button_padding_h}px;
                 min-height: {button_min_height}px;
-                min-width: {int(font_size * 2.5)}px;
+                min-width: {button_min_width}px;
+                background-color: #f8f9fa;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                color: #495057;
             }}
+            QPushButton:hover {{
+                background-color: #e9ecef;
+                border-color: #adb5bd;
+            }}
+            QPushButton:pressed {{
+                background-color: #dee2e6;
+                border-color: #6c757d;
+            }}
+            QPushButton:disabled {{
+                background-color: #e9ecef;
+                color: #6c757d;
+                border-color: #dee2e6;
+            }}
+            
+            /* 入力フィールド */
             QLineEdit {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
                 min-height: {input_min_height}px;
+                min-width: {input_min_width}px;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                background-color: white;
+                color: #495057;
             }}
+            QLineEdit:focus {{
+                border-color: #80bdff;
+                outline: none;
+            }}
+            
+            /* コンボボックス */
             QComboBox {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
                 min-height: {input_min_height}px;
-                min-width: {int(font_size * 3)}px;
+                min-width: {input_min_width}px;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                background-color: white;
+                color: #495057;
             }}
+            QComboBox:focus {{
+                border-color: #80bdff;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox::down-arrow {{
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #6c757d;
+                margin-right: 5px;
+            }}
+            
+            /* 日付編集 */
             QDateEdit {{
                 font-size: {font_size}px;
                 padding: {input_padding}px;
                 min-height: {input_min_height}px;
-                min-width: {int(font_size * 5)}px;
+                min-width: {int(input_min_width * 1.2)}px;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                background-color: white;
+                color: #495057;
+            }}
+            
+            /* ツリーウィジェット */
+            QTreeWidget {{
+                font-size: {font_size}px;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                background-color: white;
+                alternate-background-color: #f8f9fa;
+                gridline-color: #dee2e6;
+                selection-background-color: #007bff;
+                selection-color: white;
+            }}
+            QTreeWidget::item {{
+                padding: 4px;
+                min-height: {int(font_size * 1.8)}px;
+            }}
+            QTreeWidget::item:selected {{
+                background-color: #007bff;
+                color: white;
+            }}
+            QTreeWidget::item:hover {{
+                background-color: #e3f2fd;
+            }}
+            QTreeWidget::header {{
+                font-size: {font_size}px;
+                font-weight: bold;
+                background-color: #f8f9fa;
+                border: none;
+                border-bottom: 2px solid #dee2e6;
+            }}
+            QTreeWidget::header::section {{
+                padding: 8px;
+                border-right: 1px solid #dee2e6;
+                background-color: #f8f9fa;
+            }}
+            
+            /* タブウィジェット */
+            QTabWidget::pane {{
+                border: 1px solid #dee2e6;
+                background-color: white;
+            }}
+            QTabBar::tab {{
+                font-size: {font_size}px;
+                padding: 8px 16px;
+                margin-right: 2px;
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-bottom: none;
+                border-radius: 4px 4px 0 0;
+            }}
+            QTabBar::tab:selected {{
+                background-color: white;
+                border-bottom: 1px solid white;
+            }}
+            QTabBar::tab:hover {{
+                background-color: #e9ecef;
+            }}
+            
+            /* フレーム */
+            QFrame {{
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                background-color: white;
+            }}
+            
+            /* スプリッター */
+            QSplitter::handle {{
+                background-color: #dee2e6;
+                width: {splitter_width}px;
+                height: {splitter_width}px;
+            }}
+            QSplitter::handle:horizontal {{
+                width: {splitter_width}px;
+            }}
+            QSplitter::handle:vertical {{
+                height: {splitter_width}px;
+            }}
+            QSplitter::handle:hover {{
+                background-color: #adb5bd;
+            }}
+            
+            /* チェックボックス */
+            QCheckBox {{
+                font-size: {font_size}px;
+                color: #495057;
+                spacing: 8px;
+            }}
+            QCheckBox::indicator {{
+                width: {int(font_size * 1.2)}px;
+                height: {int(font_size * 1.2)}px;
+                border: 1px solid #ced4da;
+                border-radius: 3px;
+                background-color: white;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: #007bff;
+                border-color: #007bff;
+            }}
+            
+            /* スクロールエリア */
+            QScrollArea {{
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                background-color: white;
+            }}
+            
+            /* スクロールバー */
+            QScrollBar:vertical {{
+                background-color: #f8f9fa;
+                width: 16px;
+                border-radius: 8px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: #ced4da;
+                border-radius: 8px;
+                min-height: 20px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: #adb5bd;
             }}
         """
         self.setStyleSheet(style)
@@ -237,9 +452,6 @@ class RadioBillingApp(QMainWindow):
         try:
             # CSVファイルの情報を更新
             file_size = os.path.getsize(csv_file) // 1024  # KBに変換
-            file_time = datetime.fromtimestamp(os.path.getmtime(csv_file)).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
             file_name = os.path.basename(csv_file)
 
             self.payment_tab.csv_info_label.setText(f"CSV: {file_name} ({file_size}KB)")
