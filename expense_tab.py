@@ -342,10 +342,10 @@ class ExpenseTab(QWidget):
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.show_context_menu)
 
-        # 下部：レコード編集エリア
+        # 下部：レコード編集エリア（高さを拡張）
         edit_frame = QFrame()
         edit_frame.setFrameStyle(QFrame.StyledPanel)
-        edit_frame.setMaximumHeight(280)
+        edit_frame.setMaximumHeight(400)  # 案件情報対応のため高さ拡張
         edit_layout = QVBoxLayout(edit_frame)
         edit_layout.setContentsMargins(8, 8, 8, 8)
         content_splitter.addWidget(edit_frame)
@@ -356,16 +356,30 @@ class ExpenseTab(QWidget):
         edit_title.setStyleSheet("color: #2c3e50; margin-bottom: 8px;")
         edit_layout.addWidget(edit_title)
 
-        # 編集フォームのグリッドレイアウト
-        edit_grid = QWidget()
-        edit_grid_layout = QGridLayout(edit_grid)
-        edit_grid_layout.setContentsMargins(0, 0, 0, 0)
-        edit_grid_layout.setSpacing(8)
-        edit_layout.addWidget(edit_grid)
+        # スクロールエリアの作成
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        edit_layout.addWidget(scroll_area)
+
+        # スクロール可能なウィジェット
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setContentsMargins(8, 8, 8, 8)
+        scroll_layout.setSpacing(12)
+        scroll_area.setWidget(scroll_widget)
 
         # 編集フィールドの作成
         self.edit_entries = {}
-        edit_fields = [
+
+        # 基本情報グループ
+        basic_group = QGroupBox("📋 基本情報")
+        basic_layout = QGridLayout(basic_group)
+        basic_layout.setSpacing(8)
+        scroll_layout.addWidget(basic_group)
+
+        basic_fields = [
             ("ID:", "id", 0, 0, True),
             ("案件名:", "project_name", 0, 2, False),
             ("支払い先:", "payee", 1, 0, False),
@@ -375,11 +389,11 @@ class ExpenseTab(QWidget):
             ("状態:", "status", 3, 0, False),
         ]
 
-        for label_text, field_key, row, col, read_only in edit_fields:
+        for label_text, field_key, row, col, read_only in basic_fields:
             # ラベル
             label = QLabel(label_text)
             label.setStyleSheet("font-weight: bold; color: #34495e;")
-            edit_grid_layout.addWidget(label, row, col)
+            basic_layout.addWidget(label, row, col)
 
             # 入力ウィジェット
             if field_key == "id":
@@ -402,7 +416,56 @@ class ExpenseTab(QWidget):
                 widget = QLineEdit()
 
             widget.setMinimumWidth(self.detail_label_width)
-            edit_grid_layout.addWidget(widget, row, col + 1)
+            basic_layout.addWidget(widget, row, col + 1)
+            self.edit_entries[field_key] = widget
+
+        # 案件情報グループ
+        project_group = QGroupBox("🏢 案件情報")
+        project_layout = QGridLayout(project_group)
+        project_layout.setSpacing(8)
+        scroll_layout.addWidget(project_group)
+
+        project_fields = [
+            ("クライアント:", "client_name", 0, 0, False),
+            ("担当部門:", "department", 0, 2, False),
+            ("案件状況:", "project_status", 1, 0, False),
+            ("緊急度:", "urgency_level", 1, 2, False),
+            ("開始日:", "project_start_date", 2, 0, False),
+            ("完了予定日:", "project_end_date", 2, 2, False),
+            ("予算:", "budget", 3, 0, False),
+            ("承認者:", "approver", 3, 2, False),
+        ]
+
+        for label_text, field_key, row, col, read_only in project_fields:
+            # ラベル
+            label = QLabel(label_text)
+            label.setStyleSheet("font-weight: bold; color: #34495e;")
+            project_layout.addWidget(label, row, col)
+
+            # 入力ウィジェット
+            if field_key == "department":
+                widget = QComboBox()
+                widget.setEditable(True)
+                widget.addItems(["", "営業部", "マーケティング部", "総務部", "企画部", "制作部"])
+            elif field_key == "project_status":
+                widget = QComboBox()
+                widget.addItems(["進行中", "完了", "中止", "保留"])
+            elif field_key == "urgency_level":
+                widget = QComboBox()
+                widget.addItems(["通常", "重要", "緊急"])
+            elif field_key in ["project_start_date", "project_end_date"]:
+                widget = QDateEdit()
+                widget.setCalendarPopup(True)
+                widget.setDate(QDate.currentDate())
+                widget.setSpecialValueText("未設定")
+            elif field_key == "budget":
+                widget = QLineEdit()
+                widget.setPlaceholderText("0")
+            else:
+                widget = QLineEdit()
+
+            widget.setMinimumWidth(self.detail_label_width)
+            project_layout.addWidget(widget, row, col + 1)
             self.edit_entries[field_key] = widget
 
         # 支払い先と支払い先コードの連動を設定
@@ -412,35 +475,35 @@ class ExpenseTab(QWidget):
             payee_widget.code_field = payee_code_widget
 
         # 編集ボタンエリア
-        edit_button_widget = QWidget()
-        edit_button_layout = QHBoxLayout(edit_button_widget)
-        edit_button_layout.setContentsMargins(0, 0, 0, 0)
-        edit_layout.addWidget(edit_button_widget)
+        button_group = QGroupBox("💾 操作")
+        button_layout = QHBoxLayout(button_group)
+        button_layout.setSpacing(8)
+        scroll_layout.addWidget(button_group)
 
         # 請求書催促管理ボタン
         view_payments_button = QPushButton("📋 請求書確認")
         view_payments_button.setMinimumSize(self.button_min_width, self.button_min_height)
         view_payments_button.clicked.connect(self.show_related_payments)
-        edit_button_layout.addWidget(view_payments_button)
+        button_layout.addWidget(view_payments_button)
         
         # 同じ月・同じ支払い先の比較確認ボタン
         compare_button = QPushButton("🔍 同月同支払い先比較")
         # 長いテキストのボタンは特別に幅を広げる
         compare_button.setMinimumSize(max(120, int(self.font_size * 12)), self.button_min_height)
         compare_button.clicked.connect(self.show_payment_comparison)
-        edit_button_layout.addWidget(compare_button)
+        button_layout.addWidget(compare_button)
         
-        edit_button_layout.addStretch()
+        button_layout.addStretch()
 
         cancel_button = QPushButton("❌ キャンセル")
         cancel_button.setMinimumSize(self.button_min_width, self.button_min_height)
         cancel_button.clicked.connect(self.cancel_direct_edit)
-        edit_button_layout.addWidget(cancel_button)
+        button_layout.addWidget(cancel_button)
 
         save_button = QPushButton("💾 保存")
         save_button.setMinimumSize(self.button_min_width, self.button_min_height)
         save_button.clicked.connect(self.save_direct_edit)
-        edit_button_layout.addWidget(save_button)
+        button_layout.addWidget(save_button)
 
         # 編集フィールドにEnterキーイベントを追加
         for field_key, widget in self.edit_entries.items():
@@ -1174,38 +1237,62 @@ class ExpenseTab(QWidget):
             if not row:
                 return
 
-            # 編集フォームに値を設定
-            field_names = [
-                "id",
-                "project_name",
-                "payee",
-                "payee_code",
-                "amount",
-                "payment_date",
-                "status",
-            ]
+            # 編集フォームに値を設定（案件情報含む）
+            field_mapping = {
+                0: "id",
+                1: "project_name", 
+                2: "payee",
+                3: "payee_code",
+                4: "amount",
+                5: "payment_date",
+                6: "status",
+                7: "client_name",
+                8: "department", 
+                9: "project_status",
+                10: "project_start_date",
+                11: "project_end_date",
+                12: "budget",
+                13: "approver",
+                14: "urgency_level"
+            }
 
-            for i, field in enumerate(field_names):
+            for i, field in field_mapping.items():
+                if i >= len(row) or field not in self.edit_entries:
+                    continue
+                    
+                widget = self.edit_entries[field]
+                value = row[i] if row[i] is not None else ""
+                
                 if field == "id":
                     # IDフィールド
-                    self.edit_entries[field].setText(str(row[i]))
-                elif field == "status":
-                    # 状態コンボボックス
-                    index = self.edit_entries[field].findText(row[i])
-                    if index >= 0:
-                        self.edit_entries[field].setCurrentIndex(index)
-                elif field == "payment_date":
+                    widget.setText(str(value))
+                elif field in ["status", "project_status", "urgency_level"]:
+                    # コンボボックス
+                    if hasattr(widget, 'findText'):
+                        index = widget.findText(str(value))
+                        if index >= 0:
+                            widget.setCurrentIndex(index)
+                elif field == "department":
+                    # 編集可能コンボボックス
+                    if hasattr(widget, 'setCurrentText'):
+                        widget.setCurrentText(str(value))
+                elif field in ["payment_date", "project_start_date", "project_end_date"]:
                     # 日付フィールド
                     try:
-                        parts = row[i].split("-")
-                        if len(parts) >= 3:
-                            qdate = QDate(int(parts[0]), int(parts[1]), int(parts[2]))
-                            self.edit_entries[field].setDate(qdate)
+                        if str(value) and str(value) != "":
+                            parts = str(value).split("-")
+                            if len(parts) >= 3:
+                                qdate = QDate(int(parts[0]), int(parts[1]), int(parts[2]))
+                                widget.setDate(qdate)
+                            else:
+                                widget.setDate(QDate.currentDate())
+                        else:
+                            widget.setDate(QDate.currentDate())
                     except (ValueError, IndexError):
-                        self.edit_entries[field].setDate(QDate.currentDate())
+                        widget.setDate(QDate.currentDate())
                 else:
                     # 通常のテキストフィールド
-                    self.edit_entries[field].setText(str(row[i]))
+                    widget.setText(str(value))
 
             # 編集フォームを表示
             self.edit_frame.show()
@@ -1219,39 +1306,49 @@ class ExpenseTab(QWidget):
             # utils.pyから関数をインポート
             from utils import format_payee_code
 
-            # 入力値を取得
+            # 基本情報の入力値を取得
             expense_id = self.edit_entries["id"].text()
             project_name = self.edit_entries["project_name"].text()
             payee = self.edit_entries["payee"].text()
             payee_code = self.edit_entries["payee_code"].text()
-            # 【追加開始】
-            from utils import format_payee_code
-
-            if payee_code:
-                payee_code = format_payee_code(payee_code)
-                self.edit_entries["payee_code"].setText(payee_code)
-            # 【追加終了】
             amount_str = self.edit_entries["amount"].text()
+            status = self.edit_entries["status"].currentText()
 
-            # 【追加】支払い先コードの0埋め処理
+            # 支払い先コードの0埋め処理
             if payee_code:
                 payee_code = format_payee_code(payee_code)
-                # 画面上のフィールドも更新
                 self.edit_entries["payee_code"].setText(payee_code)
 
-            # 日付はQDateEditから取得
+            # 日付の取得
             date = self.edit_entries["payment_date"].date()
             payment_date = f"{date.year()}-{date.month():02d}-{date.day():02d}"
 
-            # コンボボックスから状態を取得
-            status = self.edit_entries["status"].currentText()
+            # 案件情報の入力値を取得
+            client_name = self.edit_entries["client_name"].text()
+            department = self.edit_entries["department"].currentText() if hasattr(self.edit_entries["department"], 'currentText') else ""
+            project_status = self.edit_entries["project_status"].currentText()
+            urgency_level = self.edit_entries["urgency_level"].currentText()
+            
+            # 案件日付の取得
+            project_start_date = ""
+            project_end_date = ""
+            if "project_start_date" in self.edit_entries:
+                start_date = self.edit_entries["project_start_date"].date()
+                project_start_date = f"{start_date.year()}-{start_date.month():02d}-{start_date.day():02d}"
+            
+            if "project_end_date" in self.edit_entries:
+                end_date = self.edit_entries["project_end_date"].date()
+                project_end_date = f"{end_date.year()}-{end_date.month():02d}-{end_date.day():02d}"
+
+            budget_str = self.edit_entries["budget"].text()
+            approver = self.edit_entries["approver"].text()
 
             # 入力チェック
             if not project_name or not payee or not amount_str or not payment_date:
-                QMessageBox.critical(self, "エラー", "必須項目を入力してください")
+                QMessageBox.critical(self, "エラー", "必須項目（案件名、支払先、金額、支払日）を入力してください")
                 return
 
-            # 金額の変換
+            # 金額と予算の変換
             try:
                 amount_str = amount_str.replace(",", "").replace("円", "").strip()
                 amount = float(amount_str)
@@ -1259,7 +1356,12 @@ class ExpenseTab(QWidget):
                 QMessageBox.critical(self, "エラー", "金額は数値で入力してください")
                 return
 
-            # データの設定
+            try:
+                budget = float(budget_str.replace(",", "").replace("円", "").strip()) if budget_str else 0
+            except ValueError:
+                budget = 0
+
+            # データの設定（案件情報含む）
             is_new = expense_id == "新規"
             data = {
                 "project_name": project_name,
@@ -1268,6 +1370,14 @@ class ExpenseTab(QWidget):
                 "amount": amount,
                 "payment_date": payment_date,
                 "status": status,
+                "client_name": client_name,
+                "department": department,
+                "project_status": project_status,
+                "project_start_date": project_start_date,
+                "project_end_date": project_end_date,
+                "budget": budget,
+                "approver": approver,
+                "urgency_level": urgency_level,
             }
 
             if not is_new:
