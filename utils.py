@@ -1,5 +1,6 @@
 import os
 import glob
+import calendar
 from datetime import datetime
 
 
@@ -191,3 +192,180 @@ def format_payee_code(code, length=4):
 
     # 英数字混在の場合はそのまま返す（例：A001）
     return code_str
+
+
+def calculate_count_based_amount(
+    base_amount, broadcast_days, target_year, target_month, use_previous_month=True
+):
+    """
+    回数ベースの費用計算を行う共通関数
+    
+    Args:
+        base_amount (float): 基本金額（1回あたり）
+        broadcast_days (str): 放送曜日（カンマ区切り、例："月,水,金"）
+        target_year (int): 支払い年
+        target_month (int): 支払い月
+        use_previous_month (bool): 前月実績を使うかどうか（デフォルト: True）
+    
+    Returns:
+        dict: {
+            'amount': 計算された金額,
+            'broadcast_count': 放送回数,
+            'calculation_year': 計算に使用した年,
+            'calculation_month': 計算に使用した月,
+            'error': エラーメッセージ（エラーがある場合）
+        }
+    """
+    try:
+        # 入力検証
+        if not broadcast_days or not broadcast_days.strip():
+            return {
+                'amount': 0,
+                'broadcast_count': 0,
+                'calculation_year': target_year,
+                'calculation_month': target_month,
+                'error': '放送曜日が指定されていません'
+            }
+        
+        # base_amountの数値検証
+        try:
+            base_amount = safe_float_convert(base_amount)
+            if base_amount < 0:
+                return {
+                    'amount': 0,
+                    'broadcast_count': 0,
+                    'calculation_year': target_year,
+                    'calculation_month': target_month,
+                    'error': '基本金額は0以上である必要があります'
+                }
+        except (ValueError, TypeError):
+            return {
+                'amount': 0,
+                'broadcast_count': 0,
+                'calculation_year': target_year,
+                'calculation_month': target_month,
+                'error': '基本金額が不正です'
+            }
+        
+        # 年月の検証
+        if not (1 <= target_month <= 12):
+            return {
+                'amount': 0,
+                'broadcast_count': 0,
+                'calculation_year': target_year,
+                'calculation_month': target_month,
+                'error': f'不正な月です: {target_month}'
+            }
+        
+        if target_year < 1900 or target_year > 2100:
+            return {
+                'amount': 0,
+                'broadcast_count': 0,
+                'calculation_year': target_year,
+                'calculation_month': target_month,
+                'error': f'不正な年です: {target_year}'
+            }
+        
+        # 計算基準月を決定
+        if use_previous_month:
+            # 前月実績を使用
+            if target_month == 1:
+                calculation_year = target_year - 1
+                calculation_month = 12
+            else:
+                calculation_year = target_year
+                calculation_month = target_month - 1
+        else:
+            # 同月実績を使用
+            calculation_year = target_year
+            calculation_month = target_month
+        
+        # 放送曜日をパース
+        days = [day.strip() for day in broadcast_days.split(",") if day.strip()]
+        
+        # 有効な曜日名の検証
+        valid_weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+        invalid_days = [day for day in days if day not in valid_weekdays]
+        if invalid_days:
+            return {
+                'amount': 0,
+                'broadcast_count': 0,
+                'calculation_year': calculation_year,
+                'calculation_month': calculation_month,
+                'error': f'不正な曜日が含まれています: {", ".join(invalid_days)}'
+            }
+        
+        if not days:
+            return {
+                'amount': 0,
+                'broadcast_count': 0,
+                'calculation_year': calculation_year,
+                'calculation_month': calculation_month,
+                'error': '有効な放送曜日が指定されていません'
+            }
+        
+        # 曜日名から曜日番号へのマッピング
+        weekday_names = ["月", "火", "水", "木", "金", "土", "日"]
+        
+        # 計算月の放送日数を計算
+        try:
+            last_day = calendar.monthrange(calculation_year, calculation_month)[1]
+        except (ValueError, calendar.IllegalMonthError):
+            return {
+                'amount': 0,
+                'broadcast_count': 0,
+                'calculation_year': calculation_year,
+                'calculation_month': calculation_month,
+                'error': f'不正な日付です: {calculation_year}年{calculation_month}月'
+            }
+        
+        broadcast_count = 0
+        for day in range(1, last_day + 1):
+            try:
+                date_obj = datetime(calculation_year, calculation_month, day)
+                weekday_str = weekday_names[date_obj.weekday()]
+                if weekday_str in days:
+                    broadcast_count += 1
+            except (ValueError, IndexError) as e:
+                return {
+                    'amount': 0,
+                    'broadcast_count': 0,
+                    'calculation_year': calculation_year,
+                    'calculation_month': calculation_month,
+                    'error': f'日付計算エラー: {e}'
+                }
+        
+        # 最終金額を計算
+        calculated_amount = base_amount * broadcast_count
+        
+        # 成功時のログ出力
+        if use_previous_month:
+            log_message(
+                f"回数ベース計算: {target_year}年{target_month}月支払い分 = "
+                f"{calculation_year}年{calculation_month}月実績 "
+                f"(放送回数: {broadcast_count}回, 金額: {calculated_amount}円)"
+            )
+        else:
+            log_message(
+                f"回数ベース計算: {target_year}年{target_month}月支払い分 "
+                f"(同月実績, 放送回数: {broadcast_count}回, 金額: {calculated_amount}円)"
+            )
+        
+        return {
+            'amount': calculated_amount,
+            'broadcast_count': broadcast_count,
+            'calculation_year': calculation_year,
+            'calculation_month': calculation_month,
+            'error': None
+        }
+        
+    except Exception as e:
+        error_msg = f"回数ベース計算でエラーが発生しました: {e}"
+        log_message(error_msg)
+        return {
+            'amount': 0,
+            'broadcast_count': 0,
+            'calculation_year': target_year if 'calculation_year' not in locals() else calculation_year,
+            'calculation_month': target_month if 'calculation_month' not in locals() else calculation_month,
+            'error': error_msg
+        }

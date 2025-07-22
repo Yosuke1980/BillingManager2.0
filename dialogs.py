@@ -2,7 +2,7 @@ import sqlite3
 import csv
 import calendar
 from datetime import datetime, timedelta
-from utils import log_message
+from utils import log_message, calculate_count_based_amount
 
 
 class DatabaseManager:
@@ -803,32 +803,18 @@ class DatabaseManager:
                     except ValueError:
                         pass
 
-                # 支払日を決定
+                # 支払日と金額を決定
                 if payment_type == "回数ベース" and broadcast_days:
-                    # 回数ベースの場合は放送回数で計算
-                    days = [
-                        day.strip() for day in broadcast_days.split(",") if day.strip()
-                    ]
-                    weekday_map = {
-                        "月": 0,
-                        "火": 1,
-                        "水": 2,
-                        "木": 3,
-                        "金": 4,
-                        "土": 5,
-                        "日": 6,
-                    }
-
-                    # 該当月の放送日数を計算
-                    broadcast_count = 0
-                    for day in range(1, last_day + 1):
-                        date_obj = datetime(target_year, target_month, day)
-                        weekday_str = list(weekday_map.keys())[date_obj.weekday()]
-                        if weekday_str in days:
-                            broadcast_count += 1
-
-                    # 金額を放送回数で計算
-                    calculated_amount = amount * broadcast_count
+                    # 共通の回数ベース計算関数を使用（前月実績ベース）
+                    result = calculate_count_based_amount(
+                        amount, broadcast_days, target_year, target_month, use_previous_month=True
+                    )
+                    
+                    if result['error']:
+                        log_message(f"回数ベース計算エラー: {result['error']}")
+                        continue  # エラーの場合はこのマスターをスキップ
+                    
+                    calculated_amount = result['amount']
                     payment_date = (
                         f"{target_year:04d}-{target_month:02d}-{last_day:02d}"
                     )
@@ -974,30 +960,16 @@ class DatabaseManager:
 
                 # 支払日と金額を計算
                 if payment_type == "回数ベース" and broadcast_days:
-                    # 回数ベースの場合は放送回数で計算
-                    days = [
-                        day.strip() for day in broadcast_days.split(",") if day.strip()
-                    ]
-                    weekday_map = {
-                        "月": 0,
-                        "火": 1,
-                        "水": 2,
-                        "木": 3,
-                        "金": 4,
-                        "土": 5,
-                        "日": 6,
-                    }
-
-                    # 今月の放送日数を計算
-                    broadcast_count = 0
-                    for day in range(1, last_day + 1):
-                        date_obj = datetime(current_year, current_month, day)
-                        weekday_str = list(weekday_map.keys())[date_obj.weekday()]
-                        if weekday_str in days:
-                            broadcast_count += 1
-
-                    # 金額を放送回数で計算
-                    calculated_amount = amount * broadcast_count
+                    # 共通の回数ベース計算関数を使用（前月実績ベース）
+                    result = calculate_count_based_amount(
+                        amount, broadcast_days, current_year, current_month, use_previous_month=True
+                    )
+                    
+                    if result['error']:
+                        log_message(f"新規マスター回数ベース計算エラー: {result['error']}")
+                        continue  # エラーの場合はこのマスターをスキップ
+                    
+                    calculated_amount = result['amount']
                     payment_date = (
                         f"{current_year:04d}-{current_month:02d}-{last_day:02d}"
                     )
