@@ -2868,4 +2868,66 @@ class ExpenseTab(QWidget):
             log_message(f"比較結果エクスポートエラー: {e}")
             QMessageBox.critical(self, "エラー", f"比較結果のエクスポートに失敗しました: {e}")
 
+    # ===== メニューバー/ツールバー用の共通アクション =====
+    def export_csv(self):
+        """CSV出力（メニュー/ツールバー用）"""
+        self.export_to_csv()
+    
+    def create_new_entry(self):
+        """新規エントリ作成（メニュー/ツールバー用）"""
+        # 新規レコード追加ダイアログを表示
+        try:
+            from PyQt5.QtWidgets import QInputDialog, QComboBox
+            
+            # 現在選択されているタブに応じて適切な新規作成を実行
+            current_tab = self.tab_control.currentIndex()
+            
+            if current_tab == 0:  # 支出情報タブ
+                # 新規支出レコードを作成
+                self.add_new_record()
+            else:
+                QMessageBox.information(self, "新規作成", "現在のサブタブでは新規作成は利用できません。")
+                
+        except Exception as e:
+            log_message(f"新規作成エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"新規作成に失敗しました: {e}")
+    
+    def delete_selected(self):
+        """選択項目削除（メニュー/ツールバー用）"""
+        self.delete_record()
+    
+    def show_search(self):
+        """検索表示（メニュー/ツールバー用）"""
+        self.search_records()
+    
+    def reset_filters(self):
+        """フィルターリセット（メニュー/ツールバー用）"""
+        self.reset_search()
+    
+    def toggle_filter_panel(self, visible):
+        """フィルターパネル表示切り替え"""
+        try:
+            if hasattr(self, 'search_frame'):
+                self.search_frame.setVisible(visible)
+        except Exception as e:
+            log_message(f"フィルターパネル切り替えエラー: {e}")
+    
+    def run_matching(self):
+        """照合実行（メニュー/ツールバー用）"""
+        try:
+            # 現在のタブに応じて適切な照合処理を実行
+            current_tab = self.tab_control.currentIndex()
+            
+            if current_tab == 2:  # 支払い照合タブ
+                # 照合処理を実行
+                self.comparison_results_label.setText("照合処理を実行中...")
+                self.compare_payments()
+                QMessageBox.information(self, "照合実行", "照合処理が完了しました。")
+            else:
+                QMessageBox.information(self, "照合実行", "支払い照合タブで照合機能を使用してください。")
+                
+        except Exception as e:
+            log_message(f"照合実行エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"照合実行に失敗しました: {e}")
+
     # ファイル終了確認用のコメント - expense_tab.py完了

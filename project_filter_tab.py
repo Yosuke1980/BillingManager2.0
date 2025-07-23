@@ -735,5 +735,112 @@ class ProjectFilterTab(QWidget):
             item.setBackground(i, brush)
             item.setForeground(i, text_brush)
 
+    # ===== メニューバー/ツールバー用の共通アクション =====
+    def export_csv(self):
+        """CSV出力（メニュー/ツールバー用）"""
+        try:
+            # 現在表示されているデータをCSVで出力
+            from PyQt5.QtWidgets import QFileDialog
+            import csv
+            from datetime import datetime
+            
+            # 案件データまたは支払いデータを出力
+            active_tree = None
+            filename_prefix = "project_filter"
+            
+            if hasattr(self, 'project_tree') and self.project_tree.topLevelItemCount() > 0:
+                active_tree = self.project_tree
+                filename_prefix = "projects"
+            elif hasattr(self, 'payment_tree') and self.payment_tree.topLevelItemCount() > 0:
+                active_tree = self.payment_tree
+                filename_prefix = "filtered_payments"
+            
+            if not active_tree:
+                QMessageBox.information(self, "CSV出力", "出力するデータがありません。")
+                return
+            
+            # ファイル保存ダイアログ
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "データをCSVで保存",
+                f"{filename_prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                "CSV files (*.csv)"
+            )
+            
+            if filename:
+                with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    
+                    # ヘッダーを書き込み
+                    headers = []
+                    for col in range(active_tree.columnCount()):
+                        headers.append(active_tree.headerItem().text(col))
+                    writer.writerow(headers)
+                    
+                    # データを書き込み
+                    for i in range(active_tree.topLevelItemCount()):
+                        item = active_tree.topLevelItem(i)
+                        row_data = []
+                        for col in range(active_tree.columnCount()):
+                            row_data.append(item.text(col))
+                        writer.writerow(row_data)
+                
+                QMessageBox.information(self, "完了", f"データを保存しました:\n{filename}")
+                
+        except Exception as e:
+            log_message(f"CSV出力エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"CSV出力に失敗しました: {e}")
+    
+    def create_new_entry(self):
+        """新規エントリ作成（メニュー/ツールバー用）"""
+        QMessageBox.information(self, "新規作成", 
+                               "案件絞込みタブでは新規作成機能は利用できません。\n"
+                               "費用管理タブまたはマスタータブをご利用ください。")
+    
+    def delete_selected(self):
+        """選択項目削除（メニュー/ツールバー用）"""
+        QMessageBox.information(self, "削除", 
+                               "案件絞込みタブでは削除機能は利用できません。\n"
+                               "費用管理タブまたはマスタータブをご利用ください。")
+    
+    def show_search(self):
+        """検索表示（メニュー/ツールバー用）"""
+        # 検索フィールドにフォーカスを設定
+        if hasattr(self, 'search_entry'):
+            self.search_entry.setFocus()
+        elif hasattr(self, 'project_search_entry'):
+            self.project_search_entry.setFocus()
+        else:
+            QMessageBox.information(self, "検索", "検索フィールドが見つかりません。")
+    
+    def reset_filters(self):
+        """フィルターリセット（メニュー/ツールバー用）"""
+        try:
+            # 検索フィールドをクリア
+            if hasattr(self, 'search_entry'):
+                self.search_entry.clear()
+            if hasattr(self, 'project_search_entry'):
+                self.project_search_entry.clear()
+            
+            # データを再読み込み
+            self.refresh_project_data()
+            self.app.status_label.setText("フィルターをリセットしました")
+        except Exception as e:
+            log_message(f"フィルターリセットエラー: {e}")
+    
+    def toggle_filter_panel(self, visible):
+        """フィルターパネル表示切り替え"""
+        try:
+            if hasattr(self, 'search_frame'):
+                self.search_frame.setVisible(visible)
+        except Exception as e:
+            log_message(f"フィルターパネル切り替えエラー: {e}")
+    
+    def run_matching(self):
+        """照合実行（メニュー/ツールバー用）"""
+        QMessageBox.information(self, "照合実行", 
+                               "案件絞込みタブでは照合機能は利用できません。\n"
+                               "費用管理タブの支払い照合をご利用ください。")
+
 
 # ファイル終了確認用のコメント - project_filter_tab.py完了

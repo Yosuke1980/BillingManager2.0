@@ -754,5 +754,78 @@ class PaymentTab(QWidget):
             log_message(traceback.format_exc())
             QMessageBox.critical(self, "エラー", f"照合処理に失敗しました: {e}")
 
+    # ===== メニューバー/ツールバー用の共通アクション =====
+    def export_csv(self):
+        """CSV出力（メニュー/ツールバー用）"""
+        try:
+            # 現在表示されているデータをCSVで出力
+            from PyQt5.QtWidgets import QFileDialog
+            import csv
+            from datetime import datetime
+            
+            # ファイル保存ダイアログ
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "支払いデータをCSVで保存",
+                f"payment_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                "CSV files (*.csv)"
+            )
+            
+            if filename:
+                with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    
+                    # ヘッダーを書き込み
+                    headers = []
+                    for col in range(self.payment_tree.columnCount()):
+                        headers.append(self.payment_tree.headerItem().text(col))
+                    writer.writerow(headers)
+                    
+                    # データを書き込み
+                    for i in range(self.payment_tree.topLevelItemCount()):
+                        item = self.payment_tree.topLevelItem(i)
+                        row_data = []
+                        for col in range(self.payment_tree.columnCount()):
+                            row_data.append(item.text(col))
+                        writer.writerow(row_data)
+                
+                QMessageBox.information(self, "完了", f"支払いデータを保存しました:\n{filename}")
+                
+        except Exception as e:
+            log_message(f"CSV出力エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"CSV出力に失敗しました: {e}")
+    
+    def create_new_entry(self):
+        """新規エントリ作成（メニュー/ツールバー用）"""
+        QMessageBox.information(self, "新規作成", 
+                               "支払い情報は閲覧専用です。\n"
+                               "新規作成は費用管理タブをご利用ください。")
+    
+    def delete_selected(self):
+        """選択項目削除（メニュー/ツールバー用）"""
+        QMessageBox.information(self, "削除", 
+                               "支払い情報は閲覧専用です。\n"
+                               "データの削除はできません。")
+    
+    def show_search(self):
+        """検索表示（メニュー/ツールバー用）"""
+        self.search_records()
+    
+    def reset_filters(self):
+        """フィルターリセット（メニュー/ツールバー用）"""
+        self.reset_search()
+    
+    def toggle_filter_panel(self, visible):
+        """フィルターパネル表示切り替え"""
+        try:
+            if hasattr(self, 'search_frame'):
+                self.search_frame.setVisible(visible)
+        except Exception as e:
+            log_message(f"フィルターパネル切り替えエラー: {e}")
+    
+    def run_matching(self):
+        """照合実行（メニュー/ツールバー用）"""
+        self.match_with_expenses()
+
 
 # ファイル終了確認用のコメント - payment_tab.py完了

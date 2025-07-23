@@ -1285,5 +1285,63 @@ class MasterTab(QWidget):
                 self, "エラー", f"費用マスターデータのインポートに失敗しました: {e}"
             )
 
+    # ===== メニューバー/ツールバー用の共通アクション =====
+    def export_csv(self):
+        """CSV出力（メニュー/ツールバー用）"""
+        self.export_master_data()
+    
+    def create_new_entry(self):
+        """新規エントリ作成（メニュー/ツールバー用）"""
+        self.add_new_record()
+    
+    def delete_selected(self):
+        """選択項目削除（メニュー/ツールバー用）"""
+        self.delete_record()
+    
+    def show_search(self):
+        """検索表示（メニュー/ツールバー用）"""
+        # 検索フィールドにフォーカスを設定
+        if hasattr(self, 'search_entry'):
+            self.search_entry.setFocus()
+        else:
+            QMessageBox.information(self, "検索", "検索機能は利用できません。")
+    
+    def reset_filters(self):
+        """フィルターリセット（メニュー/ツールバー用）"""
+        try:
+            if hasattr(self, 'search_entry'):
+                self.search_entry.clear()
+            self.refresh_data()
+            self.app.status_label.setText("フィルターをリセットしました")
+        except Exception as e:
+            log_message(f"フィルターリセットエラー: {e}")
+    
+    def toggle_filter_panel(self, visible):
+        """フィルターパネル表示切り替え"""
+        try:
+            if hasattr(self, 'search_frame'):
+                self.search_frame.setVisible(visible)
+        except Exception as e:
+            log_message(f"フィルターパネル切り替えエラー: {e}")
+    
+    def run_matching(self):
+        """照合実行（メニュー/ツールバー用）"""
+        QMessageBox.information(self, "照合実行", 
+                               "マスタータブでは照合機能は利用できません。\n"
+                               "費用管理タブの支払い照合をご利用ください。")
+    
+    def generate_master_data(self):
+        """マスターデータ生成（メニュー/ツールバー用）"""
+        try:
+            # 支払いデータからマスターデータを生成
+            generated_count = self.db_manager.generate_master_from_payments()
+            self.refresh_data()
+            self.app.status_label.setText(f"マスターデータを{generated_count}件生成しました")
+            QMessageBox.information(self, "マスター生成", 
+                                   f"支払いデータからマスターデータを{generated_count}件生成しました。")
+        except Exception as e:
+            log_message(f"マスター生成エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"マスターデータの生成に失敗しました: {e}")
+
 
 # ファイル終了確認用のコメント - master_tab.py完了

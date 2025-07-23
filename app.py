@@ -9,6 +9,11 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QFrame,
+    QMenuBar,
+    QToolBar,
+    QAction,
+    QMessageBox,
+    QFileDialog,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QFontMetrics
@@ -124,12 +129,236 @@ class RadioBillingApp(QMainWindow):
         self.project_filter_tab = ProjectFilterTab(self.tab_control, self)
         self.tab_control.addTab(self.project_filter_tab, "案件絞込み・管理")
 
+        # メニューバーとツールバーを作成
+        self.create_menu_bar()
+        self.create_toolbar()
+        
         # データを読み込み
         self.import_latest_csv()
         self.expense_tab.refresh_data()
         self.master_tab.refresh_data()
 
         self.apply_stylesheet()  # 基本的な視認性を確保
+    
+    def create_menu_bar(self):
+        """メニューバーを作成"""
+        menubar = self.menuBar()
+        
+        # ファイルメニュー
+        file_menu = menubar.addMenu('ファイル(&F)')
+        
+        # CSV読み込みアクション
+        csv_import_action = QAction('CSV読み込み(&I)', self)
+        csv_import_action.setShortcut('Ctrl+I')
+        csv_import_action.setStatusTip('CSVファイルからデータを読み込み')
+        csv_import_action.triggered.connect(self.import_latest_csv)
+        file_menu.addAction(csv_import_action)
+        
+        # データ再読み込みアクション
+        reload_action = QAction('データ再読み込み(&R)', self)
+        reload_action.setShortcut('F5')
+        reload_action.setStatusTip('データを再読み込み')
+        reload_action.triggered.connect(self.reload_data)
+        file_menu.addAction(reload_action)
+        
+        file_menu.addSeparator()
+        
+        # CSV出力アクション
+        csv_export_action = QAction('CSV出力(&E)', self)
+        csv_export_action.setShortcut('Ctrl+E')
+        csv_export_action.setStatusTip('データをCSV形式で出力')
+        csv_export_action.triggered.connect(self.export_csv)
+        file_menu.addAction(csv_export_action)
+        
+        file_menu.addSeparator()
+        
+        # 終了アクション
+        exit_action = QAction('終了(&X)', self)
+        exit_action.setShortcut('Ctrl+Q')
+        exit_action.setStatusTip('アプリケーションを終了')
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # 編集メニュー
+        edit_menu = menubar.addMenu('編集(&E)')
+        
+        # 新規作成アクション
+        new_action = QAction('新規作成(&N)', self)
+        new_action.setShortcut('Ctrl+N')
+        new_action.setStatusTip('新しいエントリを作成')
+        new_action.triggered.connect(self.create_new_entry)
+        edit_menu.addAction(new_action)
+        
+        # 削除アクション
+        delete_action = QAction('削除(&D)', self)
+        delete_action.setShortcut('Delete')
+        delete_action.setStatusTip('選択したエントリを削除')
+        delete_action.triggered.connect(self.delete_selected)
+        edit_menu.addAction(delete_action)
+        
+        edit_menu.addSeparator()
+        
+        # 検索アクション
+        search_action = QAction('検索(&S)', self)
+        search_action.setShortcut('Ctrl+F')
+        search_action.setStatusTip('データを検索')
+        search_action.triggered.connect(self.show_search)
+        edit_menu.addAction(search_action)
+        
+        # リセットアクション
+        reset_action = QAction('リセット(&C)', self)
+        reset_action.setShortcut('Ctrl+R')
+        reset_action.setStatusTip('フィルターをリセット')
+        reset_action.triggered.connect(self.reset_filters)
+        edit_menu.addAction(reset_action)
+        
+        # 表示メニュー
+        view_menu = menubar.addMenu('表示(&V)')
+        
+        # フィルター表示アクション
+        filter_action = QAction('フィルター表示(&F)', self)
+        filter_action.setCheckable(True)
+        filter_action.setChecked(True)
+        filter_action.setStatusTip('フィルターパネルの表示/非表示')
+        filter_action.triggered.connect(self.toggle_filter_panel)
+        view_menu.addAction(filter_action)
+        
+        # ツールメニュー
+        tools_menu = menubar.addMenu('ツール(&T)')
+        
+        # 照合実行アクション
+        match_action = QAction('照合実行(&M)', self)
+        match_action.setShortcut('Ctrl+M')
+        match_action.setStatusTip('データの照合を実行')
+        match_action.triggered.connect(self.run_matching)
+        tools_menu.addAction(match_action)
+        
+        # マスター生成アクション
+        generate_master_action = QAction('マスター生成(&G)', self)
+        generate_master_action.setStatusTip('マスターデータを生成')
+        generate_master_action.triggered.connect(self.generate_master_data)
+        tools_menu.addAction(generate_master_action)
+        
+        # ヘルプメニュー
+        help_menu = menubar.addMenu('ヘルプ(&H)')
+        
+        # バージョン情報アクション
+        about_action = QAction('バージョン情報(&A)', self)
+        about_action.setStatusTip('アプリケーションのバージョン情報')
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+    
+    def create_toolbar(self):
+        """ツールバーを作成"""
+        toolbar = self.addToolBar('メイン')
+        toolbar.setMovable(False)
+        
+        # よく使う機能をツールバーに追加
+        # データ再読み込み
+        reload_action = QAction('再読み込み', self)
+        reload_action.setShortcut('F5')
+        reload_action.triggered.connect(self.reload_data)
+        toolbar.addAction(reload_action)
+        
+        toolbar.addSeparator()
+        
+        # 新規作成
+        new_action = QAction('新規', self)
+        new_action.triggered.connect(self.create_new_entry)
+        toolbar.addAction(new_action)
+        
+        # 削除
+        delete_action = QAction('削除', self)
+        delete_action.triggered.connect(self.delete_selected)
+        toolbar.addAction(delete_action)
+        
+        toolbar.addSeparator()
+        
+        # 検索
+        search_action = QAction('検索', self)
+        search_action.triggered.connect(self.show_search)
+        toolbar.addAction(search_action)
+        
+        # リセット
+        reset_action = QAction('リセット', self)
+        reset_action.triggered.connect(self.reset_filters)
+        toolbar.addAction(reset_action)
+        
+        toolbar.addSeparator()
+        
+        # CSV出力
+        export_action = QAction('CSV出力', self)
+        export_action.triggered.connect(self.export_csv)
+        toolbar.addAction(export_action)
+    
+    # メニューとツールバーのアクション実装
+    def export_csv(self):
+        """CSV出力処理"""
+        current_tab = self.tab_control.currentWidget()
+        if hasattr(current_tab, 'export_csv'):
+            current_tab.export_csv()
+        else:
+            QMessageBox.information(self, 'CSV出力', '現在のタブではCSV出力は利用できません。')
+    
+    def create_new_entry(self):
+        """新規エントリ作成"""
+        current_tab = self.tab_control.currentWidget()
+        if hasattr(current_tab, 'create_new_entry'):
+            current_tab.create_new_entry()
+        else:
+            QMessageBox.information(self, '新規作成', '現在のタブでは新規作成は利用できません。')
+    
+    def delete_selected(self):
+        """選択項目の削除"""
+        current_tab = self.tab_control.currentWidget()
+        if hasattr(current_tab, 'delete_selected'):
+            current_tab.delete_selected()
+        else:
+            QMessageBox.information(self, '削除', '現在のタブでは削除は利用できません。')
+    
+    def show_search(self):
+        """検索機能の表示"""
+        current_tab = self.tab_control.currentWidget()
+        if hasattr(current_tab, 'show_search'):
+            current_tab.show_search()
+        else:
+            QMessageBox.information(self, '検索', '現在のタブでは検索は利用できません。')
+    
+    def reset_filters(self):
+        """フィルターのリセット"""
+        current_tab = self.tab_control.currentWidget()
+        if hasattr(current_tab, 'reset_filters'):
+            current_tab.reset_filters()
+        else:
+            QMessageBox.information(self, 'リセット', '現在のタブではリセットは利用できません。')
+    
+    def toggle_filter_panel(self, checked):
+        """フィルターパネルの表示/非表示切り替え"""
+        current_tab = self.tab_control.currentWidget()
+        if hasattr(current_tab, 'toggle_filter_panel'):
+            current_tab.toggle_filter_panel(checked)
+    
+    def run_matching(self):
+        """照合実行"""
+        current_tab = self.tab_control.currentWidget()
+        if hasattr(current_tab, 'run_matching'):
+            current_tab.run_matching()
+        else:
+            QMessageBox.information(self, '照合実行', '現在のタブでは照合機能は利用できません。')
+    
+    def generate_master_data(self):
+        """マスターデータ生成"""
+        if hasattr(self.master_tab, 'generate_master_data'):
+            self.master_tab.generate_master_data()
+        else:
+            QMessageBox.information(self, 'マスター生成', 'マスター生成機能は利用できません。')
+    
+    def show_about(self):
+        """バージョン情報表示"""
+        QMessageBox.about(self, 'バージョン情報', 
+                         'ラジオ局支払い・費用管理システム\n'
+                         'Version 1.0\n\n'
+                         'PyQt5ベースの業務管理アプリケーション')
     
     def calculate_optimal_font_size(self):
         """システムのDPI設定に基づいて最適なフォントサイズを計算"""

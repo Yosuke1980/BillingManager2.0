@@ -1,0 +1,192 @@
+{
+  "application": {
+    "name": "Generic Business Manager",
+    "version": "1.0.0",
+    "author": "Generic Framework",
+    "window": {
+      "title": "Generic Business Management System",
+      "geometry": {
+        "x": 100,
+        "y": 100,
+        "width": 1400,
+        "height": 1600
+      },
+      "minimum_size": {
+        "width": 800,
+        "height": 600
+      }
+    }
+  },
+  "plugins": [
+    {
+      "id": "PaymentPlugin",
+      "enabled": true,
+      "config": {
+        "read_only": true
+      }
+    },
+    {
+      "id": "ExpensePlugin", 
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "MasterPlugin",
+      "enabled": true,
+      "config": {}
+    },
+    {
+      "id": "ProjectFilterPlugin",
+      "enabled": true,
+      "config": {}
+    }
+  ],
+  "menus": {
+    "File": [
+      {"type": "action", "action_id": "file_import"},
+      {"type": "action", "action_id": "file_reload"},
+      {"type": "separator"},
+      {"type": "action", "action_id": "file_export"},
+      {"type": "separator"},
+      {"type": "action", "action_id": "file_exit"}
+    ],
+    "Edit": [
+      {"type": "action", "action_id": "edit_new"},
+      {"type": "action", "action_id": "edit_delete"},
+      {"type": "separator"},
+      {"type": "action", "action_id": "edit_find"},
+      {"type": "action", "action_id": "edit_reset"}
+    ],
+    "View": [
+      {"type": "action", "action_id": "view_refresh"},
+      {"type": "separator"},
+      {"type": "action", "action_id": "view_toggle_filter"}
+    ],
+    "Tools": [
+      {"type": "action", "action_id": "tools_match"},
+      {"type": "action", "action_id": "tools_generate_master"}
+    ],
+    "Help": [
+      {"type": "action", "action_id": "help_about"}
+    ]
+  },
+  "toolbar": {
+    "main": [
+      {"type": "action", "action_id": "file_reload"},
+      {"type": "separator"},
+      {"type": "action", "action_id": "edit_new"},
+      {"type": "action", "action_id": "edit_delete"},
+      {"type": "separator"},
+      {"type": "action", "action_id": "edit_find"},
+      {"type": "action", "action_id": "edit_reset"},
+      {"type": "separator"},
+      {"type": "action", "action_id": "file_export"}
+    ]
+  },
+  "actions": {
+    "file_import": {
+      "text": "データ読み込み",
+      "shortcut": "Ctrl+I",
+      "tooltip": "CSVファイルからデータを読み込み",
+      "icon": null,
+      "enabled": true
+    },
+    "file_reload": {
+      "text": "データ再読み込み",
+      "shortcut": "F5", 
+      "tooltip": "データを再読み込み",
+      "icon": null,
+      "enabled": true
+    },
+    "file_export": {
+      "text": "データ出力",
+      "shortcut": "Ctrl+E",
+      "tooltip": "データをCSV形式で出力",
+      "icon": null,
+      "enabled": true
+    },
+    "file_exit": {
+      "text": "終了",
+      "shortcut": "Ctrl+Q",
+      "tooltip": "アプリケーションを終了",
+      "icon": null,
+      "enabled": true
+    },
+    "edit_new": {
+      "text": "新規作成",
+      "shortcut": "Ctrl+N",
+      "tooltip": "新しいエントリを作成",
+      "icon": null,
+      "enabled": true
+    },
+    "edit_delete": {
+      "text": "削除",
+      "shortcut": "Delete",
+      "tooltip": "選択したエントリを削除",
+      "icon": null,
+      "enabled": true
+    },
+    "edit_find": {
+      "text": "検索",
+      "shortcut": "Ctrl+F",
+      "tooltip": "データを検索",
+      "icon": null,
+      "enabled": true
+    },
+    "edit_reset": {
+      "text": "リセット",
+      "shortcut": "Ctrl+R",
+      "tooltip": "フィルターをリセット",
+      "icon": null,
+      "enabled": true
+    },
+    "view_refresh": {
+      "text": "表示更新",
+      "shortcut": "F5",
+      "tooltip": "表示を更新",
+      "icon": null,
+      "enabled": true
+    },
+    "view_toggle_filter": {
+      "text": "フィルター表示切替",
+      "shortcut": null,
+      "tooltip": "フィルターパネルの表示/非表示",
+      "icon": null,
+      "checkable": true,
+      "enabled": true
+    },
+    "tools_match": {
+      "text": "照合実行",
+      "shortcut": "Ctrl+M",
+      "tooltip": "データの照合を実行",
+      "icon": null,
+      "enabled": true
+    },
+    "tools_generate_master": {
+      "text": "マスター生成",
+      "shortcut": null,
+      "tooltip": "マスターデータを生成",
+      "icon": null,
+      "enabled": true
+    },
+    "help_about": {
+      "text": "バージョン情報",
+      "shortcut": null,
+      "tooltip": "アプリケーションのバージョン情報",
+      "icon": null,
+      "enabled": true
+    }
+  },
+  "styles": {
+    "theme": "default",
+    "font_size": "auto"
+  },
+  "database": {
+    "billing_db": "billing.db",
+    "payee_master_db": "payee_master.db"
+  },
+  "csv": {
+    "data_folder": "data",
+    "encoding": "utf-8"
+  }
+}
