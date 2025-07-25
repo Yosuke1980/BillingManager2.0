@@ -1428,7 +1428,17 @@ class ExpenseTab(QWidget):
                         widget.setCurrentIndex(index)
                 elif field == "payment_date":
                     widget.setDate(QDate.currentDate())
+                elif isinstance(widget, QComboBox):
+                    # ComboBoxの場合は空のテキストを設定または最初の項目を選択
+                    if widget.isEditable():
+                        widget.setCurrentText("")
+                    else:
+                        widget.setCurrentIndex(0)
+                elif isinstance(widget, QDateEdit):
+                    # DateEditの場合は現在の日付を設定
+                    widget.setDate(QDate.currentDate())
                 else:
+                    # LineEditなどテキスト入力ウィジェットの場合
                     widget.setText("")
 
         except Exception as e:
