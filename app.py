@@ -25,6 +25,7 @@ from payment_tab import PaymentTab
 from expense_tab import ExpenseTab
 from master_tab import MasterTab
 from project_filter_tab import ProjectFilterTab
+from monitoring_tab import MonitoringTab
 from utils import get_latest_csv_file, log_message
 
 
@@ -128,6 +129,10 @@ class RadioBillingApp(QMainWindow):
         # 案件絞込みタブを追加
         self.project_filter_tab = ProjectFilterTab(self.tab_control, self)
         self.tab_control.addTab(self.project_filter_tab, "案件絞込み・管理")
+
+        # 監視機能タブを追加
+        self.monitoring_tab = MonitoringTab()
+        self.tab_control.addTab(self.monitoring_tab, "📁 ファイル監視")
 
         # メニューバーとツールバーを作成
         self.create_menu_bar()
