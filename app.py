@@ -718,6 +718,13 @@ class RadioBillingApp(QMainWindow):
 
 
 def main():
+    import argparse
+    
+    # コマンドライン引数の解析
+    parser = argparse.ArgumentParser(description='ラジオ局支払い・費用管理システム')
+    parser.add_argument('--import-csv', type=str, help='指定されたCSVファイルをインポートしてアプリを起動')
+    args = parser.parse_args()
+    
     app = QApplication(sys.argv)
     
     # Windows高DPI対応（強化版）
@@ -738,6 +745,30 @@ def main():
             pass  # 古いバージョンでは無視
     
     window = RadioBillingApp()
+    
+    # コマンドライン引数でCSVファイルが指定された場合の処理
+    if args.import_csv:
+        try:
+            if os.path.exists(args.import_csv):
+                log_message(f"コマンドライン引数で指定されたCSVファイルをインポート: {args.import_csv}")
+                # 指定されたCSVファイルをインポート
+                row_count = window.db_manager.import_csv_data(args.import_csv, window.header_mapping)
+                window.payment_tab.refresh_data()
+                window.status_label.setText(f"{row_count}件のデータをCSVからインポートしました")
+                
+                # CSVファイル情報を更新
+                file_size = os.path.getsize(args.import_csv) // 1024
+                file_name = os.path.basename(args.import_csv)
+                window.payment_tab.csv_info_label.setText(f"CSV: {file_name} ({file_size}KB)")
+                
+                log_message(f"CSVファイルのインポートが完了しました: {row_count}件")
+            else:
+                log_message(f"エラー: 指定されたCSVファイルが見つかりません: {args.import_csv}")
+                window.status_label.setText(f"CSVファイルが見つかりません: {args.import_csv}")
+        except Exception as e:
+            log_message(f"CSVインポートエラー: {e}")
+            window.status_label.setText(f"CSVインポートに失敗しました: {str(e)}")
+    
     window.show()
     sys.exit(app.exec_())
 
