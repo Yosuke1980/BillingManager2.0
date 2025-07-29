@@ -15,11 +15,11 @@ if %errorlevel% neq 0 (
 )
 
 rem 引数の処理
-if "%1"=="" goto :show_usage
-if "%1"=="start" goto :start_watcher
-if "%1"=="stop" goto :stop_watcher
-if "%1"=="status" goto :check_status
-if "%1"=="restart" goto :restart_watcher
+if "%~1"=="" goto :show_usage
+if /i "%~1"=="start" goto :start_watcher
+if /i "%~1"=="stop" goto :stop_watcher
+if /i "%~1"=="status" goto :check_status
+if /i "%~1"=="restart" goto :restart_watcher
 goto :show_usage
 
 :check_dependencies
