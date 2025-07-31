@@ -1444,6 +1444,10 @@ class DatabaseManager:
                 if filters.get('payment_month'):
                     conditions.append("strftime('%Y-%m', REPLACE(payment_date, '/', '-')) = ?")
                     params.append(filters['payment_month'])
+                
+                if filters.get('payment_status'):
+                    conditions.append("status = ?")
+                    params.append(filters['payment_status'])
 
             # 条件を結合
             if conditions:
@@ -1512,9 +1516,13 @@ class DatabaseManager:
         cursor = conn.cursor()
 
         try:
-            # 進行状況の選択肢
+            # 案件進行状況の選択肢
             cursor.execute("SELECT DISTINCT project_status FROM payments WHERE project_status IS NOT NULL AND project_status != ''")
-            status_options = [row[0] for row in cursor.fetchall()]
+            project_status_options = [row[0] for row in cursor.fetchall()]
+            
+            # 支払い状態の選択肢
+            cursor.execute("SELECT DISTINCT status FROM payments WHERE status IS NOT NULL AND status != ''")
+            payment_status_options = [row[0] for row in cursor.fetchall()]
 
             # 担当部門の選択肢
             cursor.execute("SELECT DISTINCT department FROM payments WHERE department IS NOT NULL AND department != ''")
@@ -1536,13 +1544,15 @@ class DatabaseManager:
             
             # デバッグログ出力
             log_message(f"フィルターオプション取得結果:")
-            log_message(f"  進行状況: {len(status_options)}件")
+            log_message(f"  案件進行状況: {len(project_status_options)}件")
+            log_message(f"  支払い状態: {len(payment_status_options)}件")
             log_message(f"  担当部門: {len(department_options)}件")
             log_message(f"  クライアント: {len(client_options)}件")
             log_message(f"  支払い月: {len(payment_month_options)}件 - {payment_month_options[:5]}")
 
             return {
-                'status_options': status_options,
+                'project_status_options': project_status_options,
+                'payment_status_options': payment_status_options,
                 'department_options': department_options,
                 'client_options': client_options,
                 'payment_month_options': payment_month_options
@@ -1553,10 +1563,11 @@ class DatabaseManager:
             import traceback
             log_message(f"エラー詳細: {traceback.format_exc()}")
             return {
-                'status_options': [],
+                'project_status_options': [],
+                'payment_status_options': [],
                 'department_options': [],
                 'client_options': [],
-                'payment_month_options': []  # キーを追加
+                'payment_month_options': []
             }
         finally:
             conn.close()

@@ -110,9 +110,15 @@ class ProjectFilterTab(QWidget):
         self.search_entry.returnPressed.connect(self.apply_filters)
         search_layout.addWidget(self.search_entry)
 
-        search_button = QPushButton("検索")
-        search_button.clicked.connect(self.apply_filters)
-        search_layout.addWidget(search_button)
+        # フィルター適用ボタン
+        filter_button_layout = QHBoxLayout()
+        
+        apply_button = QPushButton("🔍 フィルター適用")
+        apply_button.clicked.connect(self.apply_filters)
+        apply_button.setStyleSheet("background-color: lightblue; font-weight: bold;")
+        filter_button_layout.addWidget(apply_button)
+        
+        search_layout.addLayout(filter_button_layout)
 
         layout.addWidget(search_group)
 
@@ -122,15 +128,41 @@ class ProjectFilterTab(QWidget):
 
         self.payment_month_filter = QComboBox()
         self.payment_month_filter.addItem("すべて")
-        self.payment_month_filter.currentTextChanged.connect(self.apply_filters)
+        # 自動適用を削除し、手動適用ボタンで制御
         month_layout.addWidget(self.payment_month_filter)
 
         layout.addWidget(month_group)
 
+        # 案件状況フィルター
+        project_status_group = QGroupBox("📊 案件状況")
+        project_status_layout = QVBoxLayout(project_status_group)
+
+        self.project_status_filter = QComboBox()
+        self.project_status_filter.addItem("すべて")
+        project_status_layout.addWidget(self.project_status_filter)
+
+        layout.addWidget(project_status_group)
+
+        # 支払い状態フィルター
+        payment_status_group = QGroupBox("💳 支払い状態")
+        payment_status_layout = QVBoxLayout(payment_status_group)
+
+        self.payment_status_filter = QComboBox()
+        self.payment_status_filter.addItem("すべて")
+        payment_status_layout.addWidget(self.payment_status_filter)
+
+        layout.addWidget(payment_status_group)
+
+        # ボタンレイアウト
+        button_layout = QHBoxLayout()
+        
         # リセットボタン
         reset_button = QPushButton("🔄 リセット")
         reset_button.clicked.connect(self.reset_filters)
-        layout.addWidget(reset_button)
+        reset_button.setStyleSheet("background-color: lightcoral;")
+        button_layout.addWidget(reset_button)
+        
+        layout.addLayout(button_layout)
 
         layout.addStretch()
 
@@ -361,20 +393,58 @@ class ProjectFilterTab(QWidget):
             self.payment_month_filter.clear()
             self.payment_month_filter.addItem("すべて")
             
-            # キーの存在チェック
+            # 支払い月フィルターの更新
             if 'payment_month_options' in options:
                 payment_months = options['payment_month_options']
                 log_message(f"支払い月オプション: {len(payment_months)}件 - {payment_months[:5]}")
                 
-                for month in payment_months:
-                    if month:  # Noneや空文字を除外
-                        self.payment_month_filter.addItem(month)
-                        
-                log_message(f"支払い月フィルターに{len(payment_months)}件の選択肢を追加")
+                if len(payment_months) == 0:
+                    # 空データの場合の処理
+                    log_message("支払い月のデータが空です。データを確認してください。")
+                    self.payment_month_filter.addItem("データなし")
+                    self.payment_month_filter.setEnabled(False)
+                    self.status_info_label.setText("データが見つかりません。CSVファイルを読み込んでください。")
+                else:
+                    # 正常なデータがある場合
+                    self.payment_month_filter.setEnabled(True)
+                    for month in payment_months:
+                        if month:  # Noneや空文字を除外
+                            self.payment_month_filter.addItem(month)
+                    
+                    log_message(f"支払い月フィルターに{len(payment_months)}件の選択肢を追加")
+                    self.status_info_label.setText("準備完了")
             else:
                 log_message("警告: payment_month_optionsキーが見つかりません")
                 # フォールバック処理: 直接データベースから取得を試みる
                 self.load_payment_months_fallback()
+                
+            # 案件状況フィルターの更新
+            if 'project_status_options' in options:
+                project_statuses = options['project_status_options']
+                log_message(f"案件状況オプション: {len(project_statuses)}件 - {project_statuses}")
+                
+                self.project_status_filter.clear()
+                self.project_status_filter.addItem("すべて")
+                
+                for status in project_statuses:
+                    if status:
+                        self.project_status_filter.addItem(status)
+                        
+                log_message(f"案件状況フィルターに{len(project_statuses)}件の選択肢を追加")
+            
+            # 支払い状態フィルターの更新
+            if 'payment_status_options' in options:
+                payment_statuses = options['payment_status_options']
+                log_message(f"支払い状態オプション: {len(payment_statuses)}件 - {payment_statuses}")
+                
+                self.payment_status_filter.clear()
+                self.payment_status_filter.addItem("すべて")
+                
+                for status in payment_statuses:
+                    if status:
+                        self.payment_status_filter.addItem(status)
+                        
+                log_message(f"支払い状態フィルターに{len(payment_statuses)}件の選択肢を追加")
 
         except Exception as e:
             log_message(f"フィルターオプション更新エラー: {e}")
@@ -422,26 +492,86 @@ class ProjectFilterTab(QWidget):
 
     def apply_filters(self):
         """フィルターを適用して案件データを更新"""
-        # フィルター条件を収集
-        filters = {}
-        
-        search_term = self.search_entry.text().strip()
-        if search_term:
-            filters['search_term'] = search_term
+        try:
+            # フィルター条件を収集
+            filters = {}
+            filter_descriptions = []
+            
+            search_term = self.search_entry.text().strip()
+            if search_term:
+                filters['search_term'] = search_term
+                filter_descriptions.append(f"検索: '{search_term}'")
 
-        payment_month = self.payment_month_filter.currentText()
-        if payment_month != "すべて":
-            filters['payment_month'] = payment_month
+            payment_month = self.payment_month_filter.currentText()
+            if payment_month != "すべて":
+                filters['payment_month'] = payment_month
+                filter_descriptions.append(f"支払い月: {payment_month}")
 
-        self.current_filters = filters
-        self.refresh_project_data()
+            project_status = self.project_status_filter.currentText()
+            if project_status != "すべて":
+                filters['project_status'] = project_status
+                filter_descriptions.append(f"案件状況: {project_status}")
+
+            payment_status = self.payment_status_filter.currentText()
+            if payment_status != "すべて":
+                filters['payment_status'] = payment_status
+                filter_descriptions.append(f"支払い状態: {payment_status}")
+
+            # フィルター状態を保存
+            self.current_filters = filters
+            
+            # ログ出力
+            if filter_descriptions:
+                log_message(f"フィルターを適用: {', '.join(filter_descriptions)}")
+                self.status_info_label.setText(f"適用中のフィルター: {', '.join(filter_descriptions)}")
+            else:
+                log_message("全てのフィルターをクリアして表示")
+                self.status_info_label.setText("フィルターなし - 全件表示")
+            
+            # データを更新
+            self.refresh_project_data()
+            
+        except Exception as e:
+            log_message(f"フィルター適用エラー: {e}")
+            self.status_info_label.setText("フィルター適用中にエラーが発生しました")
 
     def reset_filters(self):
         """フィルターをリセット"""
-        self.search_entry.clear()
-        self.payment_month_filter.setCurrentText("すべて")
-        self.current_filters = {}
-        self.refresh_project_data()
+        try:
+            # 検索フィールドをクリア
+            if hasattr(self, 'search_entry'):
+                self.search_entry.clear()
+            
+            # 支払い月フィルターをリセット
+            if hasattr(self, 'payment_month_filter'):
+                self.payment_month_filter.setCurrentText("すべて")
+                
+            # 案件状況フィルターをリセット
+            if hasattr(self, 'project_status_filter'):
+                self.project_status_filter.setCurrentText("すべて")
+                
+            # 支払い状態フィルターをリセット
+            if hasattr(self, 'payment_status_filter'):
+                self.payment_status_filter.setCurrentText("すべて")
+            
+            # フィルター状態をクリア
+            self.current_filters = {}
+            
+            # データを再読み込み
+            self.refresh_project_data()
+            
+            # 選択状態もクリア
+            self.current_project = None
+            self.clear_payment_list()
+            
+            # ステータス更新
+            self.status_info_label.setText("フィルターをリセットしました")
+            
+            log_message("フィルターを正常にリセットしました")
+            
+        except Exception as e:
+            log_message(f"フィルターリセットエラー: {e}")
+            self.status_info_label.setText("フィルターリセット中にエラーが発生しました")
 
     def refresh_project_data(self):
         """案件データを更新"""
@@ -487,9 +617,29 @@ class ProjectFilterTab(QWidget):
                 total_amount += project_amount
 
             # ステータス更新
-            self.status_info_label.setText(
-                f"絞込み結果: {project_count}案件 | 総額: {format_amount(total_amount)}"
-            )
+            if project_count == 0:
+                if self.current_filters:
+                    self.status_info_label.setText("絞込み条件に一致する案件が見つかりません")
+                else:
+                    self.status_info_label.setText("案件データがありません。CSVファイルを読み込んでください。")
+            else:
+                filter_status = ""
+                if self.current_filters:
+                    filter_descriptions = []
+                    if 'search_term' in self.current_filters:
+                        filter_descriptions.append(f"検索: '{self.current_filters['search_term']}'")
+                    if 'payment_month' in self.current_filters:
+                        filter_descriptions.append(f"支払い月: {self.current_filters['payment_month']}")
+                    if 'project_status' in self.current_filters:
+                        filter_descriptions.append(f"案件状況: {self.current_filters['project_status']}")
+                    if 'payment_status' in self.current_filters:
+                        filter_descriptions.append(f"支払い状態: {self.current_filters['payment_status']}")
+                    if filter_descriptions:
+                        filter_status = f" | フィルター: {', '.join(filter_descriptions)}"
+                
+                self.status_info_label.setText(
+                    f"絞込み結果: {project_count}案件 | 総額: {format_amount(total_amount)}{filter_status}"
+                )
 
         except Exception as e:
             log_message(f"案件データ更新エラー: {e}")
@@ -813,20 +963,13 @@ class ProjectFilterTab(QWidget):
         else:
             QMessageBox.information(self, "検索", "検索フィールドが見つかりません。")
     
-    def reset_filters(self):
+    def reset_filters_from_menu(self):
         """フィルターリセット（メニュー/ツールバー用）"""
-        try:
-            # 検索フィールドをクリア
-            if hasattr(self, 'search_entry'):
-                self.search_entry.clear()
-            if hasattr(self, 'project_search_entry'):
-                self.project_search_entry.clear()
-            
-            # データを再読み込み
-            self.refresh_project_data()
+        # メイン関数を呼び出す
+        self.reset_filters()
+        # アプリケーション全体のステータスラベルも更新
+        if hasattr(self, 'app') and hasattr(self.app, 'status_label'):
             self.app.status_label.setText("フィルターをリセットしました")
-        except Exception as e:
-            log_message(f"フィルターリセットエラー: {e}")
     
     def toggle_filter_panel(self, visible):
         """フィルターパネル表示切り替え"""
