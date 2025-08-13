@@ -1241,8 +1241,26 @@ class DatabaseManager:
             master_conn.close()
 
     def match_expenses_with_payments(self):
-        """費用テーブルと支払いテーブルを照合（支払いコード0埋め対応）"""
+        """費用テーブルと支払いテーブルを照合（設定対応・支払いコード0埋め対応）"""
         from utils import format_payee_code  # 追加
+        import json
+        import os
+        
+        # 設定ファイルの読み込み
+        try:
+            config_path = os.path.join(os.path.dirname(__file__), "config", "app_config.json")
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            matching_config = config.get("matching", {})
+        except Exception as e:
+            log_message(f"設定ファイル読み込みエラー、デフォルト設定を使用: {e}")
+            matching_config = {
+                "payment_rule": "next_month_end",
+                "date_tolerance_months": 0,
+                "allow_partial_match": True,
+                "amount_tolerance": 0.01,
+                "debug_logging": True
+            }
 
         # データベース接続
         expenses_conn = sqlite3.connect(self.expenses_db)
@@ -1288,9 +1306,11 @@ class DatabaseManager:
                 f"照合処理開始: 費用データ {len(expense_rows)}件、支払いデータ {len(payment_rows)}件"
             )
 
-            # 照合結果カウント
+            # 照合結果カウント（詳細統計）
             matched_count = 0
             not_matched_count = 0
+            perfect_match_count = 0  # 完全一致
+            partial_match_count = 0  # 部分一致
 
             # 日付文字列から年月を抽出する関数
             def extract_year_month(date_str):
@@ -1328,8 +1348,11 @@ class DatabaseManager:
                 expense_amount = float(expense[4]) if expense[4] else 0
                 expense_year_month = extract_year_month(expense[5])
 
-                # 一致する支払いデータを検索
+                # 一致する支払いデータを検索（優先度システム）
                 best_match = None
+                match_priority = 0  # 0: 未マッチ, 1: 部分一致, 2: 完全一致
+                
+                # 段階1: 完全一致（全条件合致）を最優先で検索
                 for payment in payment_rows:
                     if payment[0] in updated_payment_ids:
                         continue
@@ -1341,21 +1364,78 @@ class DatabaseManager:
                     payment_amount = float(payment[5]) if payment[5] else 0
                     payment_year_month = extract_year_month(payment[6])
 
-                    # 照合条件チェック
-                    amount_match = abs(expense_amount - payment_amount) < 0.01
+                    # 照合条件チェック（設定対応）
+                    amount_tolerance = matching_config.get("amount_tolerance", 0.01)
+                    amount_match = abs(expense_amount - payment_amount) < amount_tolerance
                     code_match = expense_payee_code == payment_payee_code
-                    month_match = expense_year_month == payment_year_month
+                    
+                    # 日付マッチングロジック（設定対応）
+                    month_match = False
+                    if expense_year_month and payment_year_month:
+                        try:
+                            expense_year, expense_month = expense_year_month.split("-")
+                            payment_year, payment_month = payment_year_month.split("-")
+                            
+                            if matching_config.get("payment_rule") == "next_month_end":
+                                # 翌月末支払いルール: 費用月の翌月に支払いがあるかチェック
+                                next_year = int(expense_year)
+                                next_month = int(expense_month) + 1
+                                if next_month > 12:
+                                    next_month = 1
+                                    next_year += 1
+                                
+                                expected_payment_month = f"{next_year:04d}-{next_month:02d}"
+                                
+                                # 許容範囲を設定で拡張
+                                tolerance_months = matching_config.get("date_tolerance_months", 0)
+                                if tolerance_months > 0:
+                                    # 許容範囲内の月もマッチとする
+                                    for i in range(-tolerance_months, tolerance_months + 1):
+                                        check_year = next_year
+                                        check_month = next_month + i
+                                        if check_month <= 0:
+                                            check_month += 12
+                                            check_year -= 1
+                                        elif check_month > 12:
+                                            check_month -= 12
+                                            check_year += 1
+                                        
+                                        check_month_str = f"{check_year:04d}-{check_month:02d}"
+                                        if payment_year_month == check_month_str:
+                                            month_match = True
+                                            break
+                                else:
+                                    month_match = payment_year_month == expected_payment_month
+                            else:
+                                # 完全一致モード
+                                month_match = expense_year_month == payment_year_month
+                                
+                        except (ValueError, AttributeError):
+                            month_match = False
 
                     # デバッグ情報をログに出力
                     if expense_payee_code == payment_payee_code or expense_amount == payment_amount:
                         log_message(f"照合チェック - 費用ID:{expense_id}, 支払ID:{payment_id}")
                         log_message(f"  コード: {expense_payee_code} vs {payment_payee_code} -> {code_match}")
                         log_message(f"  金額: {expense_amount} vs {payment_amount} -> {amount_match}")
-                        log_message(f"  月: {expense_year_month} vs {payment_year_month} -> {month_match}")
+                        log_message(f"  月: {expense_year_month} vs {payment_year_month} (翌月期待値) -> {month_match}")
 
+                    # 優先度1: 完全一致（最高優先度）
                     if amount_match and code_match and month_match:
                         best_match = payment_id
+                        match_priority = 2
+                        log_message(f"完全一致マッチング: 費用ID:{expense_id} <-> 支払ID:{payment_id}")
                         break
+                    
+                    # 優先度2: 部分一致（設定で有効な場合のみ）
+                    elif (matching_config.get("allow_partial_match", True) and 
+                          amount_match and code_match and match_priority < 1):
+                        best_match = payment_id
+                        match_priority = 1
+                        if matching_config.get("debug_logging", True):
+                            log_message(f"部分一致マッチング: 費用ID:{expense_id} <-> 支払ID:{payment_id} (月不一致)")
+                    
+                    # 上記以外は照合対象外
 
                 if best_match:
                     try:
@@ -1374,9 +1454,16 @@ class DatabaseManager:
                         updated_expense_ids.add(expense_id)
                         updated_payment_ids.add(best_match)
                         matched_count += 1
+                        
+                        # 統計カウント
+                        if match_priority == 2:
+                            perfect_match_count += 1
+                        elif match_priority == 1:
+                            partial_match_count += 1
 
+                        match_type = "完全一致" if match_priority == 2 else "部分一致"
                         log_message(
-                            f"照合成功: 費用ID:{expense_id} <-> 支払ID:{best_match}"
+                            f"照合成功 ({match_type}): 費用ID:{expense_id} <-> 支払ID:{best_match}"
                         )
 
                     except sqlite3.Error as e:
@@ -1388,9 +1475,18 @@ class DatabaseManager:
             expenses_conn.commit()
             billing_conn.commit()
 
-            log_message(
-                f"照合処理完了: 成功 {matched_count}件、失敗 {not_matched_count}件"
-            )
+            # 詳細統計情報をログ出力
+            log_message("=" * 50)
+            log_message("照合処理統計結果:")
+            log_message(f"  対象費用データ: {len(expense_rows)}件")
+            log_message(f"  対象支払いデータ: {len(payment_rows)}件")
+            log_message(f"  照合成功: {matched_count}件")
+            log_message(f"    - 完全一致: {perfect_match_count}件")
+            log_message(f"    - 部分一致: {partial_match_count}件")
+            log_message(f"  照合失敗: {not_matched_count}件")
+            log_message(f"  照合率: {matched_count/(len(expense_rows)) * 100:.1f}%")
+            log_message("=" * 50)
+            
             return matched_count, not_matched_count
 
         except Exception as e:

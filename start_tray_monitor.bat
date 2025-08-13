@@ -1,31 +1,31 @@
 @echo off
-rem ãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªèµ·å‹•ã‚¹ã‚¯ãƒªãƒ—ãƒˆ (Windowsç”¨)
+rem ƒtƒ@ƒCƒ‹ŠÄŽ‹ƒgƒŒƒCƒAƒvƒŠ‹N“®ƒXƒNƒŠƒvƒg (Windows—p)
 
 setlocal
 set SCRIPT_DIR=%~dp0
 set TRAY_SCRIPT=%SCRIPT_DIR%tray_monitor.py
 set PYTHON_CMD=python
 
-rem Pythonã®å­˜åœ¨ç¢ºèª
+rem Python‚Ì‘¶ÝŠm”F
 where %PYTHON_CMD% >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ã‚¨ãƒ©ãƒ¼: PythonãŒã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¦ã„ã¾ã›ã‚“
+    echo ƒGƒ‰[: Python‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
     pause
     exit /b 1
 )
 
-rem ä¾å­˜é–¢ä¿‚ã®ç¢ºèª
-echo ä¾å­˜é–¢ä¿‚ã‚’ç¢ºèªä¸­...
+rem ˆË‘¶ŠÖŒW‚ÌŠm”F
+echo ˆË‘¶ŠÖŒW‚ðŠm”F’†...
 %PYTHON_CMD% -c "import PyQt5, watchdog, psutil" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo å¿…è¦ãªãƒ©ã‚¤ãƒ–ãƒ©ãƒªãŒã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¦ã„ã¾ã›ã‚“
-    echo ä»¥ä¸‹ã®ã‚³ãƒžãƒ³ãƒ‰ã§ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã—ã¦ãã ã•ã„:
+    echo •K—v‚Èƒ‰ƒCƒuƒ‰ƒŠ‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
+    echo ˆÈ‰º‚ÌƒRƒ}ƒ“ƒh‚ÅƒCƒ“ƒXƒg[ƒ‹‚µ‚Ä‚­‚¾‚³‚¢:
     echo pip install -r requirements.txt
     pause
     exit /b 1
 )
 
-rem å¼•æ•°ã®å‡¦ç†
+rem ˆø”‚Ìˆ—
 if "%~1"=="" goto :start_tray
 if /i "%~1"=="start" goto :start_tray
 if /i "%~1"=="stop" goto :stop_tray
@@ -33,55 +33,55 @@ if /i "%~1"=="status" goto :check_status
 goto :show_usage
 
 :show_usage
-echo ä½¿ç”¨æ–¹æ³•:
-echo   %0          - ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’èµ·å‹•
-echo   %0 start    - ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’èµ·å‹•
-echo   %0 stop     - ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’åœæ­¢
-echo   %0 status   - å®Ÿè¡ŒçŠ¶æ…‹ã‚’ç¢ºèª
+echo Žg—p•û–@:
+echo   %0          - ƒgƒŒƒCƒAƒvƒŠ‚ð‹N“®
+echo   %0 start    - ƒgƒŒƒCƒAƒvƒŠ‚ð‹N“®
+echo   %0 stop     - ƒgƒŒƒCƒAƒvƒŠ‚ð’âŽ~
+echo   %0 status   - ŽÀsó‘Ô‚ðŠm”F
 pause
 goto :eof
 
 :start_tray
-echo BillingManager ãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’èµ·å‹•ã—ã¾ã™...
+echo BillingManager ƒtƒ@ƒCƒ‹ŠÄŽ‹ƒgƒŒƒCƒAƒvƒŠ‚ð‹N“®‚µ‚Ü‚·...
 
-rem æ—¢ã«èµ·å‹•ä¸­ã‹ãƒã‚§ãƒƒã‚¯
+rem Šù‚É‹N“®’†‚©ƒ`ƒFƒbƒN
 tasklist /FI "IMAGENAME eq python.exe" 2>nul | find /I "tray_monitor.py" >nul
 if %errorlevel% equ 0 (
-    echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã¯æ—¢ã«èµ·å‹•ä¸­ã§ã™
+    echo ƒgƒŒƒCƒAƒvƒŠ‚ÍŠù‚É‹N“®’†‚Å‚·
     pause
     goto :eof
 )
 
-rem ãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰ã§èµ·å‹•
+rem ƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚Å‹N“®
 start "" /min %PYTHON_CMD% "%TRAY_SCRIPT%"
 
 timeout /t 2 /nobreak >nul
 
-echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’èµ·å‹•ã—ã¾ã—ãŸ
-echo ã‚·ã‚¹ãƒ†ãƒ ãƒˆãƒ¬ã‚¤ã®ã‚¢ã‚¤ã‚³ãƒ³ã‚’ç¢ºèªã—ã¦ãã ã•ã„
+echo ƒgƒŒƒCƒAƒvƒŠ‚ð‹N“®‚µ‚Ü‚µ‚½
+echo ƒVƒXƒeƒ€ƒgƒŒƒC‚ÌƒAƒCƒRƒ“‚ðŠm”F‚µ‚Ä‚­‚¾‚³‚¢
 pause
 goto :eof
 
 :stop_tray
-echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’åœæ­¢ã—ã¾ã™...
+echo ƒgƒŒƒCƒAƒvƒŠ‚ð’âŽ~‚µ‚Ü‚·...
 
-rem ãƒ—ãƒ­ã‚»ã‚¹ã‚’æ¤œç´¢ã—ã¦åœæ­¢
+rem ƒvƒƒZƒX‚ðŒŸõ‚µ‚Ä’âŽ~
 for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV ^| find "tray_monitor.py"') do (
     taskkill /PID %%i /F >nul 2>&1
 )
 
-echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’åœæ­¢ã—ã¾ã—ãŸ
+echo ƒgƒŒƒCƒAƒvƒŠ‚ð’âŽ~‚µ‚Ü‚µ‚½
 pause
 goto :eof
 
 :check_status
-echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã®å®Ÿè¡ŒçŠ¶æ…‹ã‚’ç¢ºèªä¸­...
+echo ƒgƒŒƒCƒAƒvƒŠ‚ÌŽÀsó‘Ô‚ðŠm”F’†...
 
 tasklist /FI "IMAGENAME eq python.exe" 2>nul | find /I "tray_monitor.py" >nul
 if %errorlevel% equ 0 (
-    echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã¯å®Ÿè¡Œä¸­ã§ã™
+    echo ƒgƒŒƒCƒAƒvƒŠ‚ÍŽÀs’†‚Å‚·
 ) else (
-    echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã¯åœæ­¢ä¸­ã§ã™
+    echo ƒgƒŒƒCƒAƒvƒŠ‚Í’âŽ~’†‚Å‚·
 )
 
 pause

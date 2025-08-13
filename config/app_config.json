@@ -188,5 +188,13 @@
   "csv": {
     "data_folder": "data",
     "encoding": "utf-8"
+  },
+  "matching": {
+    "payment_rule": "next_month_end",
+    "date_tolerance_months": 0,
+    "allow_partial_match": true,
+    "strict_amount_match": true,
+    "amount_tolerance": 0.01,
+    "debug_logging": true
   }
 }

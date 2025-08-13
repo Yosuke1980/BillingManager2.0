@@ -266,9 +266,13 @@ class PaymentTab(QWidget):
         match_group_layout = QHBoxLayout(match_group)
         status_button_layout.addWidget(match_group)
 
-        match_button = QPushButton("🔍 費用データと照合")
+        match_button = QPushButton("🔍 自動照合実行")
         match_button.clicked.connect(self.match_with_expenses)
         match_group_layout.addWidget(match_button)
+        
+        manual_match_button = QPushButton("✋ 手動照合")
+        manual_match_button.clicked.connect(self.manual_match_with_expenses)
+        match_group_layout.addWidget(manual_match_button)
 
     def get_color_for_status(self, status):
         """状態に応じた背景色を返す"""
@@ -826,6 +830,43 @@ class PaymentTab(QWidget):
     def run_matching(self):
         """照合実行（メニュー/ツールバー用）"""
         self.match_with_expenses()
+
+    def manual_match_with_expenses(self):
+        """手動照合機能"""
+        from manual_match_dialog import ManualMatchDialog
+        
+        selected_items = self.tree.selectedItems()
+        if not selected_items:
+            QMessageBox.information(
+                self, "手動照合", "手動照合する支払いデータを選択してください"
+            )
+            return
+        
+        # 選択された支払いデータの情報を取得
+        selected_item = selected_items[0]
+        payment_data = {
+            'subject': selected_item.text(0),
+            'project_name': selected_item.text(1),
+            'payee': selected_item.text(2),
+            'payee_code': selected_item.text(3),
+            'amount': selected_item.text(4),
+            'payment_date': selected_item.text(5),
+            'status': selected_item.text(6)
+        }
+        
+        try:
+            # 手動照合ダイアログを表示
+            dialog = ManualMatchDialog(self, payment_data, self.db_manager)
+            if dialog.exec_() == QMessageBox.Accepted:
+                # 照合が成功した場合、データを更新
+                self.refresh_data()
+                if hasattr(self.app, "expense_tab"):
+                    self.app.expense_tab.refresh_data()
+                self.app.status_label.setText("手動照合が完了しました")
+                log_message(f"手動照合完了: {payment_data['subject']}")
+        except Exception as e:
+            log_message(f"手動照合エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"手動照合に失敗しました: {e}")
 
 
 # ファイル終了確認用のコメント - payment_tab.py完了

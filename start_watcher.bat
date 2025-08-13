@@ -1,20 +1,20 @@
 @echo off
-rem CSVãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ã‚¹ã‚¯ãƒªãƒ—ãƒˆã®èµ·å‹•/åœæ­¢ç”¨ã‚¹ã‚¯ãƒªãƒ—ãƒˆ (Windowsç”¨)
+rem CSVƒtƒ@ƒCƒ‹ŠÄŽ‹ƒXƒNƒŠƒvƒg‚Ì‹N“®/’âŽ~—pƒXƒNƒŠƒvƒg (Windows—p)
 
 setlocal
 set SCRIPT_DIR=%~dp0
 set WATCHER_SCRIPT=%SCRIPT_DIR%file_watcher.py
 set PYTHON_CMD=python
 
-rem Pythonã®å­˜åœ¨ç¢ºèª
+rem Python‚Ì‘¶ÝŠm”F
 where %PYTHON_CMD% >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ã‚¨ãƒ©ãƒ¼: PythonãŒã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¦ã„ã¾ã›ã‚“
+    echo ƒGƒ‰[: Python‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
     pause
     exit /b 1
 )
 
-rem å¼•æ•°ã®å‡¦ç†
+rem ˆø”‚Ìˆ—
 if "%~1"=="" goto :show_usage
 if /i "%~1"=="start" goto :start_watcher
 if /i "%~1"=="stop" goto :stop_watcher
@@ -23,44 +23,44 @@ if /i "%~1"=="restart" goto :restart_watcher
 goto :show_usage
 
 :check_dependencies
-echo ä¾å­˜é–¢ä¿‚ã‚’ç¢ºèªä¸­...
+echo ˆË‘¶ŠÖŒW‚ðŠm”F’†...
 %PYTHON_CMD% -c "import watchdog, psutil" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo å¿…è¦ãªãƒ©ã‚¤ãƒ–ãƒ©ãƒªãŒã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¦ã„ã¾ã›ã‚“
-    echo ä»¥ä¸‹ã®ã‚³ãƒžãƒ³ãƒ‰ã§ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã—ã¦ãã ã•ã„:
+    echo •K—v‚Èƒ‰ƒCƒuƒ‰ƒŠ‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
+    echo ˆÈ‰º‚ÌƒRƒ}ƒ“ƒh‚ÅƒCƒ“ƒXƒg[ƒ‹‚µ‚Ä‚­‚¾‚³‚¢:
     echo pip install -r requirements.txt
     pause
     exit /b 1
 )
-echo ä¾å­˜é–¢ä¿‚OK
+echo ˆË‘¶ŠÖŒWOK
 goto :eof
 
 :show_usage
-echo ä½¿ç”¨æ–¹æ³•:
-echo   %0 start   - ãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ã‚’é–‹å§‹
-echo   %0 stop    - ãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ã‚’åœæ­¢
-echo   %0 status  - ãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ã®çŠ¶æ…‹ã‚’ç¢ºèª
-echo   %0 restart - ãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ã‚’å†èµ·å‹•
+echo Žg—p•û–@:
+echo   %0 start   - ƒtƒ@ƒCƒ‹ŠÄŽ‹‚ðŠJŽn
+echo   %0 stop    - ƒtƒ@ƒCƒ‹ŠÄŽ‹‚ð’âŽ~
+echo   %0 status  - ƒtƒ@ƒCƒ‹ŠÄŽ‹‚Ìó‘Ô‚ðŠm”F
+echo   %0 restart - ƒtƒ@ƒCƒ‹ŠÄŽ‹‚ðÄ‹N“®
 pause
 goto :eof
 
 :start_watcher
-echo CSVãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ã‚’é–‹å§‹ã—ã¾ã™...
+echo CSVƒtƒ@ƒCƒ‹ŠÄŽ‹‚ðŠJŽn‚µ‚Ü‚·...
 call :check_dependencies
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-rem ãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰ã§å®Ÿè¡Œ
+rem ƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚ÅŽÀs
 start "" /min %PYTHON_CMD% "%WATCHER_SCRIPT%"
 
 timeout /t 2 /nobreak >nul
 
-rem èµ·å‹•ç¢ºèª
+rem ‹N“®Šm”F
 %PYTHON_CMD% "%WATCHER_SCRIPT%" --status
 pause
 goto :eof
 
 :stop_watcher
-echo CSVãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ã‚’åœæ­¢ã—ã¾ã™...
+echo CSVƒtƒ@ƒCƒ‹ŠÄŽ‹‚ð’âŽ~‚µ‚Ü‚·...
 %PYTHON_CMD% "%WATCHER_SCRIPT%" --stop
 pause
 goto :eof
@@ -71,7 +71,7 @@ pause
 goto :eof
 
 :restart_watcher
-echo CSVãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ã‚’å†èµ·å‹•ã—ã¾ã™...
+echo CSVƒtƒ@ƒCƒ‹ŠÄŽ‹‚ðÄ‹N“®‚µ‚Ü‚·...
 call :stop_watcher
 timeout /t 3 /nobreak >nul
 call :start_watcher
