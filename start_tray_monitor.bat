@@ -1,46 +1,46 @@
 @echo off
-rem ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½gï¿½ï¿½ï¿½Cï¿½Aï¿½vï¿½ï¿½ï¿½Nï¿½ï¿½ï¿½Xï¿½Nï¿½ï¿½ï¿½vï¿½g (Windowsï¿½p)
+rem ƒtƒ@ƒCƒ‹ŠÄŽ‹ƒgƒŒƒCƒAƒvƒŠ‹N“®ƒXƒNƒŠƒvƒg (Windows—p)
 
 setlocal
 set SCRIPT_DIR=%~dp0
 set TRAY_SCRIPT=%SCRIPT_DIR%tray_monitor.py
 
-rem Pythonã‚³ãƒžãƒ³ãƒ‰ã®ç¢ºèªï¼ˆpython3 -> python ã®é †ã«è©¦è¡Œï¼‰
+rem PythonƒRƒ}ƒ“ƒh‚ÌŠm”Fipython3 -> python ‚Ì‡‚ÉŽŽsj
 set PYTHON_CMD=python3
 where %PYTHON_CMD% >nul 2>&1
 if %errorlevel% neq 0 (
     set PYTHON_CMD=python
     where %PYTHON_CMD% >nul 2>&1
     if %errorlevel% neq 0 (
-        echo ã‚¨ãƒ©ãƒ¼: Pythonã¾ãŸã¯Python3ãŒã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¦ã„ã¾ã›ã‚“
+        echo ƒGƒ‰[: Python‚Ü‚½‚ÍPython3‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
         pause
         exit /b 1
     )
 )
 
-rem ã‚¹ã‚¯ãƒªãƒ—ãƒˆãƒ•ã‚¡ã‚¤ãƒ«ã®å­˜åœ¨ç¢ºèª
+rem ƒXƒNƒŠƒvƒgƒtƒ@ƒCƒ‹‚Ì‘¶ÝŠm”F
 if not exist "%TRAY_SCRIPT%" (
-    echo ã‚¨ãƒ©ãƒ¼: tray_monitor.pyãŒè¦‹ã¤ã‹ã‚Šã¾ã›ã‚“
-    echo ãƒ‘ã‚¹: %TRAY_SCRIPT%
+    echo ƒGƒ‰[: tray_monitor.py‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñ
+    echo ƒpƒX: %TRAY_SCRIPT%
     pause
     exit /b 1
 )
 
-rem ä¾å­˜é–¢ä¿‚ã®ç¢ºèª
-echo ä¾å­˜é–¢ä¿‚ã‚’ç¢ºèªä¸­...
+rem ˆË‘¶ŠÖŒW‚ÌŠm”F
+echo ˆË‘¶ŠÖŒW‚ðŠm”F’†...
 %PYTHON_CMD% -c "import PyQt5, watchdog, psutil" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo å¿…è¦ãªãƒ©ã‚¤ãƒ–ãƒ©ãƒªãŒã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã•ã‚Œã¦ã„ã¾ã›ã‚“
-    echo ä»¥ä¸‹ã®ã‚³ãƒžãƒ³ãƒ‰ã§ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«ã—ã¦ãã ã•ã„:
+    echo •K—v‚Èƒ‰ƒCƒuƒ‰ƒŠ‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
+    echo ˆÈ‰º‚ÌƒRƒ}ƒ“ƒh‚ÅƒCƒ“ƒXƒg[ƒ‹‚µ‚Ä‚­‚¾‚³‚¢:
     echo pip install -r requirements.txt
-    echo ã¾ãŸã¯å€‹åˆ¥ã«ã‚¤ãƒ³ã‚¹ãƒˆãƒ¼ãƒ«:
+    echo ‚Ü‚½‚ÍŒÂ•Ê‚ÉƒCƒ“ƒXƒg[ƒ‹:
     echo pip install PyQt5 watchdog psutil
     pause
     exit /b 1
 )
-echo ä¾å­˜é–¢ä¿‚OK
+echo ˆË‘¶ŠÖŒWOK
 
-rem ï¿½ï¿½ï¿½ï¿½ï¿½Ìï¿½ï¿½ï¿½
+rem ˆø”‚Ìˆ—
 if "%~1"=="" goto :start_tray
 if /i "%~1"=="start" goto :start_tray
 if /i "%~1"=="stop" goto :stop_tray
@@ -48,26 +48,26 @@ if /i "%~1"=="status" goto :check_status
 goto :show_usage
 
 :show_usage
-echo ä½¿ç”¨æ–¹æ³•:
-echo   %0          - ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’èµ·å‹•
-echo   %0 start    - ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’èµ·å‹•  
-echo   %0 stop     - ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’åœæ­¢
-echo   %0 status   - å®Ÿè¡ŒçŠ¶æ…‹ã‚’ç¢ºèª
+echo Žg—p•û–@:
+echo   %0          - ƒgƒŒƒCƒAƒvƒŠ‚ð‹N“®
+echo   %0 start    - ƒgƒŒƒCƒAƒvƒŠ‚ð‹N“®  
+echo   %0 stop     - ƒgƒŒƒCƒAƒvƒŠ‚ð’âŽ~
+echo   %0 status   - ŽÀsó‘Ô‚ðŠm”F
 pause
 goto :eof
 
 :start_tray
-echo BillingManager ãƒ•ã‚¡ã‚¤ãƒ«ç›£è¦–ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’èµ·å‹•ã—ã¾ã™...
+echo BillingManager ƒtƒ@ƒCƒ‹ŠÄŽ‹ƒgƒŒƒCƒAƒvƒŠ‚ð‹N“®‚µ‚Ü‚·...
 
-rem æ—¢ã«èµ·å‹•æ¸ˆã¿ã‹ãƒã‚§ãƒƒã‚¯
+rem Šù‚É‹N“®Ï‚Ý‚©ƒ`ƒFƒbƒN
 tasklist /FI "IMAGENAME eq python.exe" 2>nul | find /I "tray_monitor.py" >nul
 if %errorlevel% equ 0 (
-    echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã¯æ—¢ã«èµ·å‹•æ¸ˆã¿ã§ã™
+    echo ƒgƒŒƒCƒAƒvƒŠ‚ÍŠù‚É‹N“®Ï‚Ý‚Å‚·
     pause
     goto :eof
 )
 
-rem ãƒãƒƒã‚¯ã‚°ãƒ©ã‚¦ãƒ³ãƒ‰ã§èµ·å‹•ï¼ˆGUIç”¨ã¯pythonwä½¿ç”¨ï¼‰
+rem ƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚Å‹N“®iGUI—p‚ÍpythonwŽg—pj
 if exist "%PYTHON_CMD%w.exe" (
     set PYTHON_GUI_CMD=%PYTHON_CMD%w
 ) else (
@@ -77,31 +77,31 @@ start "" /min %PYTHON_GUI_CMD% "%TRAY_SCRIPT%"
 
 timeout /t 2 /nobreak >nul
 
-echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’èµ·å‹•ã—ã¾ã—ãŸ
-echo ã‚·ã‚¹ãƒ†ãƒ ãƒˆãƒ¬ã‚¤ã®ã‚¢ã‚¤ã‚³ãƒ³ã‚’ç¢ºèªã—ã¦ãã ã•ã„
+echo ƒgƒŒƒCƒAƒvƒŠ‚ð‹N“®‚µ‚Ü‚µ‚½
+echo ƒVƒXƒeƒ€ƒgƒŒƒC‚ÌƒAƒCƒRƒ“‚ðŠm”F‚µ‚Ä‚­‚¾‚³‚¢
 pause
 goto :eof
 
 :stop_tray
-echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’åœæ­¢ã—ã¾ã™...
+echo ƒgƒŒƒCƒAƒvƒŠ‚ð’âŽ~‚µ‚Ü‚·...
 
-rem ãƒ—ãƒ­ã‚»ã‚¹ã‚’æ¤œç´¢ã—ã¦åœæ­¢
+rem ƒvƒƒZƒX‚ðŒŸõ‚µ‚Ä’âŽ~
 for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FO CSV ^| find "tray_monitor.py"') do (
     taskkill /PID %%i /F >nul 2>&1
 )
 
-echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã‚’åœæ­¢ã—ã¾ã—ãŸ
+echo ƒgƒŒƒCƒAƒvƒŠ‚ð’âŽ~‚µ‚Ü‚µ‚½
 pause
 goto :eof
 
 :check_status
-echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã®å®Ÿè¡ŒçŠ¶æ…‹ã‚’ç¢ºèªä¸­...
+echo ƒgƒŒƒCƒAƒvƒŠ‚ÌŽÀsó‘Ô‚ðŠm”F’†...
 
 tasklist /FI "IMAGENAME eq python.exe" 2>nul | find /I "tray_monitor.py" >nul
 if %errorlevel% equ 0 (
-    echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã¯å®Ÿè¡Œä¸­ã§ã™
+    echo ƒgƒŒƒCƒAƒvƒŠ‚ÍŽÀs’†‚Å‚·
 ) else (
-    echo ãƒˆãƒ¬ã‚¤ã‚¢ãƒ—ãƒªã¯åœæ­¢ä¸­ã§ã™
+    echo ƒgƒŒƒCƒAƒvƒŠ‚Í’âŽ~’†‚Å‚·
 )
 
 pause
