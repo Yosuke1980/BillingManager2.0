@@ -726,8 +726,8 @@ class ExpenseTab(QWidget):
 
             log_message(f"新規マスター項目反映完了: {generated_count}件")
 
-            # データを更新表示
-            self.refresh_data()
+            # フィルター状態を保持してデータを更新
+            self.refresh_data_with_filters()
 
             # 結果表示
             if generated_count > 0:
@@ -812,8 +812,8 @@ class ExpenseTab(QWidget):
                 f"マスター費用生成完了: 新規{generated_count}件、更新{updated_count}件"
             )
 
-            # データを更新表示
-            self.refresh_data()
+            # フィルター状態を保持してデータを更新
+            self.refresh_data_with_filters()
 
             # 結果メッセージ
             message = f"{year}年{month}月の費用データを生成完了: 新規{generated_count}件、更新{updated_count}件"
@@ -1236,6 +1236,50 @@ class ExpenseTab(QWidget):
             log_message(traceback.format_exc())
             self.app.status_label.setText(f"エラー: 費用データ読み込みに失敗しました")
 
+    def refresh_data_with_filters(self):
+        """フィルター状態を保持してデータを更新"""
+        try:
+            # 現在のフィルター状態を保存
+            current_search = self.search_entry.text()
+            current_status = self.status_filter.currentText()
+            current_month_index = self.payment_month_filter.currentIndex()
+            current_month_text = self.payment_month_filter.currentText()
+            
+            log_message(f"フィルター状態保存: 検索='{current_search}', 状態='{current_status}', 月='{current_month_text}'")
+            
+            # データを更新
+            self.refresh_data()
+            
+            # フィルター状態を復元
+            if current_search:
+                self.search_entry.setText(current_search)
+            
+            if current_status != "すべて":
+                self.status_filter.setCurrentText(current_status)
+            
+            # 月フィルターの復元（インデックスベース）
+            if current_month_text != "すべて表示" and current_month_index > 0:
+                # まず同じテキストがあるかチェック
+                month_index = self.payment_month_filter.findText(current_month_text)
+                if month_index >= 0:
+                    self.payment_month_filter.setCurrentIndex(month_index)
+                    log_message(f"月フィルター復元: {current_month_text}")
+            
+            # フィルターを再適用
+            if current_search:
+                self.search_records()
+            elif current_month_text != "すべて表示" and current_month_index > 0:
+                self.filter_by_month()
+            elif current_status != "すべて":
+                self.filter_by_status()
+                
+            log_message("フィルター状態の復元が完了しました")
+            
+        except Exception as e:
+            log_message(f"フィルター状態復元中にエラー: {e}")
+            # エラーが発生した場合は通常のrefresh_dataにフォールバック
+            self.refresh_data()
+
     def on_tree_select_for_edit(self):
         """ツリーウィジェットの行選択時に編集フォームを表示"""
         selected_items = self.tree.selectedItems()
@@ -1412,8 +1456,8 @@ class ExpenseTab(QWidget):
             log_message(message)
             self.app.status_label.setText(message)
 
-            # テーブルを更新
-            self.refresh_data()
+            # フィルター状態を保持してテーブルを更新
+            self.refresh_data_with_filters()
 
             # 編集フォームを非表示
             self.edit_frame.hide()
@@ -1494,7 +1538,7 @@ class ExpenseTab(QWidget):
 
             message = f"費用データ ID: {expense_id} を削除しました"
             log_message(message)
-            self.refresh_data()
+            self.refresh_data_with_filters()
             self.app.status_label.setText(message)
 
         except Exception as e:
@@ -1536,7 +1580,7 @@ class ExpenseTab(QWidget):
                 log_message(
                     f"費用データ ID: {expense_id} を複製しました（新ID: {new_id}）"
                 )
-                self.refresh_data()
+                self.refresh_data_with_filters()
                 self.app.status_label.setText(message)
 
                 QMessageBox.information(self, "複製完了", message)
@@ -1560,8 +1604,8 @@ class ExpenseTab(QWidget):
                 self.db_manager.match_expenses_with_payments()
             )
 
-            # データを更新表示
-            self.refresh_data()  # 費用データを更新
+            # フィルター状態を保持してデータを更新
+            self.refresh_data_with_filters()  # 費用データを更新
             self.app.payment_tab.refresh_data()  # 支払いデータも更新
             
             # フィルター状態を復元
@@ -1774,7 +1818,7 @@ class ExpenseTab(QWidget):
             conn.close()
 
             log_message(f"{len(imported_rows)}件のデータを{operation_text}しました")
-            self.refresh_data()
+            self.refresh_data_with_filters()
             self.app.status_label.setText(
                 f"{len(imported_rows)}件のデータを{operation_text}しました"
             )
