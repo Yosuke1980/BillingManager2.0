@@ -29,14 +29,15 @@ if not exist "%TRAY_SCRIPT%" (
 rem 依存関係の確認
 set PYTHONDONTWRITEBYTECODE=1
 set PYTHONWARNINGS=ignore
+set PIP_DISABLE_PIP_VERSION_CHECK=1
 echo 依存関係を確認中...
 %PYTHON_CMD% -c "import PyQt5, watchdog, psutil" >nul 2>&1
 if %errorlevel% neq 0 (
     echo 必要なライブラリがインストールされていません
     echo 以下のコマンドでインストールしてください:
-    echo pip install --no-warn-script-location -r requirements.txt
+    echo pip install --quiet -r requirements.txt
     echo または個別にインストール:
-    echo pip install --no-warn-script-location PyQt5 watchdog psutil
+    echo pip install --quiet PyQt5 watchdog psutil
     pause
     exit /b 1
 )
