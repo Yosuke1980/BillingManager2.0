@@ -97,7 +97,7 @@ class PaymentTab(QWidget):
         # 状態フィルタ
         search_layout.addWidget(QLabel("📊 状態:"))
         self.status_filter = QComboBox()
-        self.status_filter.addItems(["すべて", "未処理", "処理中", "処理済", "照合済"])
+        self.status_filter.addItems(["すべて", "未処理", "処理中", "処理済", "照合済", "⚠️ 未照合(要支払い)"])
         self.status_filter.setMinimumWidth(self.widget_min_width)
         self.status_filter.currentTextChanged.connect(self.filter_by_status)
         search_layout.addWidget(self.status_filter)
@@ -307,14 +307,32 @@ class PaymentTab(QWidget):
                 item.setFont(i, font)
 
     def filter_by_status(self):
-        """状態でフィルタリング"""
+        """状態でフィルタリング（未照合フィルター対応）"""
         selected_status = self.status_filter.currentText()
 
         if selected_status == "すべて":
             self.refresh_data()
             return
 
-        # 現在表示されている項目をフィルタリング
+        # 未照合フィルター（照合済み以外を表示）
+        if selected_status == "⚠️ 未照合(要支払い)":
+            root = self.tree.invisibleRootItem()
+            for i in range(root.childCount()):
+                item = root.child(i)
+                status = item.text(6)  # 状態列
+                # 照合済み以外を表示
+                item.setHidden(status == "照合済")
+
+            # 表示件数を更新
+            visible_count = sum(
+                1 for i in range(root.childCount()) if not root.child(i).isHidden()
+            )
+            self.app.status_label.setText(
+                f"未照合の支払いデータ（要支払い）: {visible_count}件"
+            )
+            return
+
+        # 通常の状態フィルタリング
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
             item = root.child(i)
