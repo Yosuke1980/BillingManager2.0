@@ -899,14 +899,21 @@ class ExpenseTab(QWidget):
             conn = sqlite3.connect(self.db_manager.expenses_db)
             cursor = conn.cursor()
 
-            # 支払日から年月を抽出 (YYYY-MM形式)
+            # 支払日から年月を抽出 (YYYY-MM形式、複数フォーマット対応)
             cursor.execute(
                 """
-                SELECT DISTINCT substr(payment_date, 1, 7) as month
+                SELECT DISTINCT 
+                    CASE 
+                        WHEN payment_date LIKE '%/%' THEN substr(replace(payment_date, '/', '-'), 1, 7)
+                        ELSE substr(payment_date, 1, 7)
+                    END as month
                 FROM expenses
                 WHERE payment_date IS NOT NULL 
                 AND payment_date != '' 
                 AND length(payment_date) >= 7
+                AND (
+                    (payment_date LIKE '____-__-%' OR payment_date LIKE '____/__/__')
+                )
                 ORDER BY month DESC
                 """
             )
@@ -998,27 +1005,37 @@ class ExpenseTab(QWidget):
 
             log_message(f"フィルタリング実行: 対象月='{selected_month}'")
 
-            # 指定した年月のデータを取得
+            # 指定した年月のデータを取得（複数の日付フォーマットに対応）
             cursor.execute(
                 """
                 SELECT id, project_name, payee, payee_code, amount, payment_date, status
                 FROM expenses 
-                WHERE substr(payment_date, 1, 7) = ?
+                WHERE (
+                    substr(payment_date, 1, 7) = ? OR
+                    substr(replace(payment_date, '/', '-'), 1, 7) = ? OR
+                    (payment_date LIKE ? || '/%') OR
+                    (payment_date LIKE ? || '-%')
+                )
                 ORDER BY payment_date DESC
                 """,
-                (selected_month,),
+                (selected_month, selected_month, selected_month, selected_month),
             )
 
             expense_rows = cursor.fetchall()
             log_message(f"フィルタリング結果: {len(expense_rows)}件")
 
-            # 照合済み件数を取得
+            # 照合済み件数を取得（複数の日付フォーマットに対応）
             cursor.execute(
                 """
                 SELECT COUNT(*) FROM expenses
-                WHERE status = '照合済' AND substr(payment_date, 1, 7) = ?
+                WHERE status = '照合済' AND (
+                    substr(payment_date, 1, 7) = ? OR
+                    substr(replace(payment_date, '/', '-'), 1, 7) = ? OR
+                    (payment_date LIKE ? || '/%') OR
+                    (payment_date LIKE ? || '-%')
+                )
                 """,
-                (selected_month,),
+                (selected_month, selected_month, selected_month, selected_month),
             )
 
             matched_count = cursor.fetchone()[0]
