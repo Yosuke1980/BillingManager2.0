@@ -140,6 +140,7 @@ class RadioBillingApp(QMainWindow):
         
         # データを読み込み
         self.import_latest_csv()
+        self.payment_tab.refresh_data()
         self.expense_tab.refresh_data()
         self.master_tab.refresh_data()
 
