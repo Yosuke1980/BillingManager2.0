@@ -1,11 +1,12 @@
 @echo off
+chcp 932 >nul
 rem CSVファイル監視スクリプトの起動/停止用スクリプト (Windows用)
 
 setlocal
 set SCRIPT_DIR=%~dp0
 set WATCHER_SCRIPT=%SCRIPT_DIR%file_watcher.py
 
-rem Pythonコマンドの確認（python3 -> python の順に試行）
+rem Pythonコマンドの確認（python3 -> python の順に実行）
 set PYTHON_CMD=python3
 where %PYTHON_CMD% >nul 2>&1
 if %errorlevel% neq 0 (
@@ -36,13 +37,16 @@ goto :show_usage
 
 :check_dependencies
 echo 依存関係を確認中...
+set PYTHONDONTWRITEBYTECODE=1
+set PYTHONWARNINGS=ignore
+set PIP_DISABLE_PIP_VERSION_CHECK=1
 %PYTHON_CMD% -c "import watchdog, psutil" >nul 2>&1
 if %errorlevel% neq 0 (
     echo 必要なライブラリがインストールされていません
     echo 以下のコマンドでインストールしてください:
-    echo pip install -r requirements.txt
+    echo pip install --quiet -r requirements.txt
     echo または個別にインストール:
-    echo pip install watchdog psutil
+    echo pip install --quiet watchdog psutil
     pause
     exit /b 1
 )

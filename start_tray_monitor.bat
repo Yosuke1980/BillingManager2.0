@@ -1,4 +1,5 @@
 @echo off
+chcp 932 >nul
 rem ファイル監視トレイアプリ起動スクリプト (Windows用)
 
 setlocal

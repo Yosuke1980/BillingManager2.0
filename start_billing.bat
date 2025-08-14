@@ -1,43 +1,43 @@
 @echo off
-chcp 65001 >nul
+chcp 932 >nul
 cd /d %~dp0
 
-rem Pythonï¿½Â‹ï¿½ï¿½Ïï¿½ï¿½Ý’ï¿½ipipï¿½xï¿½ï¿½ï¿½ï¿½ï¿½ï¿½j
+rem PythonŠÂ‹«•Ï”Ý’èipipŒx‰ñ”ðj
 set PYTHONDONTWRITEBYTECODE=1
 set PYTHONWARNINGS=ignore
 set PIP_DISABLE_PIP_VERSION_CHECK=1
 
-rem Pythonï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½ÌŠmï¿½F
+rem PythonƒRƒ}ƒ“ƒh‚ÌŠm”F
 set PYTHON_CMD=python3
 where %PYTHON_CMD% >nul 2>&1
 if %errorlevel% neq 0 (
     set PYTHON_CMD=python
     where %PYTHON_CMD% >nul 2>&1
     if %errorlevel% neq 0 (
-        echo ï¿½Gï¿½ï¿½ï¿½[: Pythonï¿½Ü‚ï¿½ï¿½ï¿½python3ï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½Xï¿½gï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½
+        echo ƒGƒ‰[: Python‚Ü‚½‚Ípython3‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
         pause
         exit /b 1
     )
 )
 
-rem ï¿½Ë‘ï¿½ï¿½ÖŒWï¿½ÌŠmï¿½F
-echo ï¿½Ë‘ï¿½ï¿½ÖŒWï¿½ï¿½ï¿½mï¿½Fï¿½ï¿½...
+rem ˆË‘¶ŠÖŒW‚ÌŠm”F
+echo ˆË‘¶ŠÖŒW‚ðŠm”F’†...
 %PYTHON_CMD% -c "import PyQt5, watchdog, psutil" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ï¿½Kï¿½vï¿½Èƒï¿½ï¿½Cï¿½uï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½Xï¿½gï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½
-    echo ï¿½È‰ï¿½ï¿½ÌƒRï¿½}ï¿½ï¿½ï¿½hï¿½ÅƒCï¿½ï¿½ï¿½Xï¿½gï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½:
+    echo •K—v‚Èƒ‰ƒCƒuƒ‰ƒŠ‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
+    echo ˆÈ‰º‚ÌƒRƒ}ƒ“ƒh‚ÅƒCƒ“ƒXƒg[ƒ‹‚µ‚Ä‚­‚¾‚³‚¢:
     echo pip install --quiet -r requirements.txt
     pause
     exit /b 1
 )
-echo ï¿½Ë‘ï¿½ï¿½ÖŒWOK
+echo ˆË‘¶ŠÖŒWOK
 
-rem ï¿½oï¿½bï¿½Nï¿½Oï¿½ï¿½ï¿½Eï¿½ï¿½ï¿½hï¿½ÅƒAï¿½vï¿½ï¿½ï¿½ï¿½ï¿½Nï¿½ï¿½ï¿½iGUIï¿½ppythonwï¿½ï¿½ï¿½gï¿½pï¿½j
+rem ƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚ÅƒAƒvƒŠ‚ð‹N“®iGUI—ppythonw‚ðŽg—pj
 if exist "%PYTHON_CMD%w.exe" (
     start "" /min %PYTHON_CMD%w app.pyw
 ) else (
     start "" /min %PYTHON_CMD% app.pyw
 )
 
-echo BillingManagerï¿½ï¿½ï¿½Nï¿½ï¿½ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½
+echo BillingManager‚ð‹N“®‚µ‚Ü‚µ‚½
 timeout /t 2 /nobreak >nul
