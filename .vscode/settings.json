@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.bat": "bat"
+    },
+    "files.encoding": "shiftjis",
+    "[bat]": {
+        "files.encoding": "shiftjis"
+    },
+    "files.autoGuessEncoding": true
+}

@@ -1,0 +1,7 @@
+@echo off
+chcp 932 >nul
+cd /d %~dp0
+
+rem ここにバッチファイルの内容を記述
+
+pause
