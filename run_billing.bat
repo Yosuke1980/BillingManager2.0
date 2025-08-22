@@ -1,0 +1,6 @@
+@echo off
+set PYTHONDONTWRITEBYTECODE=1
+set PYTHONWARNINGS=ignore
+set PIP_DISABLE_PIP_VERSION_CHECK=1
+cd /d %~dp0
+pythonw app.pyw

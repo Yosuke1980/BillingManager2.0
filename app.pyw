@@ -781,5 +781,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# ファイル終了確認用のコメント - app.py完了
