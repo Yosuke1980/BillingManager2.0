@@ -1365,9 +1365,27 @@ class DatabaseManager:
                     payment_year_month = extract_year_month(payment[6])
 
                     # 照合条件チェック（設定対応）
-                    amount_tolerance = matching_config.get("amount_tolerance", 0.01)
-                    amount_match = abs(expense_amount - payment_amount) < amount_tolerance
                     code_match = expense_payee_code == payment_payee_code
+                    
+                    # 金額マッチング処理（設定対応の柔軟マッチング）
+                    amount_tolerance = matching_config.get("amount_tolerance", 0.01)
+                    strict_amount_match = matching_config.get("strict_amount_match", True)
+                    
+                    if strict_amount_match:
+                        # 厳密金額マッチング（従来通り）
+                        amount_match = abs(expense_amount - payment_amount) < amount_tolerance
+                    else:
+                        # 柔軟金額マッチング（10%許容 + 部分マッチ）
+                        if expense_amount == 0 or payment_amount == 0:
+                            amount_match = expense_amount == payment_amount
+                        else:
+                            # 比率計算による柔軟マッチング
+                            ratio = min(expense_amount, payment_amount) / max(expense_amount, payment_amount)
+                            amount_match = ratio >= (1 - amount_tolerance)
+                            
+                            # ログ出力（デバッグ用）
+                            if matching_config.get("debug_logging", True) and code_match:
+                                log_message(f"金額比率チェック: {expense_amount}/{payment_amount} = {ratio:.3f}, 閾値: {1-amount_tolerance:.3f}")
                     
                     # 日付マッチングロジック（設定対応）
                     month_match = False
@@ -1406,6 +1424,30 @@ class DatabaseManager:
                                             break
                                 else:
                                     month_match = payment_year_month == expected_payment_month
+                            elif matching_config.get("payment_rule") == "same_month":
+                                # 同月支払いルール: 費用月と支払い月が同じかチェック
+                                tolerance_months = matching_config.get("date_tolerance_months", 0)
+                                if tolerance_months > 0:
+                                    # 許容範囲内の月もマッチとする
+                                    expense_year_int = int(expense_year)
+                                    expense_month_int = int(expense_month)
+                                    
+                                    for i in range(-tolerance_months, tolerance_months + 1):
+                                        check_year = expense_year_int
+                                        check_month = expense_month_int + i
+                                        if check_month <= 0:
+                                            check_month += 12
+                                            check_year -= 1
+                                        elif check_month > 12:
+                                            check_month -= 12
+                                            check_year += 1
+                                        
+                                        check_month_str = f"{check_year:04d}-{check_month:02d}"
+                                        if payment_year_month == check_month_str:
+                                            month_match = True
+                                            break
+                                else:
+                                    month_match = expense_year_month == payment_year_month
                             else:
                                 # 完全一致モード
                                 month_match = expense_year_month == payment_year_month
@@ -1414,11 +1456,18 @@ class DatabaseManager:
                             month_match = False
 
                     # デバッグ情報をログに出力
-                    if expense_payee_code == payment_payee_code or expense_amount == payment_amount:
+                    if expense_payee_code == payment_payee_code or amount_match:
+                        rule_name = matching_config.get("payment_rule", "next_month_end")
+                        rule_desc = {
+                            "next_month_end": "翌月期待値",
+                            "same_month": "同月期待値",
+                            "exact": "完全一致"
+                        }.get(rule_name, rule_name)
+                        
                         log_message(f"照合チェック - 費用ID:{expense_id}, 支払ID:{payment_id}")
                         log_message(f"  コード: {expense_payee_code} vs {payment_payee_code} -> {code_match}")
                         log_message(f"  金額: {expense_amount} vs {payment_amount} -> {amount_match}")
-                        log_message(f"  月: {expense_year_month} vs {payment_year_month} (翌月期待値) -> {month_match}")
+                        log_message(f"  月: {expense_year_month} vs {payment_year_month} ({rule_desc}) -> {month_match}")
 
                     # 優先度1: 完全一致（最高優先度）
                     if amount_match and code_match and month_match:

@@ -190,11 +190,11 @@
     "encoding": "utf-8"
   },
   "matching": {
-    "payment_rule": "next_month_end",
-    "date_tolerance_months": 0,
+    "payment_rule": "same_month",
+    "date_tolerance_months": 1,
     "allow_partial_match": true,
-    "strict_amount_match": true,
-    "amount_tolerance": 0.01,
+    "strict_amount_match": false,
+    "amount_tolerance": 0.1,
     "debug_logging": true
   }
 }
