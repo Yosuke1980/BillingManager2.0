@@ -1434,11 +1434,19 @@ class DatabaseManager:
                         match_priority = 1
                         if matching_config.get("debug_logging", True):
                             log_message(f"部分一致マッチング: 費用ID:{expense_id} <-> 支払ID:{payment_id} (月不一致)")
+                            log_message(f"  詳細: コード一致={code_match}, 金額一致={amount_match}, 月一致={month_match}")
+                            log_message(f"  費用: コード={expense_payee_code}, 金額={expense_amount}")
+                            log_message(f"  支払: コード={payment_payee_code}, 金額={payment_amount}")
                     
                     # 上記以外は照合対象外
 
                 if best_match:
                     try:
+                        # デバッグ: 照合実行前の詳細ログ
+                        log_message(f"=== 照合実行 ===")
+                        log_message(f"費用ID:{expense_id} (コード:{expense_payee_code}, 金額:{expense_amount})")
+                        log_message(f"支払ID:{best_match} (優先度:{match_priority})")
+                        
                         # 費用データを照合済みに更新
                         expenses_cursor.execute(
                             "UPDATE expenses SET status = '照合済' WHERE id = ?",
