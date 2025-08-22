@@ -1452,12 +1452,31 @@ class DatabaseManager:
                             "UPDATE expenses SET status = '照合済' WHERE id = ?",
                             (expense_id,),
                         )
+                        
+                        # 更新結果を確認
+                        expense_updated_rows = expenses_cursor.rowcount
+                        log_message(f"費用データ更新結果: ID={expense_id}, 更新行数={expense_updated_rows}")
+                        
+                        if expense_updated_rows == 0:
+                            log_message(f"⚠️ 費用データ更新失敗: ID={expense_id} が見つかりません")
+                            continue
 
                         # 支払いデータを照合済みに更新
                         billing_cursor.execute(
                             "UPDATE payments SET status = '照合済' WHERE id = ?",
                             (best_match,),
                         )
+                        
+                        # 更新結果を確認
+                        payment_updated_rows = billing_cursor.rowcount
+                        log_message(f"支払いデータ更新結果: ID={best_match}, 更新行数={payment_updated_rows}")
+                        
+                        if payment_updated_rows == 0:
+                            log_message(f"⚠️ 支払いデータ更新失敗: ID={best_match} が見つかりません")
+                            # 費用データの更新もロールバック
+                            expenses_conn.rollback()
+                            billing_conn.rollback()
+                            continue
 
                         updated_expense_ids.add(expense_id)
                         updated_payment_ids.add(best_match)
