@@ -1,0 +1,2465 @@
+<!-- script.html 完全修正版 - エラー修正済み -->
+<script>
+// グローバル変数
+let currentPayments = [];
+let currentExpenses = [];
+let currentMaster = [];
+let selectedPayments = new Set();
+let selectedExpenses = new Set();
+let selectedMaster = new Set();
+
+// ページ読み込み時の初期化
+document.addEventListener('DOMContentLoaded', function() {
+    // タブ切り替え時のイベントリスナー
+    const tabTriggerList = [].slice.call(document.querySelectorAll('#mainTabs button[data-bs-toggle="tab"]'));
+    tabTriggerList.forEach(function (tabTrigger) {
+        tabTrigger.addEventListener('shown.bs.tab', function (event) {
+            const target = event.target.getAttribute('data-bs-target');
+            switch(target) {
+                case '#payment':
+                    loadPayments();
+                    break;
+                case '#expense':
+                    loadExpenses();
+                    break;
+                case '#master':
+                    loadMaster();
+                    break;
+            }
+        });
+    });
+
+    // 全選択チェックボックスのイベント
+    document.getElementById('selectAllPayments').addEventListener('change', toggleAllPayments);
+    document.getElementById('selectAllExpenses').addEventListener('change', toggleAllExpenses);
+    document.getElementById('selectAllMaster').addEventListener('change', toggleAllMaster);
+
+    // 初期データ読み込み
+    loadPayments();
+    loadStats();
+});
+
+// === 統一されたユーティリティ関数 ===
+
+function showStatus(message, type = 'info') {
+    const alert = document.getElementById('statusAlert');
+    alert.className = `alert alert-${type}`;
+    alert.textContent = message;
+    alert.classList.remove('d-none');
+    
+    setTimeout(() => {
+        alert.classList.add('d-none');
+    }, 5000);
+}
+
+function showLoading(elementId, show = true) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.style.display = show ? 'block' : 'none';
+    }
+}
+
+function formatAmount(amount) {
+    if (!amount && amount !== 0) return '';
+    
+    const num = parseFloat(amount);
+    if (isNaN(num)) return amount;
+    
+    return new Intl.NumberFormat('ja-JP', {
+        style: 'currency',
+        currency: 'JPY',
+        minimumFractionDigits: 0
+    }).format(num);
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('ja-JP');
+    } catch (error) {
+        return dateStr;
+    }
+}
+
+function getStatusBadge(status) {
+    return `<span class="status-badge status-${status}">${status}</span>`;
+}
+
+function formatBroadcastDays(daysStr) {
+    if (!daysStr) return '';
+    
+    const dayMap = {
+        '月': '月',
+        '火': '火', 
+        '水': '水',
+        '木': '木',
+        '金': '金',
+        '土': '土',
+        '日': '日'
+    };
+    
+    const days = daysStr.split(',').map(day => day.trim());
+    return days.map(day => dayMap[day] || day).join('・');
+}
+
+function getPaymentTypeBadge(type) {
+    const typeColors = {
+        '月額固定': 'primary',
+        '回数ベース': 'success',
+        '単発': 'warning',
+        'その他': 'secondary'
+    };
+    
+    const color = typeColors[type] || 'secondary';
+    return `<span class="badge bg-${color}">${type}</span>`;
+}
+
+function handleDataLoadError(error, dataType) {
+    console.error(`${dataType}データ取得エラー:`, error);
+    showStatus(`${dataType}データの読み込みに失敗しました: ${error}`, 'danger');
+}
+
+function displayDataWithFallback(data, displayFunction, tableBodyId, dataType) {
+    const tbody = document.getElementById(tableBodyId);
+    
+    if (!tbody) {
+        console.error(`テーブル要素が見つかりません: ${tableBodyId}`);
+        showStatus(`${dataType}の表示に失敗しました`, 'danger');
+        return;
+    }
+    
+    // テーブルをクリア
+    tbody.innerHTML = '';
+    
+    // データが空の場合
+    if (!data || data.length === 0) {
+        const colspan = tbody.parentElement.querySelector('thead tr').children.length;
+        const row = document.createElement('tr');
+        row.innerHTML = `<td colspan="${colspan}" class="text-center text-muted">データがありません</td>`;
+        tbody.appendChild(row);
+        return;
+    }
+    
+    try {
+        // データ表示関数を呼び出し
+        displayFunction(data);
+        console.log(`${dataType}データ表示完了: ${data.length}件`);
+    } catch (displayError) {
+        console.error(`${dataType}データ表示エラー:`, displayError);
+        const colspan = tbody.parentElement.querySelector('thead tr').children.length;
+        const row = document.createElement('tr');
+        row.innerHTML = `<td colspan="${colspan}" class="text-center text-danger">データの表示中にエラーが発生しました</td>`;
+        tbody.appendChild(row);
+        showStatus(`${dataType}データの表示中にエラーが発生しました`, 'danger');
+    }
+}
+
+// === 統計データの読み込み ===
+
+function loadStats() {
+    google.script.run
+        .withSuccessHandler(function(result) {
+            try {
+                if (result && result.payments && result.payments.data) {
+                    document.getElementById('paymentCount').textContent = result.payments.data.length;
+                    document.getElementById('matchedCount').textContent = result.payments.matchedCount || 0;
+                } else {
+                    document.getElementById('paymentCount').textContent = '0';
+                    document.getElementById('matchedCount').textContent = '0';
+                }
+                
+                if (result && result.expenses && result.expenses.data) {
+                    document.getElementById('expenseCount').textContent = result.expenses.data.length;
+                } else {
+                    document.getElementById('expenseCount').textContent = '0';
+                }
+                
+                if (result && result.master && result.master.data) {
+                    document.getElementById('masterCount').textContent = result.master.data.length;
+                } else {
+                    document.getElementById('masterCount').textContent = '0';
+                }
+            } catch (error) {
+                console.error('統計データ処理エラー:', error);
+                // デフォルト値を設定
+                document.getElementById('paymentCount').textContent = '0';
+                document.getElementById('expenseCount').textContent = '0';
+                document.getElementById('masterCount').textContent = '0';
+                document.getElementById('matchedCount').textContent = '0';
+            }
+        })
+        .withFailureHandler(function(error) {
+            handleDataLoadError(error, '統計');
+            // デフォルト値を設定
+            document.getElementById('paymentCount').textContent = '0';
+            document.getElementById('expenseCount').textContent = '0';
+            document.getElementById('masterCount').textContent = '0';
+            document.getElementById('matchedCount').textContent = '0';
+        })
+        .loadAllStats();
+}
+
+// === 支払いデータ関連 ===
+
+function loadPayments() {
+    showLoading('paymentLoading');
+    const searchTerm = document.getElementById('paymentSearch').value || '';
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            showLoading('paymentLoading', false);
+            try {
+                if (result && result.success && result.data) {
+                    currentPayments = result.data;
+                    displayDataWithFallback(result.data, displayPayments, 'paymentTableBody', '支払い');
+                    document.getElementById('paymentCount').textContent = result.data.length;
+                    document.getElementById('matchedCount').textContent = result.matchedCount || 0;
+                    
+                    if (result.data.length === 0) {
+                        showStatus('支払いデータがありません', 'info');
+                    }
+                } else {
+                    currentPayments = [];
+                    displayDataWithFallback([], displayPayments, 'paymentTableBody', '支払い');
+                    document.getElementById('paymentCount').textContent = '0';
+                    document.getElementById('matchedCount').textContent = '0';
+                    showStatus(result ? result.message : '支払いデータの取得に失敗しました', 'warning');
+                }
+            } catch (error) {
+                console.error('支払いデータ処理エラー:', error);
+                currentPayments = [];
+                displayDataWithFallback([], displayPayments, 'paymentTableBody', '支払い');
+                showStatus('支払いデータの処理に失敗しました', 'warning');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showLoading('paymentLoading', false);
+            handleDataLoadError(error, '支払い');
+            currentPayments = [];
+            displayDataWithFallback([], displayPayments, 'paymentTableBody', '支払い');
+        })
+        .getPaymentData(searchTerm);
+}
+
+function displayPayments(payments) {
+    const tbody = document.getElementById('paymentTableBody');
+    
+    payments.forEach(payment => {
+        const row = document.createElement('tr');
+        if (payment.status === '照合済' || payment.status === '処理済') {
+            row.classList.add('matched');
+        }
+        
+        // 安全なデータ取得
+        const safePayment = {
+            id: payment.id || '',
+            subject: payment.subject || '',
+            projectName: payment.projectName || '',
+            payee: payment.payee || '',
+            payeeCode: payment.payeeCode || '',
+            amount: payment.amount || 0,
+            paymentDate: payment.paymentDate || '',
+            status: payment.status || '未処理'
+        };
+        
+        row.innerHTML = `
+            <td><input type="checkbox" class="payment-select" value="${safePayment.id}" onchange="togglePaymentSelection('${safePayment.id}')"></td>
+            <td>${safePayment.subject}</td>
+            <td>${safePayment.projectName}</td>
+            <td>${safePayment.payee}</td>
+            <td>${safePayment.payeeCode}</td>
+            <td class="text-end">${formatAmount(safePayment.amount)}</td>
+            <td>${formatDate(safePayment.paymentDate)}</td>
+            <td>${getStatusBadge(safePayment.status)}</td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+// === 費用データ関連 ===
+
+function loadExpenses() {
+    showLoading('expenseLoading');
+    const searchTerm = document.getElementById('expenseSearch').value || '';
+    const filterMonth = document.getElementById('expenseMonthFilter').value || '';
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            showLoading('expenseLoading', false);
+            try {
+                if (result && result.success && result.data) {
+                    currentExpenses = result.data;
+                    displayDataWithFallback(result.data, displayExpenses, 'expenseTableBody', '費用');
+                    document.getElementById('expenseCount').textContent = result.data.length;
+                    updateMonthFilter(result.data);
+                    
+                    if (result.data.length === 0) {
+                        showStatus('費用データがありません', 'info');
+                    }
+                } else {
+                    currentExpenses = [];
+                    displayDataWithFallback([], displayExpenses, 'expenseTableBody', '費用');
+                    document.getElementById('expenseCount').textContent = '0';
+                    showStatus(result ? result.message : '費用データの取得に失敗しました', 'warning');
+                }
+            } catch (error) {
+                console.error('費用データ処理エラー:', error);
+                currentExpenses = [];
+                displayDataWithFallback([], displayExpenses, 'expenseTableBody', '費用');
+                showStatus('費用データの処理に失敗しました', 'warning');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showLoading('expenseLoading', false);
+            handleDataLoadError(error, '費用');
+            currentExpenses = [];
+            displayDataWithFallback([], displayExpenses, 'expenseTableBody', '費用');
+        })
+        .getExpenseData(searchTerm, filterMonth);
+}
+
+function displayExpenses(expenses) {
+    const tbody = document.getElementById('expenseTableBody');
+    
+    expenses.forEach(expense => {
+        const row = document.createElement('tr');
+        if (expense.status === '照合済') {
+            row.classList.add('matched');
+        }
+        
+        // 安全なデータ取得
+        const safeExpense = {
+            id: expense.id || '',
+            projectName: expense.projectName || '',
+            payee: expense.payee || '',
+            payeeCode: expense.payeeCode || '',
+            amount: expense.amount || 0,
+            paymentDate: expense.paymentDate || '',
+            status: expense.status || '未処理'
+        };
+        
+        row.innerHTML = `
+            <td><input type="checkbox" class="expense-select" value="${safeExpense.id}" onchange="toggleExpenseSelection('${safeExpense.id}')"></td>
+            <td>${safeExpense.projectName}</td>
+            <td>${safeExpense.payee}</td>
+            <td>${safeExpense.payeeCode}</td>
+            <td class="text-end">${formatAmount(safeExpense.amount)}</td>
+            <td>${formatDate(safeExpense.paymentDate)}</td>
+            <td>${getStatusBadge(safeExpense.status)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="editExpense('${safeExpense.id}')">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteExpense('${safeExpense.id}')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+// === 費用マスター関連 ===
+
+function loadMaster() {
+    showLoading('masterLoading');
+    const searchTerm = document.getElementById('masterSearch').value || '';
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            showLoading('masterLoading', false);
+            try {
+                if (result && result.success && result.data) {
+                    currentMaster = result.data;
+                    displayDataWithFallback(result.data, displayMaster, 'masterTableBody', '費用マスター');
+                    document.getElementById('masterCount').textContent = result.data.length;
+                    
+                    if (result.data.length === 0) {
+                        showStatus('費用マスターデータがありません', 'info');
+                    }
+                } else {
+                    currentMaster = [];
+                    displayDataWithFallback([], displayMaster, 'masterTableBody', '費用マスター');
+                    document.getElementById('masterCount').textContent = '0';
+                    showStatus(result ? result.message : '費用マスターデータの取得に失敗しました', 'warning');
+                }
+            } catch (error) {
+                console.error('費用マスターデータ処理エラー:', error);
+                currentMaster = [];
+                displayDataWithFallback([], displayMaster, 'masterTableBody', '費用マスター');
+                showStatus('費用マスターデータの処理に失敗しました', 'warning');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showLoading('masterLoading', false);
+            handleDataLoadError(error, '費用マスター');
+            currentMaster = [];
+            displayDataWithFallback([], displayMaster, 'masterTableBody', '費用マスター');
+        })
+        .getMasterData(searchTerm);
+}
+
+function displayMaster(masters) {
+    const tbody = document.getElementById('masterTableBody');
+    
+    masters.forEach(master => {
+        const row = document.createElement('tr');
+        
+        // 安全なデータ取得
+        const safeMaster = {
+            id: master.id || '',
+            projectName: master.projectName || '',
+            payee: master.payee || '',
+            payeeCode: master.payeeCode || '',
+            amount: master.amount || 0,
+            paymentType: master.paymentType || '月額固定',
+            broadcastDays: master.broadcastDays || ''
+        };
+        
+        row.innerHTML = `
+            <td><input type="checkbox" class="master-select" value="${safeMaster.id}" onchange="toggleMasterSelection('${safeMaster.id}')"></td>
+            <td>${safeMaster.projectName}</td>
+            <td>${safeMaster.payee}</td>
+            <td>${safeMaster.payeeCode}</td>
+            <td class="text-end">${formatAmount(safeMaster.amount)}</td>
+            <td>${getPaymentTypeBadge(safeMaster.paymentType)}</td>
+            <td class="text-center">${formatBroadcastDays(safeMaster.broadcastDays)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="editMaster('${safeMaster.id}')">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteMaster('${safeMaster.id}')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+// === 月フィルター更新 ===
+
+function updateMonthFilter(expenses) {
+    const monthFilter = document.getElementById('expenseMonthFilter');
+    if (!monthFilter) return;
+    
+    const months = new Set();
+    
+    if (expenses && expenses.length > 0) {
+        expenses.forEach(expense => {
+            if (expense.paymentDate) {
+                try {
+                    const date = new Date(expense.paymentDate);
+                    if (!isNaN(date.getTime())) {
+                        const yearMonth = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+                        months.add(yearMonth);
+                    }
+                } catch (error) {
+                    console.warn('日付解析エラー:', expense.paymentDate);
+                }
+            }
+        });
+    }
+    
+    // 現在の選択を保存
+    const currentValue = monthFilter.value;
+    
+    // オプションをクリア
+    monthFilter.innerHTML = '<option value="">すべての月</option>';
+    
+    // 月を降順でソートして追加
+    Array.from(months).sort().reverse().forEach(month => {
+        const option = document.createElement('option');
+        option.value = month;
+        option.textContent = `${month.replace('-', '年')}月`;
+        monthFilter.appendChild(option);
+    });
+    
+    // 以前の選択を復元
+    monthFilter.value = currentValue;
+}
+
+// === 検索関数 ===
+
+function searchPayments() {
+    loadPayments();
+}
+
+function resetPaymentSearch() {
+    document.getElementById('paymentSearch').value = '';
+    loadPayments();
+}
+
+function searchExpenses() {
+    loadExpenses();
+}
+
+function resetExpenseSearch() {
+    document.getElementById('expenseSearch').value = '';
+    document.getElementById('expenseMonthFilter').value = '';
+    loadExpenses();
+}
+
+function searchMaster() {
+    loadMaster();
+}
+
+function resetMasterSearch() {
+    document.getElementById('masterSearch').value = '';
+    loadMaster();
+}
+
+// === 選択処理 ===
+
+function toggleAllPayments() {
+    const selectAll = document.getElementById('selectAllPayments').checked;
+    const checkboxes = document.querySelectorAll('.payment-select');
+    
+    selectedPayments.clear();
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+        if (selectAll && checkbox.value) {
+            selectedPayments.add(checkbox.value);
+        }
+    });
+}
+
+function togglePaymentSelection(id) {
+    if (!id) return;
+    
+    if (selectedPayments.has(id)) {
+        selectedPayments.delete(id);
+    } else {
+        selectedPayments.add(id);
+    }
+}
+
+function toggleAllExpenses() {
+    const selectAll = document.getElementById('selectAllExpenses').checked;
+    const checkboxes = document.querySelectorAll('.expense-select');
+    
+    selectedExpenses.clear();
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+        if (selectAll && checkbox.value) {
+            selectedExpenses.add(checkbox.value);
+        }
+    });
+}
+
+function toggleExpenseSelection(id) {
+    if (!id) return;
+    
+    if (selectedExpenses.has(id)) {
+        selectedExpenses.delete(id);
+    } else {
+        selectedExpenses.add(id);
+    }
+}
+
+function toggleAllMaster() {
+    const selectAll = document.getElementById('selectAllMaster').checked;
+    const checkboxes = document.querySelectorAll('.master-select');
+    
+    selectedMaster.clear();
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+        if (selectAll && checkbox.value) {
+            selectedMaster.add(checkbox.value);
+        }
+    });
+}
+
+function toggleMasterSelection(id) {
+    if (!id) return;
+    
+    if (selectedMaster.has(id)) {
+        selectedMaster.delete(id);
+    } else {
+        selectedMaster.add(id);
+    }
+}
+
+// === 支払いデータ操作 ===
+
+function markSelectedPayments(status) {
+    if (selectedPayments.size === 0) {
+        showStatus('処理する支払いデータを選択してください', 'warning');
+        return;
+    }
+    
+    const updates = Array.from(selectedPayments).map(id => ({id, status}));
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showStatus(`${selectedPayments.size}件の支払いデータを${status}にしました`, 'success');
+                selectedPayments.clear();
+                document.getElementById('selectAllPayments').checked = false;
+                loadPayments();
+            } else {
+                showStatus(result ? result.message : 'ステータス更新に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('ステータス更新に失敗しました: ' + error, 'danger');
+        })
+        .updateMultiplePaymentStatus(updates);
+}
+
+function matchWithExpenses() {
+    showLoading('paymentLoading');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            showLoading('paymentLoading', false);
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                loadPayments();
+                if (document.querySelector('#expense-tab').classList.contains('active')) {
+                    loadExpenses();
+                }
+            } else {
+                showStatus(result ? result.message : '照合処理に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showLoading('paymentLoading', false);
+            showStatus('照合処理に失敗しました: ' + error, 'danger');
+        })
+        .matchExpensesWithPayments();
+}
+
+// === 費用データ操作 ===
+
+function openExpenseModal(expenseId = null) {
+    const modal = new bootstrap.Modal(document.getElementById('expenseModal'));
+    const title = document.getElementById('expenseModalTitle');
+    
+    if (expenseId) {
+        title.textContent = '費用データ編集';
+        const expense = currentExpenses.find(e => e.id === expenseId);
+        if (expense) {
+            document.getElementById('expenseId').value = expense.id || '';
+            document.getElementById('expenseProjectName').value = expense.projectName || '';
+            document.getElementById('expensePayee').value = expense.payee || '';
+            document.getElementById('expensePayeeCode').value = expense.payeeCode || '';
+            document.getElementById('expenseAmount').value = expense.amount || '';
+            document.getElementById('expensePaymentDate').value = expense.paymentDate ? expense.paymentDate.split('T')[0] : '';
+            document.getElementById('expenseStatus').value = expense.status || '未処理';
+        }
+    } else {
+        title.textContent = '費用データ新規作成';
+        document.getElementById('expenseForm').reset();
+        document.getElementById('expenseId').value = '';
+        document.getElementById('expenseStatus').value = '未処理';
+    }
+    
+    modal.show();
+}
+
+function editExpense(expenseId) {
+    if (!expenseId) return;
+    openExpenseModal(expenseId);
+}
+
+function saveExpense() {
+    const form = document.getElementById('expenseForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const expenseData = {
+        id: document.getElementById('expenseId').value,
+        projectName: document.getElementById('expenseProjectName').value,
+        payee: document.getElementById('expensePayee').value,
+        payeeCode: document.getElementById('expensePayeeCode').value,
+        amount: parseFloat(document.getElementById('expenseAmount').value),
+        paymentDate: document.getElementById('expensePaymentDate').value,
+        status: document.getElementById('expenseStatus').value
+    };
+    
+    const isNew = !expenseData.id;
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                bootstrap.Modal.getInstance(document.getElementById('expenseModal')).hide();
+                loadExpenses();
+            } else {
+                showStatus(result ? result.message : '保存に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('費用データの保存に失敗しました: ' + error, 'danger');
+        })
+        .saveExpense(expenseData, isNew);
+}
+
+function deleteExpense(expenseId) {
+    if (!expenseId) return;
+    
+    const expense = currentExpenses.find(e => e.id === expenseId);
+    if (expense && confirm(`費用データ「${expense.projectName}」を削除しますか？`)) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showStatus(result.message, 'success');
+                    loadExpenses();
+                } else {
+                    showStatus(result ? result.message : '削除に失敗しました', 'danger');
+                }
+            })
+            .withFailureHandler(function(error) {
+                showStatus('費用データの削除に失敗しました: ' + error, 'danger');
+            })
+            .deleteData('費用データ', expenseId);
+    }
+}
+
+function deleteSelectedExpenses() {
+    if (selectedExpenses.size === 0) {
+        showStatus('削除する費用データを選択してください', 'warning');
+        return;
+    }
+    
+    if (confirm(`選択された${selectedExpenses.size}件の費用データを削除しますか？`)) {
+        const promises = Array.from(selectedExpenses).map(id => {
+            return new Promise((resolve) => {
+                google.script.run
+                    .withSuccessHandler(resolve)
+                    .withFailureHandler(resolve)
+                    .deleteData('費用データ', id);
+            });
+        });
+        
+        Promise.all(promises).then(() => {
+            showStatus(`${selectedExpenses.size}件の費用データを削除しました`, 'success');
+            selectedExpenses.clear();
+            document.getElementById('selectAllExpenses').checked = false;
+            loadExpenses();
+        });
+    }
+}
+
+function duplicateSelectedExpense() {
+    if (selectedExpenses.size === 0) {
+        showStatus('複製する費用データを選択してください', 'warning');
+        return;
+    }
+    
+    const expenseId = Array.from(selectedExpenses)[0];
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                loadExpenses();
+            } else {
+                showStatus(result ? result.message : '複製に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('費用データの複製に失敗しました: ' + error, 'danger');
+        })
+        .duplicateData('費用データ', expenseId);
+}
+
+function matchExpensesWithPayments() {
+    showLoading('expenseLoading');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            showLoading('expenseLoading', false);
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                loadExpenses();
+                if (document.querySelector('#payment-tab').classList.contains('active')) {
+                    loadPayments();
+                }
+            } else {
+                showStatus(result ? result.message : '照合処理に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showLoading('expenseLoading', false);
+            showStatus('照合処理に失敗しました: ' + error, 'danger');
+        })
+        .matchExpensesWithPayments();
+}
+
+function exportExpensesCsv() {
+    google.script.run
+        .withSuccessHandler(function(base64Content) {
+            if (base64Content) {
+                downloadCsv(base64Content, `費用データ_${new Date().toISOString().slice(0, 10)}.csv`);
+                showStatus('CSVファイルをダウンロードしました', 'success');
+            } else {
+                showStatus('CSVデータの生成に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('CSVエクスポートに失敗しました: ' + error, 'danger');
+        })
+        .exportExpensesToCsv();
+}
+
+// === 費用マスター操作 ===
+
+function openMasterModal(masterId = null) {
+    const modal = new bootstrap.Modal(document.getElementById('masterModal'));
+    const title = document.getElementById('masterModalTitle');
+    
+    if (masterId) {
+        title.textContent = '費用マスター編集';
+        const master = currentMaster.find(m => m.id === masterId);
+        if (master) {
+            document.getElementById('masterId').value = master.id || '';
+            document.getElementById('masterProjectName').value = master.projectName || '';
+            document.getElementById('masterPayee').value = master.payee || '';
+            document.getElementById('masterPayeeCode').value = master.payeeCode || '';
+            document.getElementById('masterAmount').value = master.amount || '';
+            document.getElementById('masterPaymentType').value = master.paymentType || '月額固定';
+            document.getElementById('masterStartDate').value = master.startDate ? master.startDate.split('T')[0] : '';
+            document.getElementById('masterEndDate').value = master.endDate ? master.endDate.split('T')[0] : '';
+            
+            // 放送曜日のチェックボックスを設定
+            const broadcastDays = (master.broadcastDays || '').split(',');
+            const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+            const weekdayIds = ['broadcastMon', 'broadcastTue', 'broadcastWed', 'broadcastThu', 'broadcastFri', 'broadcastSat', 'broadcastSun'];
+            
+            weekdayIds.forEach((id, index) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.checked = broadcastDays.includes(weekdays[index]);
+                }
+            });
+        }
+    } else {
+        title.textContent = '費用マスター新規作成';
+        document.getElementById('masterForm').reset();
+        document.getElementById('masterId').value = '';
+        document.getElementById('masterPaymentType').value = '月額固定';
+        
+        // 放送曜日のチェックボックスをクリア
+        const weekdayIds = ['broadcastMon', 'broadcastTue', 'broadcastWed', 'broadcastThu', 'broadcastFri', 'broadcastSat', 'broadcastSun'];
+        weekdayIds.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.checked = false;
+            }
+        });
+    }
+    
+    modal.show();
+}
+
+function editMaster(masterId) {
+    if (!masterId) return;
+    openMasterModal(masterId);
+}
+
+function saveMaster() {
+    const form = document.getElementById('masterForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    // 放送曜日を取得
+    const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
+    const weekdayIds = ['broadcastMon', 'broadcastTue', 'broadcastWed', 'broadcastThu', 'broadcastFri', 'broadcastSat', 'broadcastSun'];
+    const selectedDays = [];
+    
+    weekdayIds.forEach((id, index) => {
+        const element = document.getElementById(id);
+        if (element && element.checked) {
+            selectedDays.push(weekdays[index]);
+        }
+    });
+    
+    const masterData = {
+        id: document.getElementById('masterId').value,
+        projectName: document.getElementById('masterProjectName').value,
+        payee: document.getElementById('masterPayee').value,
+        payeeCode: document.getElementById('masterPayeeCode').value,
+        amount: parseFloat(document.getElementById('masterAmount').value),
+        paymentType: document.getElementById('masterPaymentType').value,
+        startDate: document.getElementById('masterStartDate').value,
+        endDate: document.getElementById('masterEndDate').value,
+        broadcastDays: selectedDays.join(',')
+    };
+    
+    const isNew = !masterData.id;
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                bootstrap.Modal.getInstance(document.getElementById('masterModal')).hide();
+                loadMaster();
+            } else {
+                showStatus(result ? result.message : '保存に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('費用マスターデータの保存に失敗しました: ' + error, 'danger');
+        })
+        .saveMaster(masterData, isNew);
+}
+
+function deleteMaster(masterId) {
+    if (!masterId) return;
+    
+    const master = currentMaster.find(m => m.id === masterId);
+    if (master && confirm(`費用マスター「${master.projectName}」を削除しますか？`)) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showStatus(result.message, 'success');
+                    loadMaster();
+                } else {
+                    showStatus(result ? result.message : '削除に失敗しました', 'danger');
+                }
+            })
+            .withFailureHandler(function(error) {
+                showStatus('費用マスターデータの削除に失敗しました: ' + error, 'danger');
+            })
+            .deleteData('費用マスター', masterId);
+    }
+}
+
+function deleteSelectedMaster() {
+    if (selectedMaster.size === 0) {
+        showStatus('削除する費用マスターデータを選択してください', 'warning');
+        return;
+    }
+    
+    if (confirm(`選択された${selectedMaster.size}件の費用マスターデータを削除しますか？`)) {
+        const promises = Array.from(selectedMaster).map(id => {
+            return new Promise((resolve) => {
+                google.script.run
+                    .withSuccessHandler(resolve)
+                    .withFailureHandler(resolve)
+                    .deleteData('費用マスター', id);
+            });
+        });
+        
+        Promise.all(promises).then(() => {
+            showStatus(`${selectedMaster.size}件の費用マスターデータを削除しました`, 'success');
+            selectedMaster.clear();
+            document.getElementById('selectAllMaster').checked = false;
+            loadMaster();
+        });
+    }
+}
+
+function duplicateSelectedMaster() {
+    if (selectedMaster.size === 0) {
+        showStatus('複製する費用マスターデータを選択してください', 'warning');
+        return;
+    }
+    
+    const masterId = Array.from(selectedMaster)[0];
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                loadMaster();
+            } else {
+                showStatus(result ? result.message : '複製に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('費用マスターデータの複製に失敗しました: ' + error, 'danger');
+        })
+        .duplicateData('費用マスター', masterId);
+}
+
+function exportMasterCsv() {
+    google.script.run
+        .withSuccessHandler(function(base64Content) {
+            if (base64Content) {
+                downloadCsv(base64Content, `費用マスター_${new Date().toISOString().slice(0, 10)}.csv`);
+                showStatus('CSVファイルをダウンロードしました', 'success');
+            } else {
+                showStatus('CSVデータの生成に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('CSVエクスポートに失敗しました: ' + error, 'danger');
+        })
+        .exportMasterToCsv();
+}
+
+function forceRefresh() {
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                loadMaster();
+            } else {
+                showStatus(result ? result.message : '強制更新に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('強制更新に失敗しました: ' + error, 'danger');
+        })
+        .forceRefreshData();
+}
+
+function debugSpreadsheet() {
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                console.log('デバッグ情報:', result);
+                showStatus(result.message, 'info');
+            } else {
+                showStatus(result ? result.message : 'デバッグ処理に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('デバッグ処理に失敗しました: ' + error, 'danger');
+        })
+        .debugSpreadsheetContent();
+}
+
+function initializeSystem() {
+    if (confirm('システムを初期化しますか？')) {
+        google.script.run
+            .withSuccessHandler(function(result) {
+                if (result && result.success) {
+                    showStatus(result.message, 'success');
+                    loadStats();
+                    loadPayments();
+                } else {
+                    showStatus(result ? result.message : '初期化に失敗しました', 'danger');
+                }
+            })
+            .withFailureHandler(function(error) {
+                showStatus('初期化に失敗しました: ' + error, 'danger');
+            })
+            .initializeSheets();
+    }
+}
+
+// === CSVファイルの読み込み処理 ===
+
+function handleFileImport(file, type) {
+    if (!file) return;
+    
+    showStatus('CSVファイルを読み込んでいます...', 'info');
+    console.log('ファイル情報:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: new Date(file.lastModified)
+    });
+    
+    // まずテキストとして読み込みを試行（UTF-8）
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const csvContent = e.target.result;
+        console.log('UTF-8として読み込み成功');
+        console.log('内容の最初の200文字:', csvContent.substring(0, 200));
+        
+        // 日本語が正しく表示されているかチェック
+        if (csvContent.includes('案件名') || csvContent.includes('株式会社')) {
+            console.log('日本語が正常に読み込まれました');
+            importWithContent(csvContent, type);
+        } else {
+            console.log('日本語が文字化けしている可能性があります。Shift-JISで再試行...');
+            // Shift-JISで再試行
+            const readerSJIS = new FileReader();
+            readerSJIS.onload = function(e2) {
+                const sjisContent = e2.target.result;
+                console.log('Shift-JISとして読み込み成功');
+                console.log('内容の最初の200文字:', sjisContent.substring(0, 200));
+                importWithContent(sjisContent, type);
+            };
+            readerSJIS.onerror = function() {
+                console.log('Shift-JIS読み込み失敗。UTF-8で進行します。');
+                importWithContent(csvContent, type);
+            };
+            readerSJIS.readAsText(file, 'shift_jis');
+        }
+    };
+    
+    reader.onerror = function() {
+        showStatus('ファイルの読み込みに失敗しました', 'danger');
+        console.error('ファイル読み込みエラー');
+    };
+    
+    // UTF-8として読み込み
+    reader.readAsText(file, 'UTF-8');
+}
+
+function importWithContent(csvContent, type) {
+    const functionName = type === 'master' ? 'importMasterCsvText' : 'importExpensesFromCsv';
+    const loadFunction = type === 'master' ? loadMaster : loadExpenses;
+    
+    console.log(`${functionName}を呼び出し中...`);
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            console.log('GAS関数実行結果:', result);
+            if (result && result.success) {
+                let message = result.message || 'インポートが完了しました';
+                
+                // エラーの詳細を表示
+                if (result.errorCount && result.errorCount > 0) {
+                    console.log('エラー詳細:', result.errorDetails);
+                    
+                    // エラーサマリーを表示
+                    if (result.errorDetails && result.errorDetails.length > 0) {
+                        const errorSummary = result.errorDetails.slice(0, 5).join('\n');
+                        message += `\n\n主なエラー:\n${errorSummary}`;
+                        if (result.errorDetails.length > 5) {
+                            message += `\n... 他${result.errorDetails.length - 5}件のエラー`;
+                        }
+                    }
+                    
+                    showStatus(message, 'warning');
+                } else {
+                    showStatus(message, 'success');
+                }
+                
+                loadFunction();
+            } else {
+                let errorMessage = result ? (result.message || 'インポートに失敗しました') : 'インポートに失敗しました';
+                if (result && result.errorDetails) {
+                    errorMessage += '\n詳細: ' + result.errorDetails.join(', ');
+                }
+                showStatus(errorMessage, 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            console.error('GAS呼び出しエラー:', error);
+            showStatus('CSVインポートに失敗しました: ' + error, 'danger');
+        })
+        [functionName](csvContent);
+}
+
+// === ダウンロード関数（CSV） ===
+
+function downloadCsv(base64Content, filename) {
+    try {
+        const byteCharacters = atob(base64Content);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'text/csv; charset=UTF-8' });
+        
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+        
+        window.URL.revokeObjectURL(link.href);
+    } catch (error) {
+        console.error('ダウンロードエラー:', error);
+        showStatus('ファイルのダウンロードに失敗しました', 'danger');
+    }
+}
+
+// === 診断機能 ===
+
+/**
+ * 簡易診断
+ */
+function runQuickDiagnosis() {
+    console.log('=== 簡易診断開始 ===');
+    
+    showStatus('簡易診断を実行しています...', 'info');
+    
+    // 1. フロントエンド基本チェック
+    const frontendCheck = {
+        domElements: checkDOMElements(),
+        javaScriptFunctions: checkJavaScriptFunctions(),
+        gasConnection: checkGASConnection()
+    };
+    
+    console.log('フロントエンド診断結果:', frontendCheck);
+    
+    // 2. スプレッドシートIDチェック
+    google.script.run
+        .withSuccessHandler(function(result) {
+            console.log('スプレッドシート情報取得結果:', result);
+            
+            let message = '📋 簡易診断結果\n\n';
+            
+            // フロントエンド結果
+            message += '■ フロントエンド\n';
+            message += `DOM要素: ${frontendCheck.domElements.success ? '✅' : '❌'}\n`;
+            message += `JavaScript関数: ${frontendCheck.javaScriptFunctions.success ? '✅' : '❌'}\n`;
+            message += `GAS接続: ${frontendCheck.gasConnection.success ? '✅' : '❌'}\n\n`;
+            
+            // バックエンド結果
+            message += '■ バックエンド\n';
+            if (result && result.success) {
+                message += `スプレッドシートアクセス: ✅\n`;
+                message += `スプレッドシート名: ${result.spreadsheetName || '不明'}\n`;
+                message += `シート数: ${result.sheetCount || 0}\n\n`;
+                
+                message += '🎉 基本的な接続は正常です！\n';
+                message += 'データが表示されない場合は、以下を試してください：\n';
+                message += '1. 初期化ボタンをクリック\n';
+                message += '2. テストデータ作成\n';
+                message += '3. ブラウザの更新';
+            } else {
+                message += `スプレッドシートアクセス: ❌\n`;
+                message += `エラー: ${result ? result.error : '不明'}\n\n`;
+                
+                message += '⚠️ スプレッドシートへの接続に問題があります\n';
+                message += '以下を確認してください：\n';
+                message += '1. Code.gsのSPREADSHEET_IDが正しく設定されているか\n';
+                message += '2. スプレッドシートの共有設定\n';
+                message += '3. GASプロジェクトの権限';
+            }
+            
+            console.log(message);
+            alert(message);
+            showStatus('簡易診断が完了しました', result && result.success ? 'success' : 'warning');
+        })
+        .withFailureHandler(function(error) {
+            console.error('スプレッドシート情報取得エラー:', error);
+            
+            let message = '📋 簡易診断結果\n\n';
+            message += '■ フロントエンド\n';
+            message += `DOM要素: ${frontendCheck.domElements.success ? '✅' : '❌'}\n`;
+            message += `JavaScript関数: ${frontendCheck.javaScriptFunctions.success ? '✅' : '❌'}\n`;
+            message += `GAS接続: ${frontendCheck.gasConnection.success ? '✅' : '❌'}\n\n`;
+            
+            message += '■ バックエンド\n';
+            message += `GAS関数実行: ❌\n`;
+            message += `エラー: ${error.toString()}\n\n`;
+            
+            message += '🚨 重大な問題があります\n';
+            message += '以下を確認してください：\n';
+            message += '1. GASプロジェクトが正しくデプロイされているか\n';
+            message += '2. アクセス権限が正しく設定されているか\n';
+            message += '3. ブラウザのセキュリティ設定';
+            
+            console.log(message);
+            alert(message);
+            showStatus('簡易診断でエラーが検出されました', 'danger');
+        })
+        .debugSpreadsheetStatus();
+}
+
+/**
+ * ステップバイステップ診断
+ */
+function runStepByStepDiagnosis() {
+    console.log('=== ステップバイステップ診断開始 ===');
+    
+    showStatus('ステップバイステップ診断を実行中...', 'info');
+    
+    // 基本的なステップ診断を実行
+    const step1 = checkDOMElements();
+    const step2 = checkJavaScriptFunctions();
+    const step3 = checkGASConnection();
+    
+    let message = '🔍 ステップバイステップ診断結果\n\n';
+    message += `ステップ1 - DOM要素チェック: ${step1.success ? '✅ 成功' : '❌ 失敗'}\n`;
+    message += `ステップ2 - JavaScript関数チェック: ${step2.success ? '✅ 成功' : '❌ 失敗'}\n`;
+    message += `ステップ3 - GAS接続チェック: ${step3.success ? '✅ 成功' : '❌ 失敗'}\n\n`;
+    
+    const successCount = [step1, step2, step3].filter(step => step.success).length;
+    message += `成功率: ${successCount}/3 (${Math.round(successCount/3*100)}%)\n\n`;
+    
+    if (successCount === 3) {
+        message += '🎉 フロントエンドの基本チェックは全て正常です！\n';
+        message += 'データ表示に問題がある場合は、詳細診断を実行してください。';
+    } else {
+        message += '⚠️ 問題が見つかりました。\n';
+        
+        if (!step1.success) message += `\nDOM要素エラー: ${step1.error}`;
+        if (!step2.success) message += `\nJavaScript関数エラー: ${step2.error}`;
+        if (!step3.success) message += `\nGAS接続エラー: ${step3.error}`;
+    }
+    
+    console.log(message);
+    alert(message);
+    showStatus('ステップバイステップ診断が完了しました', successCount === 3 ? 'success' : 'warning');
+}
+
+/**
+ * 詳細デバッグ診断
+ */
+function runDetailedDebugDiagnosis() {
+    console.log('=== 詳細デバッグ診断開始 ===');
+    
+    showStatus('詳細診断を実行しています...', 'info');
+    testBasicGASConnection();
+}
+
+/**
+ * 総合診断
+ */
+function runCompleteDiagnosis() {
+    console.log('=== 総合診断開始 ===');
+    
+    showStatus('総合診断を実行しています...', 'info');
+    
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+            .withSuccessHandler(function(backendResult) {
+                console.log('バックエンド診断結果:', backendResult);
+                
+                let message = '🔍 総合診断結果\n\n';
+                
+                if (backendResult && backendResult.success) {
+                    const diagnosis = backendResult.diagnosis;
+                    message += '■ システム状態\n';
+                    message += `スプレッドシートアクセス: ${diagnosis.summary.spreadsheetAccess ? '✅' : '❌'}\n`;
+                    message += `データ存在: ${diagnosis.summary.dataExists ? '✅' : '❌'}\n`;
+                    message += `データ構造: ${diagnosis.summary.dataStructure ? '✅' : '❌'}\n`;
+                    message += `総合状態: ${diagnosis.summary.overallStatus}\n\n`;
+                    
+                    if (diagnosis.recommendations.length > 0) {
+                        message += '推奨対応:\n';
+                        diagnosis.recommendations.forEach(rec => {
+                            message += `• ${rec}\n`;
+                        });
+                    }
+                } else {
+                    message += `エラー: ${backendResult ? backendResult.message : '診断に失敗しました'}`;
+                }
+                
+                console.log(message);
+                alert(message);
+                showStatus('総合診断が完了しました', backendResult && backendResult.success ? 'success' : 'warning');
+            })
+            .withFailureHandler(function(error) {
+                console.error('総合診断エラー:', error);
+                showStatus('総合診断に失敗しました: ' + error, 'danger');
+            })
+            .comprehensiveDiagnosis();
+    } else {
+        showStatus('GAS接続が利用できません', 'danger');
+    }
+}
+
+/**
+ * 個別チェック関数
+ */
+function checkDOMElements() {
+    const requiredElements = [
+        'masterTableBody', 
+        'expenseTableBody', 
+        'paymentTableBody',
+        'masterLoading',
+        'expenseLoading', 
+        'paymentLoading'
+    ];
+    
+    const missingElements = [];
+    
+    requiredElements.forEach(elementId => {
+        const element = document.getElementById(elementId);
+        if (!element) {
+            missingElements.push(elementId);
+        }
+    });
+    
+    if (missingElements.length > 0) {
+        return {
+            success: false,
+            error: `必要なDOM要素が見つかりません: ${missingElements.join(', ')}`,
+            solution: 'index.htmlファイルが正しく読み込まれているか確認し、必要に応じてブラウザを更新してください。'
+        };
+    }
+    
+    return { success: true };
+}
+
+function checkJavaScriptFunctions() {
+    const requiredFunctions = [
+        'loadMaster', 
+        'displayMaster', 
+        'showStatus', 
+        'loadExpenses', 
+        'loadPayments'
+    ];
+    
+    const missingFunctions = [];
+    
+    requiredFunctions.forEach(funcName => {
+        if (typeof window[funcName] !== 'function') {
+            missingFunctions.push(funcName);
+        }
+    });
+    
+    if (missingFunctions.length > 0) {
+        return {
+            success: false,
+            error: `必要なJavaScript関数が定義されていません: ${missingFunctions.join(', ')}`,
+            solution: 'script.htmlファイルが正しく読み込まれているか確認し、JavaScriptエラーがないかコンソールを確認してください。'
+        };
+    }
+    
+    return { success: true };
+}
+
+function checkGASConnection() {
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        return {
+            success: false,
+            error: 'Google Apps Script接続が利用できません',
+            solution: 'GASプロジェクトがWebアプリとしてデプロイされているか確認し、デプロイURLに直接アクセスしているか確認してください。'
+        };
+    }
+    
+    return { success: true };
+}
+
+/**
+ * 基本GAS接続テスト
+ */
+function testBasicGASConnection() {
+    console.log('基本GAS接続をテスト中...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            console.log('基本接続テスト成功:', result);
+            showStatus('基本接続: 成功', 'success');
+            setTimeout(() => testDataRetrieval(), 1000);
+        })
+        .withFailureHandler(function(error) {
+            console.error('基本接続テスト失敗:', error);
+            showStatus('基本接続: 失敗 - ' + error, 'danger');
+            
+            setTimeout(() => {
+                alert('🚨 基本GAS接続でエラーが発生しました\n\n' +
+                      `エラー内容:\n${error}\n\n` +
+                      '推奨解決策:\n' +
+                      'GASプロジェクトのデプロイ設定を確認してください。\n' +
+                      '1. 「デプロイ」→「デプロイを管理」\n' +
+                      '2. アクセス権限が「全員」になっているか確認\n' +
+                      '3. 新しいデプロイを作成してみてください');
+            }, 1000);
+        })
+        .getSystemInfo();
+}
+
+/**
+ * データ取得テスト
+ */
+function testDataRetrieval() {
+    console.log('データ取得をテスト中...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            console.log('データ取得テスト結果:', result);
+            
+            if (result && result.data !== undefined) {
+                showStatus(`データ取得: 成功 (${result.data.length}件)`, 'success');
+                
+                // データを実際に表示してみる
+                try {
+                    displayMaster(result.data);
+                    showStatus('データ表示: 成功', 'success');
+                    
+                    setTimeout(() => {
+                        showStatus('🎉 全ての診断が完了しました！', 'success');
+                        showCompleteDiagnosticSummary();
+                    }, 1000);
+                } catch (displayError) {
+                    console.error('データ表示エラー:', displayError);
+                    showStatus('データ表示: 失敗 - ' + displayError, 'danger');
+                    
+                    setTimeout(() => {
+                        alert('🚨 データ表示でエラーが発生しました\n\n' +
+                              `エラー内容:\n${displayError.toString()}\n\n` +
+                              '推奨解決策:\n' +
+                              'フロントエンドの表示関数に問題があります。\n' +
+                              'ブラウザのコンソールでJavaScriptエラーを確認してください。');
+                    }, 1000);
+                }
+            } else {
+                showStatus('データ取得: データ形式エラー', 'warning');
+                console.error('予期しないデータ形式:', result);
+                
+                setTimeout(() => {
+                    alert('🚨 データ形式エラー\n\n' +
+                          'データの形式が正しくありません\n\n' +
+                          '推奨解決策:\n' +
+                          'GAS側のデータ取得関数の戻り値を確認してください。');
+                }, 1000);
+            }
+        })
+        .withFailureHandler(function(error) {
+            console.error('データ取得失敗:', error);
+            showStatus('データ取得: 失敗 - ' + error, 'danger');
+            analyzeDataRetrievalError(error);
+        })
+        .getMasterData('');
+}
+
+/**
+ * データ取得エラーの分析
+ */
+function analyzeDataRetrievalError(error) {
+    const errorString = error.toString().toLowerCase();
+    
+    let analysis = '❌ データ取得エラー分析\n\n';
+    let recommendation = '';
+    
+    if (errorString.includes('timeout') || errorString.includes('タイムアウト')) {
+        analysis += '原因: 実行時間超過\n';
+        recommendation = '1. スプレッドシートのデータ量を確認\n' +
+                        '2. 複雑な計算式があれば簡素化\n' +
+                        '3. 一時的にデータを少なくして試行';
+    } else if (errorString.includes('permission') || errorString.includes('権限')) {
+        analysis += '原因: アクセス権限不足\n';
+        recommendation = '1. スプレッドシートの共有設定を確認\n' +
+                        '2. GASプロジェクトの権限を再承認\n' +
+                        '3. Googleアカウントでログインし直す';
+    } else if (errorString.includes('not found') || errorString.includes('見つかりません')) {
+        analysis += '原因: スプレッドシートまたはシートが見つからない\n';
+        recommendation = '1. SPREADSHEET_IDが正しいか確認\n' +
+                        '2. スプレッドシートが削除されていないか確認\n' +
+                        '3. 初期化を実行してシートを再作成';
+    } else {
+        analysis += '原因: 不明なエラー\n';
+        recommendation = '1. ブラウザを更新して再試行\n' +
+                        '2. 別のブラウザで試行\n' +
+                        '3. しばらく時間をおいて再試行';
+    }
+    
+    analysis += '\n推奨対応:\n' + recommendation;
+    
+    console.error(analysis);
+    setTimeout(() => { alert(analysis); }, 2000);
+}
+
+/**
+ * 診断サマリー表示
+ */
+function showCompleteDiagnosticSummary() {
+    const summary = '🎯 診断完了サマリー\n\n' +
+                   '基本接続: 正常\n' +
+                   'データ取得: 正常\n' +
+                   'データ表示: 正常\n\n' +
+                   '✅ システムは正常に動作しています！\n\n' +
+                   'データが表示されない場合は:\n' +
+                   '1. データが存在しない可能性があります\n' +
+                   '2. テストデータを作成してください\n' +
+                   '3. CSVインポートでデータを追加してください';
+    
+    console.log(summary);
+    alert(summary);
+}
+
+/**
+ * 緊急データ作成
+ */
+function createEmergencyTestData() {
+    if (!confirm('緊急テストデータを作成しますか？\n既存のデータには影響しません。')) {
+        return;
+    }
+    
+    showStatus('緊急テストデータを作成中...', 'info');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            console.log('緊急テストデータ作成結果:', result);
+            
+            if (result && result.success) {
+                showStatus('緊急テストデータ作成: 成功', 'success');
+                
+                // 即座にデータを再読み込み
+                setTimeout(() => {
+                    loadMaster();
+                    loadExpenses();
+                    loadPayments();
+                    loadStats();
+                }, 1000);
+                
+                alert('✅ 緊急テストデータを作成しました！\n\n' +
+                      'データの表示を確認してください。\n' +
+                      '正常に表示されれば、システムは動作しています。');
+            } else {
+                showStatus('緊急テストデータ作成: 失敗', 'danger');
+                alert('❌ 緊急テストデータの作成に失敗しました\n\n' + 
+                      (result ? result.message : '不明なエラー'));
+            }
+        })
+        .withFailureHandler(function(error) {
+            console.error('緊急テストデータ作成エラー:', error);
+            showStatus('緊急テストデータ作成: エラー', 'danger');
+            alert('❌ 緊急テストデータ作成中にエラーが発生しました\n\n' + error);
+        })
+        .createMinimalTestData();
+}
+
+/**
+ * 手動データ表示テスト
+ */
+function testManualDataDisplay() {
+    console.log('手動データ表示テストを実行中...');
+    
+    // ダミーデータでテスト
+    const testData = [
+        {
+            id: 'TEST_001',
+            projectName: '手動テスト案件',
+            payee: '手動テスト会社',
+            payeeCode: 'MANUAL001',
+            amount: 50000,
+            paymentType: '月額固定',
+            startDate: '2024-01-01',
+            endDate: '2024-12-31',
+            broadcastDays: '月,水,金',
+            createdAt: new Date()
+        }
+    ];
+    
+    try {
+        console.log('テストデータでdisplayMaster関数を実行...');
+        displayMaster(testData);
+        
+        showStatus('手動データ表示テスト: 成功', 'success');
+        alert('✅ フロントエンドの表示機能は正常です！\n\n' +
+              '問題はデータ取得側にあります。\n' +
+              'GAS側の関数を確認してください。');
+    } catch (error) {
+        console.error('手動データ表示テストエラー:', error);
+        showStatus('手動データ表示テスト: 失敗', 'danger');
+        alert('❌ フロントエンドの表示機能に問題があります\n\n' +
+              'エラー: ' + error.toString() + '\n\n' +
+              'script.htmlファイルを確認してください。');
+    }
+}
+
+/**
+ * テストデータ作成（フロントエンド側）
+ */
+function createTestDataFromFrontend() {
+    if (!confirm('テストデータを作成しますか？既存のデータには影響しません。')) {
+        return;
+    }
+    
+    showStatus('テストデータを作成しています...', 'info');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                // データ再読み込み
+                setTimeout(() => {
+                    loadMaster();
+                    loadExpenses();
+                    loadPayments();
+                    loadStats();
+                }, 1000);
+            } else {
+                showStatus(result ? result.message : 'テストデータ作成に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('テストデータ作成に失敗しました: ' + error, 'danger');
+        })
+        .createTestData();
+}
+
+/**
+ * 全データクリア（フロントエンド側）
+ */
+function clearAllDataFromFrontend() {
+    if (!confirm('全てのデータを削除しますか？この操作は元に戻せません。')) {
+        return;
+    }
+    
+    if (!confirm('本当に削除しますか？データは完全に失われます。')) {
+        return;
+    }
+    
+    showStatus('全データを削除しています...', 'info');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showStatus(result.message, 'success');
+                // 画面をクリア
+                setTimeout(() => {
+                    loadMaster();
+                    loadExpenses();
+                    loadPayments();
+                    loadStats();
+                }, 1000);
+            } else {
+                showStatus(result ? result.message : 'データ削除に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('データ削除に失敗しました: ' + error, 'danger');
+        })
+        .clearAllDataForDiagnosis();
+}
+
+// グローバルスコープに診断関数を追加
+window.runQuickDiagnosis = runQuickDiagnosis;
+window.runCompleteDiagnosis = runCompleteDiagnosis;
+window.runStepByStepDiagnosis = runStepByStepDiagnosis;
+window.runDetailedDebugDiagnosis = runDetailedDebugDiagnosis;
+window.createEmergencyTestData = createEmergencyTestData;
+window.testManualDataDisplay = testManualDataDisplay;
+window.createTestDataFromFrontend = createTestDataFromFrontend;
+window.clearAllDataFromFrontend = clearAllDataFromFrontend;
+
+// 支払いデータCSVインポート関連のJavaScript関数
+
+let currentPaymentCsvContent = '';
+let currentPaymentCsvHeaders = [];
+let paymentMappingSettings = {};
+
+/**
+ * 支払いCSVファイルインポート（標準）- Shift-JIS対応強化版
+ */
+function handlePaymentFileImport(file) {
+    if (!file) return;
+    
+    showStatus('支払いCSVファイルを読み込んでいます...', 'info');
+    console.log('支払いファイル情報:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: new Date(file.lastModified)
+    });
+    
+    // まずUTF-8で読み込みを試行
+    readCsvWithEncoding(file, 'UTF-8')
+        .then(csvContent => {
+            console.log('UTF-8読み込み成功');
+            console.log('内容の最初の200文字:', csvContent.substring(0, 200));
+            
+            // 日本語の文字化けチェック
+            if (isValidJapaneseContent(csvContent)) {
+                console.log('UTF-8: 日本語が正常に読み込まれました');
+                importPaymentWithContent(csvContent);
+            } else {
+                console.log('UTF-8: 日本語が文字化けしている可能性があります。Shift-JISで再試行...');
+                // Shift-JISで再試行
+                return readCsvWithEncoding(file, 'Shift_JIS');
+            }
+        })
+        .then(sjisContent => {
+            if (sjisContent) {
+                console.log('Shift-JIS読み込み成功');
+                console.log('内容の最初の200文字:', sjisContent.substring(0, 200));
+                
+                if (isValidJapaneseContent(sjisContent)) {
+                    console.log('Shift-JIS: 日本語が正常に読み込まれました');
+                    importPaymentWithContent(sjisContent);
+                } else {
+                    console.log('Shift-JIS: 文字化けが解決されませんでした。UTF-8で進行します。');
+                    // 最初のUTF-8の結果で進行
+                    return readCsvWithEncoding(file, 'UTF-8')
+                        .then(fallbackContent => importPaymentWithContent(fallbackContent));
+                }
+            }
+        })
+        .catch(error => {
+            console.error('ファイル読み込みエラー:', error);
+            showStatus('ファイルの読み込みに失敗しました: ' + error.message, 'danger');
+        });
+}
+
+/**
+ * 指定されたエンコーディングでCSVファイルを読み込む
+ */
+function readCsvWithEncoding(file, encoding) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            resolve(e.target.result);
+        };
+        
+        reader.onerror = function() {
+            reject(new Error(`${encoding}での読み込みに失敗しました`));
+        };
+        
+        try {
+            reader.readAsText(file, encoding);
+        } catch (error) {
+            reject(new Error(`${encoding}エンコーディングがサポートされていません`));
+        }
+    });
+}
+
+/**
+ * 日本語コンテンツの妥当性をチェック
+ */
+function isValidJapaneseContent(content) {
+    // 一般的な日本語キーワードをチェック
+    const japaneseKeywords = [
+        '案件名', '支払', '金額', '会社', '株式会社', '有限会社', '合同会社',
+        '料金', '費用', '日付', '状態', '処理', '件名', '取引先', '業者',
+        'プロジェクト', 'コード', 'ステータス'
+    ];
+    
+    // 文字化けの典型的なパターンをチェック
+    const corruptedPatterns = [
+        /�/, // 置換文字
+        /[ï¿½]+/, // UTF-8エラー文字
+        /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/, // 制御文字
+        /[àáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ]{3,}/, // 連続した文字化け文字
+    ];
+    
+    // 文字化けパターンが検出された場合は無効
+    for (const pattern of corruptedPatterns) {
+        if (pattern.test(content)) {
+            console.log('文字化けパターンを検出:', pattern);
+            return false;
+        }
+    }
+    
+    // 日本語キーワードが含まれているかチェック
+    const hasJapanese = japaneseKeywords.some(keyword => content.includes(keyword));
+    
+    // ひらがな・カタカナ・漢字の存在もチェック
+    const hasJapaneseChars = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(content);
+    
+    return hasJapanese || hasJapaneseChars;
+}
+
+/**
+ * 支払いCSVプレビュー - Shift-JIS対応強化版
+ */
+function previewPaymentCsv(file) {
+    if (!file) return;
+    
+    console.log('CSVプレビュー開始:', file.name);
+    
+    // エンコーディング自動検出でプレビュー
+    detectAndReadCsv(file)
+        .then(result => {
+            console.log(`プレビュー読み込み成功 (${result.encoding}):`, result.content.substring(0, 100));
+            currentPaymentCsvContent = result.content;
+            
+            try {
+                const lines = result.content.trim().split(/\r?\n/);
+                const headers = parseCSVLine(lines[0]);
+                currentPaymentCsvHeaders = headers;
+                
+                console.log('検出されたヘッダー:', headers);
+                
+                // プレビュー表示
+                let previewHtml = generateCsvPreviewHtml(headers, lines);
+                document.getElementById('csvPreview').innerHTML = previewHtml;
+                
+                // エンコーディング情報を表示
+                const encodingInfo = `<div class="alert alert-info mb-2">
+                    <small><i class="bi bi-info-circle"></i> 検出されたエンコーディング: <strong>${result.encoding}</strong></small>
+                </div>`;
+                document.getElementById('csvPreview').insertAdjacentHTML('afterbegin', encodingInfo);
+                
+                // ドロップダウンにオプションを追加
+                populatePaymentMappingOptions(headers);
+                
+                // 自動検出を実行
+                autoDetectPaymentMapping();
+                
+            } catch (error) {
+                console.error('CSVプレビューエラー:', error);
+                document.getElementById('csvPreview').innerHTML = 
+                    '<div class="alert alert-danger">CSVファイルの解析に失敗しました: ' + error.message + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('プレビュー読み込みエラー:', error);
+            document.getElementById('csvPreview').innerHTML = 
+                '<div class="alert alert-danger">ファイルの読み込みに失敗しました: ' + error.message + '</div>';
+        });
+}
+
+/**
+ * エンコーディング自動検出とCSV読み込み
+ */
+function detectAndReadCsv(file) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // UTF-8を試行
+            console.log('UTF-8での読み込みを試行...');
+            const utf8Content = await readCsvWithEncoding(file, 'UTF-8');
+            
+            if (isValidJapaneseContent(utf8Content)) {
+                console.log('UTF-8で正常に読み込めました');
+                resolve({ content: utf8Content, encoding: 'UTF-8' });
+                return;
+            }
+            
+            // Shift-JISを試行
+            console.log('Shift-JISでの読み込みを試行...');
+            const sjisContent = await readCsvWithEncoding(file, 'Shift_JIS');
+            
+            if (isValidJapaneseContent(sjisContent)) {
+                console.log('Shift-JISで正常に読み込めました');
+                resolve({ content: sjisContent, encoding: 'Shift-JIS' });
+                return;
+            }
+            
+            // EUC-JPを試行（追加対応）
+            console.log('EUC-JPでの読み込みを試行...');
+            try {
+                const eucContent = await readCsvWithEncoding(file, 'EUC-JP');
+                if (isValidJapaneseContent(eucContent)) {
+                    console.log('EUC-JPで正常に読み込めました');
+                    resolve({ content: eucContent, encoding: 'EUC-JP' });
+                    return;
+                }
+            } catch (eucError) {
+                console.log('EUC-JP読み込み失敗:', eucError.message);
+            }
+            
+            // 全て失敗した場合はUTF-8の結果を返す
+            console.log('全てのエンコーディングで文字化けが解決されませんでした。UTF-8で進行します。');
+            resolve({ content: utf8Content, encoding: 'UTF-8 (文字化けの可能性)' });
+            
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+/**
+ * CSVプレビューHTML生成
+ */
+function generateCsvPreviewHtml(headers, lines) {
+    let previewHtml = '<div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-light"><tr>';
+    
+    headers.forEach((header, index) => {
+        previewHtml += `<th style="min-width: 120px;">
+            列${index + 1}<br>
+            <small class="text-primary">${escapeHtml(header)}</small>
+        </th>`;
+    });
+    previewHtml += '</tr></thead><tbody>';
+    
+    // 最初の5行をプレビュー
+    const maxPreviewRows = Math.min(6, lines.length);
+    for (let i = 1; i < maxPreviewRows; i++) {
+        const row = parseCSVLine(lines[i]);
+        previewHtml += '<tr>';
+        headers.forEach((header, colIndex) => {
+            const cellValue = row[colIndex] || '';
+            previewHtml += `<td><small>${escapeHtml(cellValue)}</small></td>`;
+        });
+        previewHtml += '</tr>';
+    }
+    
+    previewHtml += '</tbody></table></div>';
+    
+    if (lines.length > maxPreviewRows) {
+        previewHtml += `<small class="text-muted">... 他 ${lines.length - maxPreviewRows} 行</small>`;
+    }
+    
+    return previewHtml;
+}
+
+/**
+ * HTMLエスケープ
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * エンコーディング診断機能
+ */
+function diagnoseCsvEncoding(file) {
+    return new Promise(async (resolve) => {
+        const diagnosis = {
+            file: {
+                name: file.name,
+                size: file.size,
+                type: file.type
+            },
+            encodings: {}
+        };
+        
+        const encodingsToTest = ['UTF-8', 'Shift_JIS', 'EUC-JP'];
+        
+        for (const encoding of encodingsToTest) {
+            try {
+                console.log(`${encoding}での診断中...`);
+                const content = await readCsvWithEncoding(file, encoding);
+                const isValid = isValidJapaneseContent(content);
+                
+                diagnosis.encodings[encoding] = {
+                    success: true,
+                    isValid: isValid,
+                    sampleText: content.substring(0, 100),
+                    hasJapanese: /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(content),
+                    lineCount: content.split(/\r?\n/).length
+                };
+                
+                console.log(`${encoding} 診断結果:`, diagnosis.encodings[encoding]);
+            } catch (error) {
+                diagnosis.encodings[encoding] = {
+                    success: false,
+                    error: error.message
+                };
+            }
+        }
+        
+        // 推奨エンコーディングを決定
+        diagnosis.recommended = Object.keys(diagnosis.encodings).find(enc => 
+            diagnosis.encodings[enc].success && diagnosis.encodings[enc].isValid
+        ) || 'UTF-8';
+        
+        resolve(diagnosis);
+    });
+}
+
+/**
+ * エンコーディング診断結果表示（デバッグ用）
+ */
+function showEncodingDiagnosis(file) {
+    diagnoseCsvEncoding(file)
+        .then(diagnosis => {
+            console.log('=== エンコーディング診断結果 ===');
+            console.log('ファイル:', diagnosis.file);
+            console.log('推奨エンコーディング:', diagnosis.recommended);
+            
+            Object.keys(diagnosis.encodings).forEach(encoding => {
+                const result = diagnosis.encodings[encoding];
+                console.log(`${encoding}:`, result);
+            });
+            
+            // ユーザーに結果を表示（必要に応じて）
+            let message = `エンコーディング診断結果:\n\n`;
+            message += `推奨: ${diagnosis.recommended}\n\n`;
+            
+            Object.keys(diagnosis.encodings).forEach(encoding => {
+                const result = diagnosis.encodings[encoding];
+                if (result.success) {
+                    message += `${encoding}: ${result.isValid ? '✓ 正常' : '⚠ 文字化けの可能性'}\n`;
+                } else {
+                    message += `${encoding}: ✗ 読み込み失敗\n`;
+                }
+            });
+            
+            // デバッグ用（通常は表示しない）
+            if (window.location.search.includes('debug=true')) {
+                alert(message);
+            }
+        })
+        .catch(error => {
+            console.error('エンコーディング診断エラー:', error);
+        });
+}
+
+// マッピング選択が変更された時のイベントリスナー（既存のまま）
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        const mappingSelects = document.querySelectorAll('#mappingFields .mapping-select');
+        mappingSelects.forEach(select => {
+            select.addEventListener('change', updatePaymentMappingStatus);
+        });
+    }, 1000);
+});
+
+/**
+ * 支払いCSVインポート実行
+ */
+function importPaymentWithContent(csvContent) {
+    console.log('支払いCSVインポートを実行中...');
+    
+    google.script.run
+        .withSuccessHandler(function(result) {
+            console.log('支払いCSVインポート結果:', result);
+            if (result && result.success) {
+                let message = result.message || '支払いデータのインポートが完了しました';
+                
+                // エラーの詳細を表示
+                if (result.errorCount && result.errorCount > 0) {
+                    console.log('エラー詳細:', result.errorDetails);
+                    
+                    if (result.errorDetails && result.errorDetails.length > 0) {
+                        const errorSummary = result.errorDetails.slice(0, 5).join('\n');
+                        message += `\n\n主なエラー:\n${errorSummary}`;
+                        if (result.errorDetails.length > 5) {
+                            message += `\n... 他${result.errorDetails.length - 5}件のエラー`;
+                        }
+                    }
+                    
+                    showStatus(message, 'warning');
+                } else {
+                    showStatus(message, 'success');
+                }
+                
+                // マッピングの警告表示
+                if (result.missingMappings && result.missingMappings.length > 0) {
+                    console.warn('マッピングできなかった列:', result.missingMappings);
+                    setTimeout(() => {
+                        alert(`⚠️ 注意: 以下の列がマッピングできませんでした\n\n${result.missingMappings.join(', ')}\n\nより正確なインポートには「マッピング設定インポート」をご使用ください。`);
+                    }, 2000);
+                }
+                
+                loadPayments();
+            } else {
+                let errorMessage = result ? (result.message || '支払いデータのインポートに失敗しました') : 'インポートに失敗しました';
+                if (result && result.errorDetails) {
+                    errorMessage += '\n詳細: ' + result.errorDetails.join(', ');
+                }
+                showStatus(errorMessage, 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            console.error('支払いCSVインポートエラー:', error);
+            showStatus('支払いCSVインポートに失敗しました: ' + error, 'danger');
+        })
+        .importPaymentsFromCsv(csvContent);
+}
+
+/**
+ * マッピング設定モーダルを開く
+ */
+function openPaymentMappingModal() {
+    const modal = new bootstrap.Modal(document.getElementById('paymentMappingModal'));
+    
+    // モーダルをリセット
+    resetPaymentMapping();
+    document.getElementById('csvPreview').innerHTML = '<p class="text-muted">CSVファイルを選択してください</p>';
+    document.getElementById('mappingStatus').className = 'alert alert-secondary';
+    document.getElementById('mappingStatus').textContent = 'マッピング未設定';
+    document.getElementById('executeMappingImport').disabled = true;
+    
+    modal.show();
+}
+
+/**
+ * 支払いCSVプレビュー - Shift-JIS対応強化版
+ */
+function previewPaymentCsv(file) {
+    if (!file) return;
+    
+    console.log('CSVプレビュー開始:', file.name);
+    
+    // エンコーディング自動検出でプレビュー
+    detectAndReadCsv(file)
+        .then(result => {
+            console.log(`プレビュー読み込み成功 (${result.encoding}):`, result.content.substring(0, 100));
+            currentPaymentCsvContent = result.content;
+            
+            try {
+                const lines = result.content.trim().split(/\r?\n/);
+                const headers = parseCSVLine(lines[0]);
+                currentPaymentCsvHeaders = headers;
+                
+                console.log('検出されたヘッダー:', headers);
+                
+                // プレビュー表示
+                let previewHtml = generateCsvPreviewHtml(headers, lines);
+                document.getElementById('csvPreview').innerHTML = previewHtml;
+                
+                // エンコーディング情報を表示
+                const encodingInfo = `<div class="alert alert-info mb-2">
+                    <small><i class="bi bi-info-circle"></i> 検出されたエンコーディング: <strong>${result.encoding}</strong></small>
+                </div>`;
+                document.getElementById('csvPreview').insertAdjacentHTML('afterbegin', encodingInfo);
+                
+                // ドロップダウンにオプションを追加
+                populatePaymentMappingOptions(headers);
+                
+                // 自動検出を実行
+                autoDetectPaymentMapping();
+                
+            } catch (error) {
+                console.error('CSVプレビューエラー:', error);
+                document.getElementById('csvPreview').innerHTML = 
+                    '<div class="alert alert-danger">CSVファイルの解析に失敗しました: ' + error.message + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('プレビュー読み込みエラー:', error);
+            document.getElementById('csvPreview').innerHTML = 
+                '<div class="alert alert-danger">ファイルの読み込みに失敗しました: ' + error.message + '</div>';
+        });
+}
+
+/**
+ * マッピングオプションを設定
+ */
+function populatePaymentMappingOptions(headers) {
+    const selects = document.querySelectorAll('#mappingFields .mapping-select');
+    
+    selects.forEach(select => {
+        // 既存のオプションをクリア（最初のオプションは残す）
+        while (select.children.length > 1) {
+            select.removeChild(select.lastChild);
+        }
+        
+        // CSVヘッダーをオプションとして追加
+        headers.forEach((header, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = `列${index + 1}: ${header}`;
+            select.appendChild(option);
+        });
+    });
+}
+
+/**
+ * 自動マッピング検出
+ */
+function autoDetectPaymentMapping() {
+    if (currentPaymentCsvHeaders.length === 0) return;
+    
+    const autoMapping = {
+        subject: findBestMatch(currentPaymentCsvHeaders, ['件名', 'タイトル', '題名', 'subject', 'title']),
+        projectName: findBestMatch(currentPaymentCsvHeaders, ['案件名', 'プロジェクト名', 'プロジェクト', 'project', '案件']),
+        payee: findBestMatch(currentPaymentCsvHeaders, ['支払い先', '支払先', '取引先', '会社名', 'payee', 'company', '業者']),
+        payeeCode: findBestMatch(currentPaymentCsvHeaders, ['支払い先コード', '支払先コード', '取引先コード', '会社コード', 'code', 'コード']),
+        amount: findBestMatch(currentPaymentCsvHeaders, ['金額', '料金', '価格', '費用', 'amount', 'price', 'cost']),
+        paymentDate: findBestMatch(currentPaymentCsvHeaders, ['支払日', '支払い日', '決済日', '日付', 'date', 'payment_date']),
+        status: findBestMatch(currentPaymentCsvHeaders, ['状態', 'ステータス', '処理状況', 'status', 'state'])
+    };
+    
+    // 検出結果を設定
+    Object.keys(autoMapping).forEach(field => {
+        const index = autoMapping[field];
+        if (index !== -1) {
+            const select = document.querySelector(`[data-field="${field}"]`);
+            if (select) {
+                select.value = index;
+            }
+        }
+    });
+    
+    updatePaymentMappingStatus();
+}
+
+/**
+ * 最適な列マッチングを検出
+ */
+function findBestMatch(headers, keywords) {
+    // 完全一致を優先
+    for (const keyword of keywords) {
+        const index = headers.findIndex(header => 
+            header.toLowerCase() === keyword.toLowerCase()
+        );
+        if (index !== -1) return index;
+    }
+    
+    // 部分一致
+    for (const keyword of keywords) {
+        const index = headers.findIndex(header => 
+            header.toLowerCase().includes(keyword.toLowerCase()) ||
+            keyword.toLowerCase().includes(header.toLowerCase())
+        );
+        if (index !== -1) return index;
+    }
+    
+    return -1;
+}
+
+/**
+ * マッピング状況を更新
+ */
+function updatePaymentMappingStatus() {
+    const selects = document.querySelectorAll('#mappingFields .mapping-select');
+    const mappings = {};
+    let mappedCount = 0;
+    let requiredCount = 0;
+    
+    selects.forEach(select => {
+        const field = select.getAttribute('data-field');
+        const value = select.value;
+        const isRequired = select.parentElement.querySelector('.text-danger') !== null;
+        
+        if (isRequired) requiredCount++;
+        
+        if (value && value !== '') {
+            mappings[field] = parseInt(value);
+            mappedCount++;
+        }
+    });
+    
+    paymentMappingSettings = mappings;
+    
+    const statusDiv = document.getElementById('mappingStatus');
+    const executeBtn = document.getElementById('executeMappingImport');
+    
+    if (mappedCount >= 3 && mappings.payee !== undefined && mappings.amount !== undefined) {
+        statusDiv.className = 'alert alert-success';
+        statusDiv.innerHTML = `
+            <i class="bi bi-check-circle"></i> 
+            マッピング完了 (${mappedCount}項目)
+            <br><small>必須項目: 支払い先、金額が設定されています</small>
+        `;
+        executeBtn.disabled = false;
+    } else if (mappedCount > 0) {
+        statusDiv.className = 'alert alert-warning';
+        statusDiv.innerHTML = `
+            <i class="bi bi-exclamation-triangle"></i> 
+            マッピング不完全 (${mappedCount}項目)
+            <br><small>支払い先と金額は必須です</small>
+        `;
+        executeBtn.disabled = true;
+    } else {
+        statusDiv.className = 'alert alert-secondary';
+        statusDiv.textContent = 'マッピング未設定';
+        executeBtn.disabled = true;
+    }
+}
+
+/**
+ * マッピングリセット
+ */
+function resetPaymentMapping() {
+    const selects = document.querySelectorAll('#mappingFields .mapping-select');
+    selects.forEach(select => {
+        select.value = '';
+    });
+    paymentMappingSettings = {};
+    updatePaymentMappingStatus();
+}
+
+/**
+ * マッピング設定インポート実行
+ */
+function executePaymentMappingImport() {
+    if (!currentPaymentCsvContent) {
+        showStatus('CSVファイルが選択されていません', 'warning');
+        return;
+    }
+    
+    if (Object.keys(paymentMappingSettings).length === 0) {
+        showStatus('マッピングが設定されていません', 'warning');
+        return;
+    }
+    
+    showStatus('マッピング設定でインポートを実行しています...', 'info');
+    
+    // カスタムマッピングを設定してからインポート実行
+    google.script.run
+        .withSuccessHandler(function(mappingResult) {
+            if (mappingResult && mappingResult.success) {
+                console.log('カスタムマッピング設定成功');
+                
+                // インポート実行
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        console.log('マッピングインポート結果:', result);
+                        
+                        // モーダルを閉じる
+                        bootstrap.Modal.getInstance(document.getElementById('paymentMappingModal')).hide();
+                        
+                        if (result && result.success) {
+                            let message = result.message || 'マッピング設定でのインポートが完了しました';
+                            
+                            if (result.errorCount && result.errorCount > 0) {
+                                if (result.errorDetails && result.errorDetails.length > 0) {
+                                    const errorSummary = result.errorDetails.slice(0, 3).join('\n');
+                                    message += `\n\n主なエラー:\n${errorSummary}`;
+                                }
+                                showStatus(message, 'warning');
+                            } else {
+                                showStatus(message, 'success');
+                            }
+                            
+                            loadPayments();
+                        } else {
+                            showStatus(result ? result.message : 'マッピングインポートに失敗しました', 'danger');
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        bootstrap.Modal.getInstance(document.getElementById('paymentMappingModal')).hide();
+                        showStatus('マッピングインポートに失敗しました: ' + error, 'danger');
+                    })
+                    .importPaymentsFromCsv(currentPaymentCsvContent);
+            } else {
+                showStatus('マッピング設定に失敗しました', 'danger');
+            }
+        })
+        .withFailureHandler(function(error) {
+            showStatus('マッピング設定エラー: ' + error, 'danger');
+        })
+        .setCustomPaymentHeaderMapping(paymentMappingSettings);
+}
+
+/**
+ * 支払いCSVテンプレートダウンロード
+ */
+function downloadPaymentCsvTemplate() {
+    const templateData = [
+        ['件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+        ['サンプル件名1', 'サンプル案件A', 'サンプル会社株式会社', 'SAMPLE001', '50000', '2024-01-15', '未処理'],
+        ['サンプル件名2', 'サンプル案件B', 'テスト商事有限会社', 'TEST002', '30000', '2024-01-20', '未処理'],
+        ['サンプル件名3', 'サンプル案件C', '例示企業合同会社', 'EXAMPLE003', '75000', '2024-01-25', '処理済']
+    ];
+    
+    let csvContent = '';
+    templateData.forEach(row => {
+        csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
+    });
+    
+    // BOMを追加してExcelで正しく表示されるようにする
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv; charset=UTF-8' });
+    
+    const link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.download = `支払いデータテンプレート_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    
+    window.URL.revokeObjectURL(link.href);
+    showStatus('支払いデータテンプレートをダウンロードしました', 'success');
+}
+
+/**
+ * CSV行解析関数
+ */
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        
+        if (char === '"') {
+            if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    
+    result.push(current.trim());
+    return result;
+}
+
+// マッピング選択が変更された時のイベントリスナー
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        const mappingSelects = document.querySelectorAll('#mappingFields .mapping-select');
+        mappingSelects.forEach(select => {
+            select.addEventListener('change', updatePaymentMappingStatus);
+        });
+    }, 1000);
+});
+</script>
