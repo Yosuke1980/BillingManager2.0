@@ -1,33 +1,33 @@
 @echo off
 chcp 932 >nul
-rem CSVƒtƒ@ƒCƒ‹ŠÄŽ‹ƒXƒNƒŠƒvƒg‚Ì‹N“®/’âŽ~—pƒXƒNƒŠƒvƒg (Windows—p)
+rem CSVï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½Xï¿½Nï¿½ï¿½ï¿½vï¿½gï¿½Ì‹Nï¿½ï¿½/ï¿½ï¿½~ï¿½pï¿½Xï¿½Nï¿½ï¿½ï¿½vï¿½g (Windowsï¿½p)
 
 setlocal
 set SCRIPT_DIR=%~dp0
 set WATCHER_SCRIPT=%SCRIPT_DIR%file_watcher.py
 
-rem PythonƒRƒ}ƒ“ƒh‚ÌŠm”Fipython3 -> python ‚Ì‡‚ÉŽÀsj
-set PYTHON_CMD=python3
+rem Pythonï¿½Rï¿½}ï¿½ï¿½ï¿½hï¿½ÌŠmï¿½Fï¿½ipython3 -> python ï¿½Ìï¿½ï¿½ÉŽï¿½ï¿½sï¿½j
+set PYTHON_CMD=python
 where %PYTHON_CMD% >nul 2>&1
 if %errorlevel% neq 0 (
-    set PYTHON_CMD=python
+    set PYTHON_CMD=python3
     where %PYTHON_CMD% >nul 2>&1
     if %errorlevel% neq 0 (
-        echo ƒGƒ‰[: Python‚Ü‚½‚ÍPython3‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
+        echo ï¿½Gï¿½ï¿½ï¿½[: Pythonï¿½Ü‚ï¿½ï¿½ï¿½Python3ï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½Xï¿½gï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½
         pause
         exit /b 1
     )
 )
 
-rem ƒXƒNƒŠƒvƒgƒtƒ@ƒCƒ‹‚Ì‘¶ÝŠm”F
+rem ï¿½Xï¿½Nï¿½ï¿½ï¿½vï¿½gï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½Ì‘ï¿½ï¿½ÝŠmï¿½F
 if not exist "%WATCHER_SCRIPT%" (
-    echo ƒGƒ‰[: file_watcher.py‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñ
-    echo ƒpƒX: %WATCHER_SCRIPT%
+    echo ï¿½Gï¿½ï¿½ï¿½[: file_watcher.pyï¿½ï¿½ï¿½ï¿½ï¿½Â‚ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½
+    echo ï¿½pï¿½X: %WATCHER_SCRIPT%
     pause
     exit /b 1
 )
 
-rem ˆø”‚Ìˆ—
+rem ï¿½ï¿½ï¿½ï¿½ï¿½Ìï¿½ï¿½ï¿½
 if "%~1"=="" goto :show_usage
 if /i "%~1"=="start" goto :start_watcher
 if /i "%~1"=="stop" goto :stop_watcher
@@ -36,49 +36,49 @@ if /i "%~1"=="restart" goto :restart_watcher
 goto :show_usage
 
 :check_dependencies
-echo ˆË‘¶ŠÖŒW‚ðŠm”F’†...
+echo ï¿½Ë‘ï¿½ï¿½ÖŒWï¿½ï¿½ï¿½mï¿½Fï¿½ï¿½...
 set PYTHONDONTWRITEBYTECODE=1
 set PYTHONWARNINGS=ignore
 set PIP_DISABLE_PIP_VERSION_CHECK=1
 %PYTHON_CMD% -c "import watchdog, psutil" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo •K—v‚Èƒ‰ƒCƒuƒ‰ƒŠ‚ªƒCƒ“ƒXƒg[ƒ‹‚³‚ê‚Ä‚¢‚Ü‚¹‚ñ
-    echo ˆÈ‰º‚ÌƒRƒ}ƒ“ƒh‚ÅƒCƒ“ƒXƒg[ƒ‹‚µ‚Ä‚­‚¾‚³‚¢:
+    echo ï¿½Kï¿½vï¿½Èƒï¿½ï¿½Cï¿½uï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½Xï¿½gï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½
+    echo ï¿½È‰ï¿½ï¿½ÌƒRï¿½}ï¿½ï¿½ï¿½hï¿½ÅƒCï¿½ï¿½ï¿½Xï¿½gï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½:
     echo pip install --quiet -r requirements.txt
-    echo ‚Ü‚½‚ÍŒÂ•Ê‚ÉƒCƒ“ƒXƒg[ƒ‹:
+    echo ï¿½Ü‚ï¿½ï¿½ÍŒÂ•Ê‚ÉƒCï¿½ï¿½ï¿½Xï¿½gï¿½[ï¿½ï¿½:
     echo pip install --quiet watchdog psutil
     pause
     exit /b 1
 )
-echo ˆË‘¶ŠÖŒWOK
+echo ï¿½Ë‘ï¿½ï¿½ÖŒWOK
 goto :eof
 
 :show_usage
-echo Žg—p•û–@:
-echo   %0 start   - ƒtƒ@ƒCƒ‹ŠÄŽ‹‚ðŠJŽn
-echo   %0 stop    - ƒtƒ@ƒCƒ‹ŠÄŽ‹‚ð’âŽ~
-echo   %0 status  - ƒtƒ@ƒCƒ‹ŠÄŽ‹‚Ìó‘Ô‚ðŠm”F
-echo   %0 restart - ƒtƒ@ƒCƒ‹ŠÄŽ‹‚ðÄ‹N“®
+echo ï¿½gï¿½pï¿½ï¿½ï¿½@:
+echo   %0 start   - ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½ï¿½ï¿½Jï¿½n
+echo   %0 stop    - ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½ï¿½ï¿½~
+echo   %0 status  - ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½Ìï¿½Ô‚ï¿½ï¿½mï¿½F
+echo   %0 restart - ï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½ï¿½ï¿½Ä‹Nï¿½ï¿½
 pause
 goto :eof
 
 :start_watcher
-echo CSVƒtƒ@ƒCƒ‹ŠÄŽ‹‚ðŠJŽn‚µ‚Ü‚·...
+echo CSVï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½ï¿½ï¿½Jï¿½nï¿½ï¿½ï¿½Ü‚ï¿½...
 call :check_dependencies
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-rem ƒoƒbƒNƒOƒ‰ƒEƒ“ƒh‚ÅŽÀs
+rem ï¿½oï¿½bï¿½Nï¿½Oï¿½ï¿½ï¿½Eï¿½ï¿½ï¿½hï¿½ÅŽï¿½ï¿½s
 start "" /min %PYTHON_CMD% "%WATCHER_SCRIPT%"
 
 timeout /t 2 /nobreak >nul
 
-rem ‹N“®Šm”F
+rem ï¿½Nï¿½ï¿½ï¿½mï¿½F
 %PYTHON_CMD% "%WATCHER_SCRIPT%" --status
 pause
 goto :eof
 
 :stop_watcher
-echo CSVƒtƒ@ƒCƒ‹ŠÄŽ‹‚ð’âŽ~‚µ‚Ü‚·...
+echo CSVï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½ï¿½ï¿½~ï¿½ï¿½ï¿½Ü‚ï¿½...
 %PYTHON_CMD% "%WATCHER_SCRIPT%" --stop
 pause
 goto :eof
@@ -89,7 +89,7 @@ pause
 goto :eof
 
 :restart_watcher
-echo CSVƒtƒ@ƒCƒ‹ŠÄŽ‹‚ðÄ‹N“®‚µ‚Ü‚·...
+echo CSVï¿½tï¿½@ï¿½Cï¿½ï¿½ï¿½ÄŽï¿½ï¿½ï¿½ï¿½Ä‹Nï¿½ï¿½ï¿½ï¿½ï¿½Ü‚ï¿½...
 call :stop_watcher
 timeout /t 3 /nobreak >nul
 call :start_watcher
