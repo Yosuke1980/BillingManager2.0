@@ -204,7 +204,15 @@
       "args": ["main.py"],
       "working_directory": ".",
       "enabled": true,
-      "auto_restart": false
+      "auto_restart": false,
+      "schedule": {
+        "enabled": true,
+        "start_time": "09:00",
+        "stop_time": "18:00",
+        "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+        "startup_delay": 30,
+        "auto_restart_interval": 0
+      }
     },
     "file_watcher": {
       "name": "ファイル監視",
@@ -212,7 +220,15 @@
       "args": ["file_watcher.py"],
       "working_directory": ".",
       "enabled": true,
-      "auto_restart": true
+      "auto_restart": true,
+      "schedule": {
+        "enabled": false,
+        "start_time": "",
+        "stop_time": "",
+        "days": [],
+        "startup_delay": 0,
+        "auto_restart_interval": 6
+      }
     },
     "textedit": {
       "name": "テキストエディット",
@@ -220,7 +236,15 @@
       "args": ["-a", "TextEdit"],
       "working_directory": ".",
       "enabled": true,
-      "auto_restart": false
+      "auto_restart": false,
+      "schedule": {
+        "enabled": false,
+        "start_time": "",
+        "stop_time": "",
+        "days": [],
+        "startup_delay": 0,
+        "auto_restart_interval": 0
+      }
     },
     "calculator": {
       "name": "電卓",
@@ -228,7 +252,15 @@
       "args": ["-a", "Calculator"],
       "working_directory": ".",
       "enabled": true,
-      "auto_restart": false
+      "auto_restart": false,
+      "schedule": {
+        "enabled": false,
+        "start_time": "",
+        "stop_time": "",
+        "days": [],
+        "startup_delay": 0,
+        "auto_restart_interval": 0
+      }
     },
     "finder": {
       "name": "Finder",
@@ -236,7 +268,15 @@
       "args": ["-a", "Finder", "."],
       "working_directory": ".",
       "enabled": true,
-      "auto_restart": false
+      "auto_restart": false,
+      "schedule": {
+        "enabled": false,
+        "start_time": "",
+        "stop_time": "",
+        "days": [],
+        "startup_delay": 0,
+        "auto_restart_interval": 0
+      }
     },
     "test_app": {
       "name": "テストアプリ",
@@ -244,7 +284,63 @@
       "args": ["test_simple_app.py"],
       "working_directory": ".",
       "enabled": true,
-      "auto_restart": false
+      "auto_restart": false,
+      "schedule": {
+        "enabled": false,
+        "start_time": "",
+        "stop_time": "",
+        "days": [],
+        "startup_delay": 0,
+        "auto_restart_interval": 0
+      }
+    },
+    "notepad_win": {
+      "name": "メモ帳 (Windows)",
+      "executable": "notepad.exe",
+      "args": [],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": false,
+      "schedule": {
+        "enabled": false,
+        "start_time": "",
+        "stop_time": "",
+        "days": [],
+        "startup_delay": 0,
+        "auto_restart_interval": 0
+      }
+    },
+    "calculator_win": {
+      "name": "電卓 (Windows)",
+      "executable": "calc.exe",
+      "args": [],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": false,
+      "schedule": {
+        "enabled": false,
+        "start_time": "",
+        "stop_time": "",
+        "days": [],
+        "startup_delay": 0,
+        "auto_restart_interval": 0
+      }
+    },
+    "chrome": {
+      "name": "Chrome",
+      "executable": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+      "args": ["--new-window"],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": false,
+      "schedule": {
+        "enabled": true,
+        "start_time": "08:30",
+        "stop_time": "17:30",
+        "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+        "startup_delay": 60,
+        "auto_restart_interval": 0
+      }
     }
   }
 }

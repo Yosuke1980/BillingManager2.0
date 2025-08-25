@@ -10,8 +10,9 @@ import subprocess
 import psutil
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional, List, Tuple
+import threading
 from PyQt5.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu, QAction, QMessageBox,
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
@@ -213,6 +214,191 @@ class TrayLogDialog(QDialog):
         self.log_text.setTextCursor(cursor)
 
 
+class ApplicationScheduler:
+    """アプリケーションスケジュール管理クラス"""
+    
+    def __init__(self):
+        self.scheduled_tasks: Dict[str, dict] = {}
+        self.running = False
+        self.scheduler_thread = None
+        
+    def add_scheduled_app(self, app_id: str, app_config: dict, process_manager):
+        """スケジュール対象アプリケーションを追加"""
+        schedule_config = app_config.get('schedule', {})
+        if not schedule_config.get('enabled', False):
+            return
+            
+        self.scheduled_tasks[app_id] = {
+            'config': app_config,
+            'schedule': schedule_config,
+            'process_manager': process_manager,
+            'last_start': None,
+            'last_stop': None,
+            'next_start': None,
+            'next_stop': None
+        }
+        
+        # 次回実行時刻を計算
+        self._calculate_next_times(app_id)
+        
+    def start_scheduler(self):
+        """スケジューラーを開始"""
+        if self.running:
+            return
+            
+        self.running = True
+        self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self.scheduler_thread.start()
+        
+    def stop_scheduler(self):
+        """スケジューラーを停止"""
+        self.running = False
+        if self.scheduler_thread:
+            self.scheduler_thread.join(timeout=1)
+            
+    def _scheduler_loop(self):
+        """スケジューラーのメインループ"""
+        while self.running:
+            current_time = datetime.now()
+            
+            for app_id, task_info in self.scheduled_tasks.items():
+                self._check_and_execute_task(app_id, task_info, current_time)
+                
+            time.sleep(30)  # 30秒ごとにチェック
+            
+    def _check_and_execute_task(self, app_id: str, task_info: dict, current_time: datetime):
+        """タスクの実行時刻をチェックして実行"""
+        schedule = task_info['schedule']
+        process_manager = task_info['process_manager']
+        
+        # 曜日チェック
+        current_day = current_time.strftime('%A')
+        if schedule['days'] and current_day not in schedule['days']:
+            return
+            
+        # 起動時刻チェック
+        if (schedule['start_time'] and task_info['next_start'] and 
+            current_time >= task_info['next_start']):
+            
+            if not process_manager.is_process_running(app_id):
+                print(f"スケジュール起動: {task_info['config']['name']}")
+                success, message = process_manager.start_application(app_id, task_info['config'])
+                if success:
+                    task_info['last_start'] = current_time
+                    self._calculate_next_start_time(app_id, task_info)
+                    
+        # 停止時刻チェック
+        if (schedule['stop_time'] and task_info['next_stop'] and 
+            current_time >= task_info['next_stop']):
+            
+            if process_manager.is_process_running(app_id):
+                print(f"スケジュール停止: {task_info['config']['name']}")
+                success, message = process_manager.stop_application(app_id)
+                if success:
+                    task_info['last_stop'] = current_time
+                    self._calculate_next_stop_time(app_id, task_info)
+                    
+        # 自動再起動チェック
+        restart_interval = schedule.get('auto_restart_interval', 0)
+        if (restart_interval > 0 and task_info['last_start'] and
+            current_time >= task_info['last_start'] + timedelta(hours=restart_interval)):
+            
+            if process_manager.is_process_running(app_id):
+                print(f"自動再起動: {task_info['config']['name']}")
+                process_manager.restart_application(app_id)
+                task_info['last_start'] = current_time
+                
+    def _calculate_next_times(self, app_id: str):
+        """次回実行時刻を計算"""
+        self._calculate_next_start_time(app_id, self.scheduled_tasks[app_id])
+        self._calculate_next_stop_time(app_id, self.scheduled_tasks[app_id])
+        
+    def _calculate_next_start_time(self, app_id: str, task_info: dict):
+        """次回起動時刻を計算"""
+        schedule = task_info['schedule']
+        start_time_str = schedule.get('start_time')
+        
+        if not start_time_str or not schedule.get('days'):
+            task_info['next_start'] = None
+            return
+            
+        try:
+            current_time = datetime.now()
+            start_hour, start_minute = map(int, start_time_str.split(':'))
+            
+            # 今日以降で最初に該当する曜日を見つける
+            for days_ahead in range(8):  # 最大1週間先まで
+                target_date = current_time + timedelta(days=days_ahead)
+                target_day = target_date.strftime('%A')
+                
+                if target_day in schedule['days']:
+                    next_start = target_date.replace(
+                        hour=start_hour, minute=start_minute, second=0, microsecond=0
+                    )
+                    
+                    if next_start > current_time:
+                        task_info['next_start'] = next_start
+                        return
+                        
+            task_info['next_start'] = None
+            
+        except (ValueError, IndexError):
+            task_info['next_start'] = None
+            
+    def _calculate_next_stop_time(self, app_id: str, task_info: dict):
+        """次回停止時刻を計算"""
+        schedule = task_info['schedule']
+        stop_time_str = schedule.get('stop_time')
+        
+        if not stop_time_str or not schedule.get('days'):
+            task_info['next_stop'] = None
+            return
+            
+        try:
+            current_time = datetime.now()
+            stop_hour, stop_minute = map(int, stop_time_str.split(':'))
+            
+            # 今日以降で最初に該当する曜日を見つける
+            for days_ahead in range(8):  # 最大1週間先まで
+                target_date = current_time + timedelta(days=days_ahead)
+                target_day = target_date.strftime('%A')
+                
+                if target_day in schedule['days']:
+                    next_stop = target_date.replace(
+                        hour=stop_hour, minute=stop_minute, second=0, microsecond=0
+                    )
+                    
+                    if next_stop > current_time:
+                        task_info['next_stop'] = next_stop
+                        return
+                        
+            task_info['next_stop'] = None
+            
+        except (ValueError, IndexError):
+            task_info['next_stop'] = None
+            
+    def get_schedule_info(self, app_id: str) -> Optional[dict]:
+        """アプリケーションのスケジュール情報を取得"""
+        if app_id not in self.scheduled_tasks:
+            return None
+            
+        task_info = self.scheduled_tasks[app_id]
+        return {
+            'next_start': task_info.get('next_start'),
+            'next_stop': task_info.get('next_stop'),
+            'last_start': task_info.get('last_start'),
+            'last_stop': task_info.get('last_stop'),
+            'enabled': task_info['schedule'].get('enabled', False)
+        }
+        
+    def get_all_schedules(self) -> Dict[str, dict]:
+        """全アプリケーションのスケジュール情報を取得"""
+        schedules = {}
+        for app_id in self.scheduled_tasks:
+            schedules[app_id] = self.get_schedule_info(app_id)
+        return schedules
+
+
 class ProcessManager:
     """プロセス管理クラス"""
     
@@ -374,6 +560,7 @@ class FileMonitorTray(QSystemTrayIcon):
         self.app = app
         self.file_watcher = FileWatcherManager()
         self.process_manager = ProcessManager()
+        self.scheduler = ApplicationScheduler()
         self.config = {}
         self.stats = {'processed_count': 0}
         self.app_configs = {}
@@ -389,6 +576,9 @@ class FileMonitorTray(QSystemTrayIcon):
         
         # アプリケーション設定を読み込み
         self.load_app_configs()
+        
+        # スケジューラーを初期化・開始
+        self.init_scheduler()
         
         # 右クリックメニューを作成
         self.create_context_menu()
@@ -497,6 +687,49 @@ class FileMonitorTray(QSystemTrayIcon):
         menu.addMenu(monitor_menu)
         menu.addSeparator()
         
+        # スケジュール管理セクション
+        schedule_menu = QMenu("📅 スケジュール管理")
+        
+        # 全スケジュール情報を表示
+        all_schedules = self.scheduler.get_all_schedules()
+        if all_schedules:
+            for app_id, schedule_info in all_schedules.items():
+                if schedule_info and schedule_info['enabled']:
+                    app_name = self.app_configs[app_id]['name']
+                    next_start = schedule_info['next_start']
+                    next_stop = schedule_info['next_stop']
+                    
+                    if next_start:
+                        start_str = next_start.strftime("%m/%d %H:%M")
+                        schedule_action = QAction(f"▶️ {app_name}: 次回起動 {start_str}", self)
+                        schedule_action.setEnabled(False)
+                        schedule_menu.addAction(schedule_action)
+                        
+                    if next_stop:
+                        stop_str = next_stop.strftime("%m/%d %H:%M")
+                        schedule_action = QAction(f"⏹️ {app_name}: 次回停止 {stop_str}", self)
+                        schedule_action.setEnabled(False)
+                        schedule_menu.addAction(schedule_action)
+        else:
+            no_schedule_action = QAction("スケジュールされたアプリはありません", self)
+            no_schedule_action.setEnabled(False)
+            schedule_menu.addAction(no_schedule_action)
+            
+        schedule_menu.addSeparator()
+        
+        # スケジューラー制御
+        if self.scheduler.running:
+            pause_action = QAction("⏸️ スケジューラー一時停止", self)
+            pause_action.triggered.connect(self.pause_scheduler)
+            schedule_menu.addAction(pause_action)
+        else:
+            resume_action = QAction("▶️ スケジューラー再開", self)
+            resume_action.triggered.connect(self.resume_scheduler)
+            schedule_menu.addAction(resume_action)
+            
+        menu.addMenu(schedule_menu)
+        menu.addSeparator()
+        
         # 設定
         settings_action = QAction("⚙️ 設定...", self)
         settings_action.triggered.connect(self.show_settings)
@@ -600,6 +833,17 @@ class FileMonitorTray(QSystemTrayIcon):
         """アプリケーション設定を読み込み"""
         self.app_configs = self.process_manager.load_app_configs()
         
+    def init_scheduler(self):
+        """スケジューラーを初期化"""
+        # 各アプリケーションをスケジューラーに追加
+        for app_id, app_config in self.app_configs.items():
+            self.scheduler.add_scheduled_app(app_id, app_config, self.process_manager)
+            
+        # スケジューラー開始
+        self.scheduler.start_scheduler()
+        
+        print("🕒 スケジューラーが開始されました")
+        
     def start_app(self, app_id: str):
         """アプリケーションを起動"""
         if app_id in self.app_configs:
@@ -659,6 +903,28 @@ class FileMonitorTray(QSystemTrayIcon):
     def update_menu(self):
         """メニューを更新"""
         self.create_context_menu()
+        
+    def pause_scheduler(self):
+        """スケジューラーを一時停止"""
+        self.scheduler.stop_scheduler()
+        self.showMessage(
+            "スケジューラー停止",
+            "スケジューラーを一時停止しました",
+            QSystemTrayIcon.Information,
+            2000
+        )
+        self.update_menu()
+        
+    def resume_scheduler(self):
+        """スケジューラーを再開"""
+        self.scheduler.start_scheduler()
+        self.showMessage(
+            "スケジューラー再開",
+            "スケジューラーを再開しました",
+            QSystemTrayIcon.Information,
+            2000
+        )
+        self.update_menu()
         
     def open_main_app(self):
         """メインアプリを開く"""
@@ -788,6 +1054,9 @@ X-GNOME-Autostart-enabled=true
             if self.file_watcher.is_running:
                 self.file_watcher.stop_monitoring()
                 
+            # スケジューラー停止
+            self.scheduler.stop_scheduler()
+            
             # すべてのプロセスを停止
             self.process_manager.stop_all_applications()
             
