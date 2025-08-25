@@ -1345,7 +1345,7 @@ class DatabaseManager:
                 expense_payee_code = format_payee_code(
                     expense[3].strip()
                 )  # 【修正】0埋めして比較
-                expense_amount = float(expense[4]) if expense[4] else 0
+                expense_amount = int(float(expense[4])) if expense[4] else 0  # 整数化
                 expense_year_month = extract_year_month(expense[5])
 
                 # 一致する支払いデータを検索（優先度システム）
@@ -1361,7 +1361,7 @@ class DatabaseManager:
                     payment_payee_code = (
                         format_payee_code(payment[4].strip()) if payment[4] else ""
                     )  # 【修正】0埋めして比較
-                    payment_amount = float(payment[5]) if payment[5] else 0
+                    payment_amount = int(float(payment[5])) if payment[5] else 0  # 整数化
                     payment_year_month = extract_year_month(payment[6])
 
                     # 照合条件チェック（設定対応）
@@ -1372,8 +1372,8 @@ class DatabaseManager:
                     strict_amount_match = matching_config.get("strict_amount_match", True)
                     
                     if strict_amount_match:
-                        # 厳密金額マッチング（従来通り）
-                        amount_match = abs(expense_amount - payment_amount) < amount_tolerance
+                        # 厳密金額マッチング（整数完全一致）
+                        amount_match = expense_amount == payment_amount
                     else:
                         # 柔軟金額マッチング（10%許容 + 部分マッチ）
                         if expense_amount == 0 or payment_amount == 0:

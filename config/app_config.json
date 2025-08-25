@@ -191,10 +191,10 @@
   },
   "matching": {
     "payment_rule": "same_month",
-    "date_tolerance_months": 1,
-    "allow_partial_match": true,
-    "strict_amount_match": false,
-    "amount_tolerance": 0.1,
+    "date_tolerance_months": 0,
+    "allow_partial_match": false,
+    "strict_amount_match": true,
+    "amount_tolerance": 0.01,
     "debug_logging": true
   }
 }
