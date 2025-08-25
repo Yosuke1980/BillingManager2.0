@@ -17,7 +17,9 @@ from PyQt5.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu, QAction, QMessageBox,
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QPushButton, QLineEdit, QSpinBox, QCheckBox, QTextEdit,
-    QGroupBox, QDialogButtonBox
+    QGroupBox, QDialogButtonBox, QTableWidget, QTableWidgetItem,
+    QHeaderView, QTabWidget, QWidget, QFileDialog, QComboBox,
+    QTimeEdit, QListWidget, QSplitter
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QObject
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QFont
@@ -142,6 +144,458 @@ class TraySettingsDialog(QDialog):
             return True
         except Exception:
             return False
+
+
+class ApplicationManagerDialog(QDialog):
+    """アプリケーション管理メインダイアログ"""
+    
+    def __init__(self, process_manager, parent=None):
+        super().__init__(parent)
+        self.process_manager = process_manager
+        self.setWindowTitle("アプリケーション管理")
+        self.resize(800, 600)
+        self.setMinimumSize(600, 400)
+        
+        self.setup_ui()
+        self.load_applications()
+        
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+        
+        # タイトル
+        title = QLabel("登録済みアプリケーション")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
+        layout.addWidget(title)
+        
+        # アプリケーション一覧テーブル
+        self.app_table = QTableWidget()
+        self.app_table.setColumnCount(5)
+        self.app_table.setHorizontalHeaderLabels(['名前', '実行ファイル', '状態', '有効', 'スケジュール'])
+        
+        # テーブルの設定
+        header = self.app_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)  # 名前列を伸縮
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 実行ファイル列を伸縮
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 状態列は内容に合わせる
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 有効列は内容に合わせる
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # スケジュール列は内容に合わせる
+        
+        self.app_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.app_table.setAlternatingRowColors(True)
+        layout.addWidget(self.app_table)
+        
+        # ボタン類
+        button_layout = QHBoxLayout()
+        
+        self.add_button = QPushButton("➕ 新規追加")
+        self.add_button.clicked.connect(self.add_application)
+        button_layout.addWidget(self.add_button)
+        
+        self.edit_button = QPushButton("✏️ 編集")
+        self.edit_button.clicked.connect(self.edit_application)
+        button_layout.addWidget(self.edit_button)
+        
+        self.delete_button = QPushButton("🗑️ 削除")
+        self.delete_button.clicked.connect(self.delete_application)
+        button_layout.addWidget(self.delete_button)
+        
+        button_layout.addStretch()
+        
+        self.refresh_button = QPushButton("🔄 更新")
+        self.refresh_button.clicked.connect(self.load_applications)
+        button_layout.addWidget(self.refresh_button)
+        
+        layout.addLayout(button_layout)
+        
+        # 閉じるボタン
+        close_layout = QHBoxLayout()
+        close_layout.addStretch()
+        
+        close_button = QPushButton("閉じる")
+        close_button.clicked.connect(self.close)
+        close_layout.addWidget(close_button)
+        
+        layout.addLayout(close_layout)
+        
+        self.setLayout(layout)
+    
+    def load_applications(self):
+        """アプリケーション一覧を読み込み"""
+        app_configs = self.process_manager.load_app_configs()
+        
+        self.app_table.setRowCount(len(app_configs))
+        
+        for row, (app_id, config) in enumerate(app_configs.items()):
+            # 名前
+            name_item = QTableWidgetItem(config.get('name', app_id))
+            self.app_table.setItem(row, 0, name_item)
+            
+            # 実行ファイル
+            executable = config.get('executable', '')
+            args = config.get('args', [])
+            full_command = f"{executable} {' '.join(args)}" if args else executable
+            exec_item = QTableWidgetItem(full_command)
+            self.app_table.setItem(row, 1, exec_item)
+            
+            # 状態
+            is_running = self.process_manager.is_process_running(app_id)
+            status_item = QTableWidgetItem("🟢 実行中" if is_running else "⚪ 停止中")
+            self.app_table.setItem(row, 2, status_item)
+            
+            # 有効
+            enabled = config.get('enabled', True)
+            enabled_item = QTableWidgetItem("✅ 有効" if enabled else "❌ 無効")
+            self.app_table.setItem(row, 3, enabled_item)
+            
+            # スケジュール
+            schedule = config.get('schedule', {})
+            if schedule.get('enabled', False):
+                start_time = schedule.get('start_time', '')
+                stop_time = schedule.get('stop_time', '')
+                schedule_text = f"⏰ {start_time}-{stop_time}"
+            else:
+                schedule_text = "📋 手動"
+            schedule_item = QTableWidgetItem(schedule_text)
+            self.app_table.setItem(row, 4, schedule_item)
+            
+            # 行データにapp_idを保存
+            name_item.setData(Qt.UserRole, app_id)
+    
+    def add_application(self):
+        """新規アプリケーション追加"""
+        dialog = ApplicationEditDialog(self.process_manager, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_applications()
+    
+    def edit_application(self):
+        """選択したアプリケーションを編集"""
+        current_row = self.app_table.currentRow()
+        if current_row < 0:
+            QMessageBox.information(self, "情報", "編集するアプリケーションを選択してください。")
+            return
+        
+        name_item = self.app_table.item(current_row, 0)
+        app_id = name_item.data(Qt.UserRole)
+        
+        dialog = ApplicationEditDialog(self.process_manager, app_id=app_id, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_applications()
+    
+    def delete_application(self):
+        """選択したアプリケーションを削除"""
+        current_row = self.app_table.currentRow()
+        if current_row < 0:
+            QMessageBox.information(self, "情報", "削除するアプリケーションを選択してください。")
+            return
+        
+        name_item = self.app_table.item(current_row, 0)
+        app_id = name_item.data(Qt.UserRole)
+        app_name = name_item.text()
+        
+        reply = QMessageBox.question(
+            self, "確認", 
+            f"アプリケーション '{app_name}' を削除しますか？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.process_manager.delete_app_config(app_id)
+            self.load_applications()
+
+
+class ApplicationEditDialog(QDialog):
+    """個別アプリケーション設定ダイアログ"""
+    
+    def __init__(self, process_manager, app_id=None, parent=None):
+        super().__init__(parent)
+        self.process_manager = process_manager
+        self.app_id = app_id
+        self.is_editing = app_id is not None
+        
+        title = "アプリケーション編集" if self.is_editing else "新規アプリケーション追加"
+        self.setWindowTitle(title)
+        self.resize(600, 500)
+        self.setMinimumSize(500, 400)
+        
+        self.setup_ui()
+        
+        if self.is_editing:
+            self.load_app_config()
+    
+    def setup_ui(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+        
+        # タブウィジェット
+        self.tab_widget = QTabWidget()
+        
+        # 基本設定タブ
+        basic_tab = QWidget()
+        self.setup_basic_tab(basic_tab)
+        self.tab_widget.addTab(basic_tab, "⚙️ 基本設定")
+        
+        # スケジュールタブ
+        schedule_tab = QWidget()
+        self.setup_schedule_tab(schedule_tab)
+        self.tab_widget.addTab(schedule_tab, "⏰ スケジュール")
+        
+        # 詳細タブ
+        advanced_tab = QWidget()
+        self.setup_advanced_tab(advanced_tab)
+        self.tab_widget.addTab(advanced_tab, "🔧 詳細")
+        
+        layout.addWidget(self.tab_widget)
+        
+        # ボタン
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        self.save_button = QPushButton("💾 保存")
+        self.save_button.clicked.connect(self.save_config)
+        button_layout.addWidget(self.save_button)
+        
+        cancel_button = QPushButton("❌ キャンセル")
+        cancel_button.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_button)
+        
+        layout.addLayout(button_layout)
+        
+        self.setLayout(layout)
+    
+    def setup_basic_tab(self, tab):
+        layout = QFormLayout()
+        layout.setSpacing(15)
+        
+        # アプリケーション名
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("例: Chrome ブラウザ")
+        layout.addRow("アプリケーション名:", self.name_edit)
+        
+        # 実行ファイル
+        exe_layout = QHBoxLayout()
+        self.executable_edit = QLineEdit()
+        self.executable_edit.setPlaceholderText("例: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+        
+        browse_button = QPushButton("📁 参照")
+        browse_button.clicked.connect(self.browse_executable)
+        
+        exe_layout.addWidget(self.executable_edit)
+        exe_layout.addWidget(browse_button)
+        
+        layout.addRow("実行ファイル:", exe_layout)
+        
+        # 引数
+        self.args_edit = QLineEdit()
+        self.args_edit.setPlaceholderText("例: --new-window --profile-directory=Default")
+        layout.addRow("コマンドライン引数:", self.args_edit)
+        
+        # 作業ディレクトリ
+        work_layout = QHBoxLayout()
+        self.working_dir_edit = QLineEdit()
+        self.working_dir_edit.setText(".")
+        
+        work_browse_button = QPushButton("📁 参照")
+        work_browse_button.clicked.connect(self.browse_working_dir)
+        
+        work_layout.addWidget(self.working_dir_edit)
+        work_layout.addWidget(work_browse_button)
+        
+        layout.addRow("作業ディレクトリ:", work_layout)
+        
+        # 有効/無効
+        self.enabled_checkbox = QCheckBox("このアプリケーションを有効にする")
+        self.enabled_checkbox.setChecked(True)
+        layout.addRow("", self.enabled_checkbox)
+        
+        tab.setLayout(layout)
+    
+    def setup_schedule_tab(self, tab):
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+        
+        # スケジュール有効化
+        self.schedule_enabled_checkbox = QCheckBox("スケジュール機能を有効にする")
+        self.schedule_enabled_checkbox.toggled.connect(self.toggle_schedule_options)
+        layout.addWidget(self.schedule_enabled_checkbox)
+        
+        # スケジュール設定グループ
+        self.schedule_group = QGroupBox("スケジュール設定")
+        schedule_layout = QFormLayout()
+        
+        # 開始時刻
+        self.start_time_edit = QTimeEdit()
+        self.start_time_edit.setDisplayFormat("HH:mm")
+        schedule_layout.addRow("開始時刻:", self.start_time_edit)
+        
+        # 終了時刻
+        self.stop_time_edit = QTimeEdit()
+        self.stop_time_edit.setDisplayFormat("HH:mm")
+        schedule_layout.addRow("終了時刻:", self.stop_time_edit)
+        
+        # 実行曜日
+        days_layout = QHBoxLayout()
+        self.day_checkboxes = {}
+        days = [
+            ('Monday', '月'), ('Tuesday', '火'), ('Wednesday', '水'),
+            ('Thursday', '木'), ('Friday', '金'), ('Saturday', '土'), ('Sunday', '日')
+        ]
+        
+        for day_en, day_jp in days:
+            checkbox = QCheckBox(day_jp)
+            self.day_checkboxes[day_en] = checkbox
+            days_layout.addWidget(checkbox)
+        
+        schedule_layout.addRow("実行曜日:", days_layout)
+        
+        # 起動遅延
+        self.startup_delay_spin = QSpinBox()
+        self.startup_delay_spin.setRange(0, 3600)  # 0秒～1時間
+        self.startup_delay_spin.setSuffix(" 秒")
+        schedule_layout.addRow("起動遅延:", self.startup_delay_spin)
+        
+        self.schedule_group.setLayout(schedule_layout)
+        layout.addWidget(self.schedule_group)
+        
+        layout.addStretch()
+        tab.setLayout(layout)
+        
+        # 初期状態でスケジュール設定を無効化
+        self.schedule_group.setEnabled(False)
+    
+    def setup_advanced_tab(self, tab):
+        layout = QFormLayout()
+        layout.setSpacing(15)
+        
+        # 自動再起動
+        self.auto_restart_checkbox = QCheckBox("プロセス終了時に自動再起動する")
+        layout.addRow("", self.auto_restart_checkbox)
+        
+        # 自動再起動間隔
+        self.restart_interval_spin = QSpinBox()
+        self.restart_interval_spin.setRange(0, 168)  # 0時間～1週間
+        self.restart_interval_spin.setSuffix(" 時間")
+        self.restart_interval_spin.setSpecialValueText("無制限")
+        layout.addRow("定期再起動間隔:", self.restart_interval_spin)
+        
+        layout.addItem(QVBoxLayout())  # スペーサー
+        tab.setLayout(layout)
+    
+    def toggle_schedule_options(self, enabled):
+        """スケジュール設定の有効/無効切り替え"""
+        self.schedule_group.setEnabled(enabled)
+    
+    def browse_executable(self):
+        """実行ファイルを選択"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "実行ファイルを選択", "", 
+            "実行ファイル (*.exe *.app);;全てのファイル (*)"
+        )
+        if file_path:
+            self.executable_edit.setText(file_path)
+            
+            # ファイル名から推測してアプリ名を設定
+            if not self.name_edit.text():
+                app_name = Path(file_path).stem
+                self.name_edit.setText(app_name)
+    
+    def browse_working_dir(self):
+        """作業ディレクトリを選択"""
+        dir_path = QFileDialog.getExistingDirectory(self, "作業ディレクトリを選択")
+        if dir_path:
+            self.working_dir_edit.setText(dir_path)
+    
+    def load_app_config(self):
+        """既存の設定を読み込み"""
+        if not self.app_id:
+            return
+            
+        app_configs = self.process_manager.load_app_configs()
+        if self.app_id not in app_configs:
+            return
+            
+        config = app_configs[self.app_id]
+        
+        # 基本設定
+        self.name_edit.setText(config.get('name', ''))
+        self.executable_edit.setText(config.get('executable', ''))
+        
+        args = config.get('args', [])
+        self.args_edit.setText(' '.join(args) if args else '')
+        
+        self.working_dir_edit.setText(config.get('working_directory', '.'))
+        self.enabled_checkbox.setChecked(config.get('enabled', True))
+        
+        # スケジュール設定
+        schedule = config.get('schedule', {})
+        schedule_enabled = schedule.get('enabled', False)
+        self.schedule_enabled_checkbox.setChecked(schedule_enabled)
+        
+        if 'start_time' in schedule and schedule['start_time']:
+            start_time = datetime.strptime(schedule['start_time'], '%H:%M').time()
+            self.start_time_edit.setTime(start_time)
+        
+        if 'stop_time' in schedule and schedule['stop_time']:
+            stop_time = datetime.strptime(schedule['stop_time'], '%H:%M').time()
+            self.stop_time_edit.setTime(stop_time)
+        
+        # 曜日設定
+        days = schedule.get('days', [])
+        for day_en, checkbox in self.day_checkboxes.items():
+            checkbox.setChecked(day_en in days)
+        
+        self.startup_delay_spin.setValue(schedule.get('startup_delay', 0))
+        
+        # 詳細設定
+        self.auto_restart_checkbox.setChecked(config.get('auto_restart', False))
+        self.restart_interval_spin.setValue(schedule.get('auto_restart_interval', 0))
+    
+    def save_config(self):
+        """設定を保存"""
+        # バリデーション
+        if not self.name_edit.text().strip():
+            QMessageBox.warning(self, "入力エラー", "アプリケーション名を入力してください。")
+            return
+        
+        if not self.executable_edit.text().strip():
+            QMessageBox.warning(self, "入力エラー", "実行ファイルを指定してください。")
+            return
+        
+        # 設定を構築
+        config = {
+            'name': self.name_edit.text().strip(),
+            'executable': self.executable_edit.text().strip(),
+            'args': self.args_edit.text().split() if self.args_edit.text().strip() else [],
+            'working_directory': self.working_dir_edit.text().strip() or '.',
+            'enabled': self.enabled_checkbox.isChecked(),
+            'auto_restart': self.auto_restart_checkbox.isChecked(),
+            'schedule': {
+                'enabled': self.schedule_enabled_checkbox.isChecked(),
+                'start_time': self.start_time_edit.time().toString('HH:mm') if self.schedule_enabled_checkbox.isChecked() else '',
+                'stop_time': self.stop_time_edit.time().toString('HH:mm') if self.schedule_enabled_checkbox.isChecked() else '',
+                'days': [day_en for day_en, checkbox in self.day_checkboxes.items() if checkbox.isChecked()],
+                'startup_delay': self.startup_delay_spin.value(),
+                'auto_restart_interval': self.restart_interval_spin.value()
+            }
+        }
+        
+        # アプリIDを生成または使用
+        if self.app_id is None:
+            # 新規の場合、名前からIDを生成
+            import re
+            app_id = re.sub(r'[^\w\-]', '_', config['name'].lower())
+            app_id = re.sub(r'_+', '_', app_id).strip('_')
+        else:
+            app_id = self.app_id
+        
+        # 設定を保存
+        try:
+            self.process_manager.save_app_config(app_id, config)
+            self.accept()
+        except Exception as e:
+            QMessageBox.critical(self, "保存エラー", f"設定の保存に失敗しました: {e}")
 
 
 class TrayLogDialog(QDialog):
@@ -577,6 +1031,71 @@ class ProcessManager:
             }
             
         return default_configs
+    
+    def save_app_config(self, app_id: str, config: dict):
+        """アプリケーション設定を保存"""
+        config_path = Path(__file__).parent / "config" / "app_config.json"
+        
+        try:
+            # 既存の設定ファイルを読み込み
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    full_config = json.load(f)
+            else:
+                # ファイルが存在しない場合は新規作成
+                full_config = {
+                    "application": {
+                        "name": "Generic Business Manager",
+                        "version": "1.0.0",
+                        "author": "Generic Framework"
+                    },
+                    "tray_applications": {}
+                }
+            
+            # アプリケーション設定を更新
+            if "tray_applications" not in full_config:
+                full_config["tray_applications"] = {}
+            
+            full_config["tray_applications"][app_id] = config
+            
+            # 設定ファイルに保存
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(full_config, f, ensure_ascii=False, indent=2)
+            
+            print(f"アプリケーション設定を保存しました: {app_id}")
+            
+        except Exception as e:
+            raise Exception(f"設定保存エラー: {e}")
+    
+    def delete_app_config(self, app_id: str):
+        """アプリケーション設定を削除"""
+        config_path = Path(__file__).parent / "config" / "app_config.json"
+        
+        try:
+            # 既存の設定ファイルを読み込み
+            if not config_path.exists():
+                return
+                
+            with open(config_path, 'r', encoding='utf-8') as f:
+                full_config = json.load(f)
+            
+            # アプリケーション設定を削除
+            if "tray_applications" in full_config and app_id in full_config["tray_applications"]:
+                del full_config["tray_applications"][app_id]
+                
+                # 設定ファイルに保存
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(full_config, f, ensure_ascii=False, indent=2)
+                
+                print(f"アプリケーション設定を削除しました: {app_id}")
+            
+            # プロセスが実行中の場合は停止
+            if app_id in self.processes:
+                self.stop_application(app_id)
+                
+        except Exception as e:
+            raise Exception(f"設定削除エラー: {e}")
             
     def start_application(self, app_id: str, app_config: dict) -> Tuple[bool, str]:
         """アプリケーションを起動"""
@@ -861,7 +1380,20 @@ class FileMonitorTray(QSystemTrayIcon):
                 app_menu.addMenu(app_submenu)
                 
             menu.addMenu(app_menu)
-            menu.addSeparator()
+        
+        # アプリケーション管理メニュー
+        manage_menu = QMenu("⚙️ アプリケーション設定")
+        
+        manage_action = QAction("📋 アプリ管理画面", self)
+        manage_action.triggered.connect(self.show_app_manager)
+        manage_menu.addAction(manage_action)
+        
+        add_action = QAction("➕ 新規アプリ追加", self)
+        add_action.triggered.connect(self.add_new_app)
+        manage_menu.addAction(add_action)
+        
+        menu.addMenu(manage_menu)
+        menu.addSeparator()
         
         # ファイル監視セクション
         monitor_menu = QMenu("📁 ファイル監視")
@@ -1006,6 +1538,49 @@ class FileMonitorTray(QSystemTrayIcon):
             if self.file_watcher.is_running:
                 self.stop_monitoring()
                 QTimer.singleShot(1000, self.start_monitoring)
+    
+    def show_app_manager(self):
+        """アプリケーション管理ダイアログを表示"""
+        dialog = ApplicationManagerDialog(self.process_manager, self)
+        dialog.finished.connect(self.reload_app_configs)
+        dialog.exec_()
+    
+    def add_new_app(self):
+        """新規アプリケーション追加ダイアログを表示"""
+        dialog = ApplicationEditDialog(self.process_manager, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.reload_app_configs()
+    
+    def reload_app_configs(self):
+        """アプリケーション設定を再読み込みしてメニューを更新"""
+        try:
+            # 設定を再読み込み
+            self.load_app_configs()
+            
+            # スケジューラーを再初期化
+            self.scheduler.stop_scheduler()
+            self.init_scheduler()
+            
+            # メニューを更新
+            self.update_context_menu()
+            
+            print("アプリケーション設定を更新しました")
+            
+        except Exception as e:
+            print(f"設定更新エラー: {e}")
+    
+    def update_context_menu(self):
+        """コンテキストメニューを更新"""
+        try:
+            # 既存のメニューを削除
+            self.tray_icon.setContextMenu(None)
+            
+            # 新しいメニューを作成
+            context_menu = self.create_context_menu()
+            self.tray_icon.setContextMenu(context_menu)
+            
+        except Exception as e:
+            print(f"メニュー更新エラー: {e}")
                 
     def show_stats(self):
         """統計を表示"""
