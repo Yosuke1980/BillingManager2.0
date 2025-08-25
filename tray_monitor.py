@@ -406,15 +406,177 @@ class ProcessManager:
         self.processes: Dict[str, subprocess.Popen] = {}
         self.process_configs: Dict[str, dict] = {}
         
-    def load_app_configs(self, config_path="config/app_config.json"):
+    def load_app_configs(self, config_path=None):
         """アプリケーション設定を読み込み"""
+        if config_path is None:
+            # スクリプトファイルの場所を基準にした絶対パス
+            config_path = Path(__file__).parent / "config" / "app_config.json"
+        else:
+            config_path = Path(config_path)
+            
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             return config.get('tray_applications', {})
+        except FileNotFoundError:
+            print(f"設定ファイルが見つかりません: {config_path}")
+            print("初回実行のため、デフォルト設定ファイルを作成します...")
+            
+            # デフォルト設定ファイルを作成
+            if self.create_default_config_file(config_path):
+                # 作成したファイルを再読み込み
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                    return config.get('tray_applications', {})
+                except Exception as e:
+                    print(f"作成した設定ファイルの読み込みエラー: {e}")
+            
+            # ファイル作成に失敗した場合はデフォルト設定を返す
+            return self._get_default_app_configs()
         except Exception as e:
             print(f"設定ファイル読み込みエラー: {e}")
-            return {}
+            return self._get_default_app_configs()
+            
+    def create_default_config_file(self, config_path):
+        """デフォルト設定ファイルを作成"""
+        config_dir = config_path.parent
+        
+        # config ディレクトリが存在しない場合は作成
+        config_dir.mkdir(parents=True, exist_ok=True)
+        
+        default_config = {
+            "application": {
+                "name": "Generic Business Manager",
+                "version": "1.0.0",
+                "author": "Generic Framework"
+            },
+            "tray_applications": self._get_default_app_configs()
+        }
+        
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(default_config, f, ensure_ascii=False, indent=2)
+            print(f"デフォルト設定ファイルを作成しました: {config_path}")
+            return True
+        except Exception as e:
+            print(f"設定ファイル作成エラー: {e}")
+            return False
+            
+    def _get_default_app_configs(self):
+        """デフォルトアプリケーション設定を返す"""
+        import platform
+        
+        system = platform.system()
+        default_configs = {}
+        
+        if system == "Windows":
+            default_configs = {
+                "notepad": {
+                    "name": "メモ帳",
+                    "executable": "notepad.exe",
+                    "args": [],
+                    "working_directory": ".",
+                    "enabled": True,
+                    "auto_restart": False,
+                    "schedule": {
+                        "enabled": False,
+                        "start_time": "",
+                        "stop_time": "",
+                        "days": [],
+                        "startup_delay": 0,
+                        "auto_restart_interval": 0
+                    }
+                },
+                "calculator": {
+                    "name": "電卓",
+                    "executable": "calc.exe", 
+                    "args": [],
+                    "working_directory": ".",
+                    "enabled": True,
+                    "auto_restart": False,
+                    "schedule": {
+                        "enabled": False,
+                        "start_time": "",
+                        "stop_time": "",
+                        "days": [],
+                        "startup_delay": 0,
+                        "auto_restart_interval": 0
+                    }
+                }
+            }
+        elif system == "Darwin":  # macOS
+            default_configs = {
+                "textedit": {
+                    "name": "テキストエディット",
+                    "executable": "open",
+                    "args": ["-a", "TextEdit"],
+                    "working_directory": ".",
+                    "enabled": True,
+                    "auto_restart": False,
+                    "schedule": {
+                        "enabled": False,
+                        "start_time": "",
+                        "stop_time": "",
+                        "days": [],
+                        "startup_delay": 0,
+                        "auto_restart_interval": 0
+                    }
+                },
+                "calculator": {
+                    "name": "電卓",
+                    "executable": "open",
+                    "args": ["-a", "Calculator"],
+                    "working_directory": ".",
+                    "enabled": True,
+                    "auto_restart": False,
+                    "schedule": {
+                        "enabled": False,
+                        "start_time": "",
+                        "stop_time": "",
+                        "days": [],
+                        "startup_delay": 0,
+                        "auto_restart_interval": 0
+                    }
+                }
+            }
+        else:  # Linux
+            default_configs = {
+                "gedit": {
+                    "name": "テキストエディタ",
+                    "executable": "gedit",
+                    "args": [],
+                    "working_directory": ".",
+                    "enabled": True,
+                    "auto_restart": False,
+                    "schedule": {
+                        "enabled": False,
+                        "start_time": "",
+                        "stop_time": "",
+                        "days": [],
+                        "startup_delay": 0,
+                        "auto_restart_interval": 0
+                    }
+                },
+                "calculator": {
+                    "name": "電卓",
+                    "executable": "gnome-calculator",
+                    "args": [],
+                    "working_directory": ".",
+                    "enabled": True,
+                    "auto_restart": False,
+                    "schedule": {
+                        "enabled": False,
+                        "start_time": "",
+                        "stop_time": "",
+                        "days": [],
+                        "startup_delay": 0,
+                        "auto_restart_interval": 0
+                    }
+                }
+            }
+            
+        return default_configs
             
     def start_application(self, app_id: str, app_config: dict) -> Tuple[bool, str]:
         """アプリケーションを起動"""
@@ -427,23 +589,59 @@ class ProcessManager:
             args = app_config.get('args', [])
             working_dir = app_config.get('working_directory', '.')
             
-            # 実行ファイルが存在するかチェック
-            if not executable.endswith('.exe') and not os.path.isabs(executable):
-                # 相対パスまたは環境変数のコマンドの場合は存在チェックをスキップ
-                pass
-            elif not Path(executable).exists() and not executable.endswith('.exe'):
-                return False, f"実行ファイルが見つかりません: {executable}"
+            # 作業ディレクトリを絶対パスに変換
+            if not os.path.isabs(working_dir):
+                working_dir = str(Path(__file__).parent / working_dir)
+            
+            # Windows固有の実行ファイルパス処理
+            import platform
+            if platform.system() == "Windows":
+                # Windows環境でのパス処理
+                if not os.path.isabs(executable) and not executable.endswith('.exe'):
+                    # システムコマンドかどうかをチェック
+                    import shutil
+                    if not shutil.which(executable):
+                        return False, f"実行ファイルが見つかりません: {executable}"
+                elif executable.endswith('.exe') and not os.path.isabs(executable):
+                    # 相対パスの.exeファイルを絶対パスに変換
+                    abs_exe = Path(__file__).parent / executable
+                    if abs_exe.exists():
+                        executable = str(abs_exe)
+                    else:
+                        # システムPATHからの検索
+                        import shutil
+                        found_exe = shutil.which(executable)
+                        if found_exe:
+                            executable = found_exe
+                        else:
+                            return False, f"実行ファイルが見つかりません: {executable}"
+            else:
+                # macOS/Linux環境でのパス処理
+                if not os.path.isabs(executable):
+                    import shutil
+                    if not shutil.which(executable):
+                        # 相対パスの場合は絶対パスに変換してチェック
+                        abs_exe = Path(__file__).parent / executable
+                        if abs_exe.exists():
+                            executable = str(abs_exe)
+                        else:
+                            return False, f"実行ファイルが見つかりません: {executable}"
             
             # コマンドライン引数を構築
             cmd = [executable] + args
             
             # プロセスを起動
+            creation_flags = 0
+            if platform.system() == "Windows":
+                # Windows環境でコンソールウィンドウを表示しない
+                creation_flags = subprocess.CREATE_NO_WINDOW
+            
             process = subprocess.Popen(
                 cmd,
                 cwd=working_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                creationflags=creation_flags
             )
             
             # 起動が成功したかチェック（少し待つ）
