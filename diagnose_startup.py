@@ -120,6 +120,15 @@ def check_system_tray():
                 icon = QIcon()  # 空のアイコン
                 tray = QSystemTrayIcon(icon)
                 print("✅ システムトレイアイコン: 作成可能")
+                
+                # アイコン表示テスト
+                try:
+                    tray.show()
+                    print("✅ システムトレイアイコン表示: 成功")
+                    tray.hide()  # テスト後は非表示
+                except Exception as e:
+                    print(f"⚠️  アイコン表示テストエラー: {e}")
+                
                 return True
             except Exception as e:
                 print(f"❌ システムトレイアイコン作成エラー: {e}")
@@ -127,6 +136,11 @@ def check_system_tray():
         else:
             print("❌ システムトレイ: 利用不可能")
             print("   システムトレイ機能が有効になっていない可能性があります")
+            print("\n🔧 Windows環境での対処法:")
+            print("   1. タスクバー右クリック → 'タスクバーの設定'")
+            print("   2. '通知領域' → 'システムアイコンのオン/オフの切り替え'")
+            print("   3. '通知' をオンにする")
+            print("   4. または --gui オプションで直接起動")
             return False
             
     except ImportError as e:
@@ -293,8 +307,15 @@ def main():
     
     if failed == 0:
         print("🎉 全てのチェックが成功しました！tray_monitor.pyは正常に起動するはずです。")
-        print("\n次のコマンドで起動してください:")
-        print("python tray_monitor.py")
+        print("\n🚀 起動方法:")
+        print("  1. トレイ常駐モード:")
+        print("     python tray_monitor.py")
+        print("  2. GUI直接起動:")  
+        print("     python tray_monitor.py --gui")
+        print("  3. アプリ管理画面:")
+        print("     python tray_monitor.py --app-manager")
+        print("  4. 専用GUIランチャー:")
+        print("     python gui_launcher.py")
     else:
         print("⚠️  問題が検出されました。上記のエラーを修正してから再度お試しください。")
         
@@ -305,9 +326,13 @@ def main():
         if any("プロジェクトファイル" in r[0] and not r[1] for r in results):
             print("2. 不足しているプロジェクトファイルを配置")
         if any("システムトレイ" in r[0] and not r[1] for r in results):
-            print("3. システムトレイ機能を有効化")
+            print("3. システムトレイ機能を有効化（または --gui オプション使用）")
         if any("設定ファイル" in r[0] and not r[1] for r in results):
             print("4. 設定ファイルの修正または再作成")
+            
+        print("\n💡 システムトレイに問題がある場合でも以下で起動可能:")
+        print("   python tray_monitor.py --gui")
+        print("   python gui_launcher.py")
 
 if __name__ == "__main__":
     main()

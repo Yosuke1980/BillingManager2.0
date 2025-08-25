@@ -1986,14 +1986,64 @@ X-GNOME-Autostart-enabled=true
             }
 
 
+def show_help():
+    """ヘルプメッセージを表示"""
+    print("""
+🎯 BillingManager - アプリケーションランチャー
+
+📋 使用方法:
+  python tray_monitor.py [オプション]
+
+⚙️  オプション:
+  --gui, -g          : GUI設定画面を直接起動
+  --app-manager      : アプリケーション管理画面を直接起動  
+  --debug, -d        : デバッグモードで起動
+  --help, -h         : このヘルプを表示
+  
+🚀 起動方法:
+  1. トレイ常駐モード:
+     python tray_monitor.py
+     → システムトレイにアイコン表示、右クリックでメニュー
+
+  2. GUI直接起動:
+     python tray_monitor.py --gui
+     → 設定画面を直接表示
+
+  3. 管理画面直接起動:
+     python tray_monitor.py --app-manager  
+     → アプリ管理画面を直接表示
+
+📱 トレイアイコンが見えない場合:
+  • Windows: 通知エリアの「^」をクリックして確認
+  • 設定で「常に表示」に変更
+  • または --gui オプションで直接起動
+
+🔧 問題診断:
+  python diagnose_startup.py
+    """)
+
 def main():
     """メイン関数"""
-    print("🚀 BillingManager トレイアプリケーション起動開始")
+    # ヘルプオプションの確認
+    if '--help' in sys.argv or '-h' in sys.argv:
+        show_help()
+        sys.exit(0)
     
-    # デバッグモードの確認
+    print("🚀 BillingManager アプリケーションランチャー起動開始")
+    
+    # オプションの確認
     debug_mode = '--debug' in sys.argv or '-d' in sys.argv
+    gui_mode = '--gui' in sys.argv or '-g' in sys.argv
+    app_manager_mode = '--app-manager' in sys.argv
+    
     if debug_mode:
         print("🐛 デバッグモードで実行中")
+    
+    if gui_mode:
+        print("🖥️  GUI直接起動モード")
+    
+    if app_manager_mode:
+        print("📋 アプリ管理画面直接起動モード")
     
     try:
         # QApplication作成
@@ -2001,38 +2051,67 @@ def main():
         app = QApplication(sys.argv)
         print("✅ QApplication作成成功")
         
-        # システムトレイが利用可能かチェック
-        print("🔄 システムトレイ利用可能性確認中...")
-        if not QSystemTrayIcon.isSystemTrayAvailable():
-            error_msg = "システムトレイが利用できません。\n\n" + \
-                       "以下を確認してください:\n" + \
-                       "• システムトレイ機能が有効になっているか\n" + \
-                       "• 他のアプリケーションでトレイアイコンが表示されるか\n" + \
-                       "• システムの通知設定が正しいか"
-            
-            if debug_mode:
-                print(f"❌ {error_msg}")
-            
-            QMessageBox.critical(
-                None,
-                "システムトレイエラー",
-                error_msg
-            )
-            sys.exit(1)
-        print("✅ システムトレイ利用可能")
         
         # アプリケーション終了時の設定
         app.setQuitOnLastWindowClosed(False)
         print("✅ アプリケーション設定完了")
         
-        # トレイアプリを作成
-        print("🔄 トレイアプリケーション作成中...")
-        tray = FileMonitorTray(app)
-        print("✅ トレイアプリケーション作成成功")
-        
-        # アプリケーション実行
-        print("🎉 アプリケーション実行開始")
-        sys.exit(app.exec_())
+        # GUI直接起動モードの処理
+        if gui_mode or app_manager_mode:
+            # GUI直接起動の場合
+            print("🔄 GUI直接起動処理中...")
+            
+            # ProcessManagerを作成（GUI用）
+            process_manager = ProcessManager()
+            
+            if app_manager_mode:
+                # アプリ管理画面を直接表示
+                print("📋 アプリケーション管理画面を起動中...")
+                dialog = ApplicationManagerDialog(process_manager)
+                dialog.show()
+                print("✅ アプリケーション管理画面表示完了")
+                print("💡 画面を閉じると終了します")
+            else:
+                # 基本設定画面を直接表示
+                print("⚙️  設定画面を起動中...")
+                dialog = TraySettingsDialog()
+                dialog.show()
+                print("✅ 設定画面表示完了")
+                print("💡 画面を閉じると終了します")
+            
+            # GUIアプリケーション実行
+            sys.exit(app.exec_())
+        else:
+            # 通常のトレイモード
+            print("🔄 トレイアプリケーション作成中...")
+            
+            # システムトレイが利用可能かチェック（トレイモードのみ）
+            if not QSystemTrayIcon.isSystemTrayAvailable():
+                error_msg = "システムトレイが利用できません。\n\n" + \
+                           "以下を確認してください:\n" + \
+                           "• システムトレイ機能が有効になっているか\n" + \
+                           "• 他のアプリケーションでトレイアイコンが表示されるか\n" + \
+                           "• システムの通知設定が正しいか\n\n" + \
+                           "または --gui オプションで直接起動してください:\n" + \
+                           "python tray_monitor.py --gui"
+                
+                if debug_mode:
+                    print(f"❌ {error_msg}")
+                
+                QMessageBox.critical(
+                    None,
+                    "システムトレイエラー",
+                    error_msg
+                )
+                sys.exit(1)
+            
+            tray = FileMonitorTray(app)
+            print("✅ トレイアプリケーション作成成功")
+            print("💡 システムトレイアイコンを右クリックして操作してください")
+            
+            # アプリケーション実行
+            print("🎉 アプリケーション実行開始")
+            sys.exit(app.exec_())
         
     except ImportError as e:
         error_msg = f"必要なモジュールがインストールされていません: {e}\n\n" + \
