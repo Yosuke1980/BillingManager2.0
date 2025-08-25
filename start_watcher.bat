@@ -1,33 +1,33 @@
 @echo off
-chcp 932 >nul
-rem CSV�t�@�C���Ď��X�N���v�g�̋N��/��~�p�X�N���v�g (Windows�p)
+chcp 65001 >nul
+rem CSVファイル監視スクリプトの起動/停止用スクリプト (Windows用)
 
 setlocal
 set SCRIPT_DIR=%~dp0
 set WATCHER_SCRIPT=%SCRIPT_DIR%file_watcher.py
 
-rem Python�R�}���h�̊m�F�ipython3 -> python �̏��Ɏ��s�j
+rem Pythonコマンドの確認(python3 -> pythonの順に実行)
 set PYTHON_CMD=python
 where %PYTHON_CMD% >nul 2>&1
 if %errorlevel% neq 0 (
     set PYTHON_CMD=python3
     where %PYTHON_CMD% >nul 2>&1
     if %errorlevel% neq 0 (
-        echo �G���[: Python�܂���Python3���C���X�g�[������Ă��܂���
+        echo エラー: PythonまたはPython3がインストールされていません
         pause
         exit /b 1
     )
 )
 
-rem �X�N���v�g�t�@�C���̑��݊m�F
+rem スクリプトファイルの存在確認
 if not exist "%WATCHER_SCRIPT%" (
-    echo �G���[: file_watcher.py��������܂���
-    echo �p�X: %WATCHER_SCRIPT%
+    echo エラー: file_watcher.pyが見つかりません
+    echo パス: %WATCHER_SCRIPT%
     pause
     exit /b 1
 )
 
-rem �����̏���
+rem 引数の処理
 if "%~1"=="" goto :show_usage
 if /i "%~1"=="start" goto :start_watcher
 if /i "%~1"=="stop" goto :stop_watcher
@@ -36,49 +36,49 @@ if /i "%~1"=="restart" goto :restart_watcher
 goto :show_usage
 
 :check_dependencies
-echo �ˑ��֌W���m�F��...
+echo 依存関係を確認中...
 set PYTHONDONTWRITEBYTECODE=1
 set PYTHONWARNINGS=ignore
 set PIP_DISABLE_PIP_VERSION_CHECK=1
 %PYTHON_CMD% -c "import watchdog, psutil" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo �K�v�ȃ��C�u�������C���X�g�[������Ă��܂���
-    echo �ȉ��̃R�}���h�ŃC���X�g�[�����Ă�������:
+    echo 必要なライブラリがインストールされていません
+    echo 以下のコマンドでインストールしてください:
     echo pip install --quiet -r requirements.txt
-    echo �܂��͌ʂɃC���X�g�[��:
+    echo または個別にインストール:
     echo pip install --quiet watchdog psutil
     pause
     exit /b 1
 )
-echo �ˑ��֌WOK
+echo 依存関係OK
 goto :eof
 
 :show_usage
-echo �g�p���@:
-echo   %0 start   - �t�@�C���Ď����J�n
-echo   %0 stop    - �t�@�C���Ď����~
-echo   %0 status  - �t�@�C���Ď��̏�Ԃ��m�F
-echo   %0 restart - �t�@�C���Ď����ċN��
+echo 使用方法:
+echo   %0 start   - ファイル監視を開始
+echo   %0 stop    - ファイル監視を停止
+echo   %0 status  - ファイル監視の状態を確認
+echo   %0 restart - ファイル監視を再起動
 pause
 goto :eof
 
 :start_watcher
-echo CSV�t�@�C���Ď����J�n���܂�...
+echo CSVファイル監視を開始します...
 call :check_dependencies
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-rem �o�b�N�O���E���h�Ŏ��s
+rem バックグラウンドで実行
 start "" /min %PYTHON_CMD% "%WATCHER_SCRIPT%"
 
 timeout /t 2 /nobreak >nul
 
-rem �N���m�F
+rem 起動確認
 %PYTHON_CMD% "%WATCHER_SCRIPT%" --status
 pause
 goto :eof
 
 :stop_watcher
-echo CSV�t�@�C���Ď����~���܂�...
+echo CSVファイル監視を停止します...
 %PYTHON_CMD% "%WATCHER_SCRIPT%" --stop
 pause
 goto :eof
@@ -89,7 +89,7 @@ pause
 goto :eof
 
 :restart_watcher
-echo CSV�t�@�C���Ď����ċN�����܂�...
+echo CSVファイル監視を再起動します...
 call :stop_watcher
 timeout /t 3 /nobreak >nul
 call :start_watcher
