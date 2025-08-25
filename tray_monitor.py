@@ -30,7 +30,9 @@ class TraySettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("監視設定")
-        self.setFixedSize(400, 300)
+        self.resize(500, 450)
+        self.setMinimumSize(450, 400)
+        self.setMaximumSize(800, 600)
         self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint)
         
         self.config_file = "monitoring_config.json"
@@ -39,17 +41,24 @@ class TraySettingsDialog(QDialog):
         
     def setup_ui(self):
         layout = QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
         
         # 基本設定
         basic_group = QGroupBox("基本設定")
         form_layout = QFormLayout()
+        form_layout.setVerticalSpacing(8)
+        form_layout.setHorizontalSpacing(10)
         
         self.folder_edit = QLineEdit()
+        self.folder_edit.setMinimumWidth(250)
+        self.folder_edit.setPlaceholderText("監視するフォルダパスを入力...")
         form_layout.addRow("監視フォルダ:", self.folder_edit)
         
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(1, 60)
         self.interval_spin.setSuffix(" 秒")
+        self.interval_spin.setMinimumWidth(100)
         form_layout.addRow("監視間隔:", self.interval_spin)
         
         self.auto_process_check = QCheckBox("ファイル検出時に自動処理")
@@ -58,6 +67,7 @@ class TraySettingsDialog(QDialog):
         self.duplicate_spin = QSpinBox()
         self.duplicate_spin.setRange(1, 300)
         self.duplicate_spin.setSuffix(" 秒")
+        self.duplicate_spin.setMinimumWidth(100)
         form_layout.addRow("重複処理防止:", self.duplicate_spin)
         
         basic_group.setLayout(form_layout)
@@ -66,6 +76,8 @@ class TraySettingsDialog(QDialog):
         # 通知設定
         notify_group = QGroupBox("通知設定")
         notify_layout = QVBoxLayout()
+        notify_layout.setContentsMargins(10, 10, 10, 10)
+        notify_layout.setSpacing(8)
         
         self.show_notifications = QCheckBox("ファイル検出時に通知表示")
         self.show_notifications.setChecked(True)
@@ -84,6 +96,9 @@ class TraySettingsDialog(QDialog):
         )
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
+        
+        # ボタン用のスペーサー
+        layout.addStretch(1)
         layout.addWidget(button_box)
         
         self.setLayout(layout)
@@ -134,25 +149,52 @@ class TrayLogDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("監視ログ")
-        self.setFixedSize(600, 400)
+        self.resize(700, 500)
+        self.setMinimumSize(500, 350)
+        self.setMaximumSize(1200, 800)
         self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint)
         
         layout = QVBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
         
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setFont(QFont("Consolas", 9))
-        self.log_text.setStyleSheet("background-color: #1e1e1e; color: #dcdcdc;")
+        # macOS/Windows対応のフォント設定
+        import platform
+        if platform.system() == "Darwin":  # macOS
+            font = QFont("Monaco", 10)
+        elif platform.system() == "Windows":
+            font = QFont("Consolas", 10)
+        else:  # Linux
+            font = QFont("DejaVu Sans Mono", 10)
+        self.log_text.setFont(font)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e; 
+                color: #dcdcdc;
+                border: 1px solid #555;
+                border-radius: 5px;
+                padding: 8px;
+            }
+        """)
         layout.addWidget(self.log_text)
         
         # ボタン
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
         
-        clear_btn = QPushButton("クリア")
+        # スペーサーを追加してボタンを右寄せ
+        button_layout.addStretch()
+        
+        clear_btn = QPushButton("🗑️ クリア")
+        clear_btn.setMinimumSize(100, 32)
         clear_btn.clicked.connect(self.log_text.clear)
         button_layout.addWidget(clear_btn)
         
-        close_btn = QPushButton("閉じる")
+        close_btn = QPushButton("❌ 閉じる")
+        close_btn.setMinimumSize(100, 32)
+        close_btn.setDefault(True)
         close_btn.clicked.connect(self.close)
         button_layout.addWidget(close_btn)
         
