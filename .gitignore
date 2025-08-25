@@ -1,6 +1,37 @@
+# Database files
 billing.db
-data/AccountingApprovalList_20250621.csv
 expense_master.db
 expenses.db
-logs/app_20250621.log
 payee_master.db
+
+# Log files
+logs/*.log
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Data files (CSV imports)
+data/AccountingApprovalList_*.csv
+
+# Test outputs
+tests/__pycache__/
+tests/*.pyc
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*~
