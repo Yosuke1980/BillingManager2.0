@@ -1270,14 +1270,7 @@ class FileMonitorTray(QSystemTrayIcon):
     """システムトレイ常駐監視アプリ"""
     
     def __init__(self, app):
-        # アイコンを作成
-        icon = self.create_icon()
-        super().__init__(icon, app)
-        
         self.app = app
-        self.file_watcher = FileWatcherManager()
-        self.process_manager = ProcessManager()
-        self.scheduler = ApplicationScheduler()
         self.config = {}
         self.stats = {'processed_count': 0}
         self.app_configs = {}
@@ -1286,31 +1279,122 @@ class FileMonitorTray(QSystemTrayIcon):
         self.settings_dialog = None
         self.log_dialog = None
         
-        # タイマーでプロセス状態を監視
-        self.process_monitor_timer = QTimer()
-        self.process_monitor_timer.timeout.connect(self.update_process_status)
-        self.process_monitor_timer.start(5000)  # 5秒間隔
+        try:
+            # アイコンを作成
+            icon = self.create_icon()
+            super().__init__(icon, app)
+            print("✅ システムトレイアイコン作成成功")
+        except Exception as e:
+            print(f"❌ システムトレイアイコン作成エラー: {e}")
+            raise
         
-        # アプリケーション設定を読み込み
-        self.load_app_configs()
-        
-        # スケジューラーを初期化・開始
-        self.init_scheduler()
-        
-        # 右クリックメニューを作成
-        self.create_context_menu()
-        
-        # シグナル接続
-        self.activated.connect(self.on_tray_activated)
-        self.file_watcher.status_changed.connect(self.on_status_changed)
-        self.file_watcher.file_processed.connect(self.on_file_processed)
-        self.file_watcher.log_message.connect(self.on_log_message)
-        
-        # 設定を読み込み
-        self.load_config()
+        # 段階的初期化
+        self._initialize_components()
         
         # トレイアイコンを表示
         self.show()
+        
+        # 起動メッセージ
+        try:
+            self.showMessage(
+                "BillingManager - アプリケーションランチャー",
+                "アプリケーション管理システムが起動しました",
+                QSystemTrayIcon.Information,
+                3000
+            )
+            print("✅ トレイアプリケーション起動完了")
+        except Exception as e:
+            print(f"⚠️  起動メッセージ表示エラー: {e}")
+    
+    def _initialize_components(self):
+        """コンポーネントの段階的初期化"""
+        try:
+            # FileWatcherManager初期化
+            print("🔄 FileWatcherManager初期化中...")
+            self.file_watcher = FileWatcherManager()
+            print("✅ FileWatcherManager初期化成功")
+        except Exception as e:
+            print(f"❌ FileWatcherManager初期化エラー: {e}")
+            # フォールバック: 最小限の実装
+            self.file_watcher = None
+        
+        try:
+            # ProcessManager初期化
+            print("🔄 ProcessManager初期化中...")
+            self.process_manager = ProcessManager()
+            print("✅ ProcessManager初期化成功")
+        except Exception as e:
+            print(f"❌ ProcessManager初期化エラー: {e}")
+            raise  # ProcessManagerは必須
+        
+        try:
+            # ApplicationScheduler初期化
+            print("🔄 ApplicationScheduler初期化中...")
+            self.scheduler = ApplicationScheduler()
+            print("✅ ApplicationScheduler初期化成功")
+        except Exception as e:
+            print(f"❌ ApplicationScheduler初期化エラー: {e}")
+            # フォールバック: スケジューラー無しで動作
+            self.scheduler = None
+        
+        try:
+            # アプリケーション設定を読み込み
+            print("🔄 アプリケーション設定読み込み中...")
+            self.load_app_configs()
+            print("✅ アプリケーション設定読み込み成功")
+        except Exception as e:
+            print(f"❌ アプリケーション設定読み込みエラー: {e}")
+        
+        try:
+            # スケジューラーを初期化・開始
+            if self.scheduler:
+                print("🔄 スケジューラー初期化中...")
+                self.init_scheduler()
+                print("✅ スケジューラー初期化成功")
+        except Exception as e:
+            print(f"❌ スケジューラー初期化エラー: {e}")
+        
+        try:
+            # タイマーでプロセス状態を監視
+            print("🔄 プロセス監視タイマー設定中...")
+            self.process_monitor_timer = QTimer()
+            self.process_monitor_timer.timeout.connect(self.update_process_status)
+            self.process_monitor_timer.start(5000)  # 5秒間隔
+            print("✅ プロセス監視タイマー設定成功")
+        except Exception as e:
+            print(f"❌ プロセス監視タイマー設定エラー: {e}")
+        
+        try:
+            # 右クリックメニューを作成
+            print("🔄 コンテキストメニュー作成中...")
+            self.create_context_menu()
+            print("✅ コンテキストメニュー作成成功")
+        except Exception as e:
+            print(f"❌ コンテキストメニュー作成エラー: {e}")
+        
+        try:
+            # シグナル接続
+            print("🔄 シグナル接続中...")
+            self.activated.connect(self.on_tray_activated)
+            
+            if self.file_watcher:
+                self.file_watcher.status_changed.connect(self.on_status_changed)
+                self.file_watcher.file_processed.connect(self.on_file_processed)
+                self.file_watcher.log_message.connect(self.on_log_message)
+            
+            print("✅ シグナル接続成功")
+        except Exception as e:
+            print(f"❌ シグナル接続エラー: {e}")
+        
+        try:
+            # 設定を読み込み
+            print("🔄 監視設定読み込み中...")
+            self.load_config()
+            print("✅ 監視設定読み込み成功")
+        except Exception as e:
+            print(f"❌ 監視設定読み込みエラー: {e}")
+            
+        print("🎉 コンポーネント初期化完了")
         
         # 起動メッセージ
         self.showMessage(
@@ -1904,25 +1988,77 @@ X-GNOME-Autostart-enabled=true
 
 def main():
     """メイン関数"""
-    app = QApplication(sys.argv)
+    print("🚀 BillingManager トレイアプリケーション起動開始")
     
-    # システムトレイが利用可能かチェック
-    if not QSystemTrayIcon.isSystemTrayAvailable():
-        QMessageBox.critical(
-            None,
-            "システムトレイ",
-            "システムトレイが利用できません。"
-        )
+    # デバッグモードの確認
+    debug_mode = '--debug' in sys.argv or '-d' in sys.argv
+    if debug_mode:
+        print("🐛 デバッグモードで実行中")
+    
+    try:
+        # QApplication作成
+        print("🔄 QApplication作成中...")
+        app = QApplication(sys.argv)
+        print("✅ QApplication作成成功")
+        
+        # システムトレイが利用可能かチェック
+        print("🔄 システムトレイ利用可能性確認中...")
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            error_msg = "システムトレイが利用できません。\n\n" + \
+                       "以下を確認してください:\n" + \
+                       "• システムトレイ機能が有効になっているか\n" + \
+                       "• 他のアプリケーションでトレイアイコンが表示されるか\n" + \
+                       "• システムの通知設定が正しいか"
+            
+            if debug_mode:
+                print(f"❌ {error_msg}")
+            
+            QMessageBox.critical(
+                None,
+                "システムトレイエラー",
+                error_msg
+            )
+            sys.exit(1)
+        print("✅ システムトレイ利用可能")
+        
+        # アプリケーション終了時の設定
+        app.setQuitOnLastWindowClosed(False)
+        print("✅ アプリケーション設定完了")
+        
+        # トレイアプリを作成
+        print("🔄 トレイアプリケーション作成中...")
+        tray = FileMonitorTray(app)
+        print("✅ トレイアプリケーション作成成功")
+        
+        # アプリケーション実行
+        print("🎉 アプリケーション実行開始")
+        sys.exit(app.exec_())
+        
+    except ImportError as e:
+        error_msg = f"必要なモジュールがインストールされていません: {e}\n\n" + \
+                   "以下のコマンドでインストールしてください:\n" + \
+                   "pip install PyQt5 psutil watchdog"
+        print(f"❌ インポートエラー: {error_msg}")
+        
+        try:
+            QMessageBox.critical(None, "モジュールエラー", error_msg)
+        except:
+            pass
         sys.exit(1)
         
-    # アプリケーション終了時の設定
-    app.setQuitOnLastWindowClosed(False)
-    
-    # トレイアプリを作成
-    tray = FileMonitorTray(app)
-    
-    # アプリケーション実行
-    sys.exit(app.exec_())
+    except Exception as e:
+        error_msg = f"予期しないエラーが発生しました: {e}"
+        print(f"❌ {error_msg}")
+        
+        if debug_mode:
+            import traceback
+            traceback.print_exc()
+        
+        try:
+            QMessageBox.critical(None, "起動エラー", error_msg)
+        except:
+            pass
+        sys.exit(1)
 
 
 if __name__ == "__main__":

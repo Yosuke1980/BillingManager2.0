@@ -62,7 +62,7 @@ def test_app_edit_dialog():
         # 編集ダイアログを表示
         edit_dialog.show()
         
-        return app, new_dialog, edit_dialog
+        return app, edit_dialog
     
     new_dialog.show()
     return app, new_dialog
@@ -107,7 +107,7 @@ def main():
         test_configuration_features()
         
         # 編集ダイアログテスト
-        app2, edit_dialog = test_app_edit_dialog()
+        app_edit, edit_dialog = test_app_edit_dialog()
         
         print("\n" + "=" * 60)
         print("✅ 全てのGUI機能テストが完了しました！")
