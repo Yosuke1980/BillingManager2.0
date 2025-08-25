@@ -1,5 +1,5 @@
 @echo off
-chcp 932 >nul
+chcp 65001 >nul
 cd /d %~dp0
 
 rem Python環境の設定とpipの表示抑制
