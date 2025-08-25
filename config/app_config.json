@@ -196,5 +196,55 @@
     "strict_amount_match": true,
     "amount_tolerance": 0.01,
     "debug_logging": true
+  },
+  "tray_applications": {
+    "main_app": {
+      "name": "メインアプリケーション",
+      "executable": "python",
+      "args": ["main.py"],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": false
+    },
+    "file_watcher": {
+      "name": "ファイル監視",
+      "executable": "python",
+      "args": ["file_watcher.py"],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": true
+    },
+    "textedit": {
+      "name": "テキストエディット",
+      "executable": "open",
+      "args": ["-a", "TextEdit"],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": false
+    },
+    "calculator": {
+      "name": "電卓",
+      "executable": "open",
+      "args": ["-a", "Calculator"],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": false
+    },
+    "finder": {
+      "name": "Finder",
+      "executable": "open",
+      "args": ["-a", "Finder", "."],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": false
+    },
+    "test_app": {
+      "name": "テストアプリ",
+      "executable": "python3",
+      "args": ["test_simple_app.py"],
+      "working_directory": ".",
+      "enabled": true,
+      "auto_restart": false
+    }
   }
 }

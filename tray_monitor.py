@@ -7,15 +7,18 @@ import sys
 import os
 import json
 import subprocess
+import psutil
+import time
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, Optional, List, Tuple
 from PyQt5.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu, QAction, QMessageBox,
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QPushButton, QLineEdit, QSpinBox, QCheckBox, QTextEdit,
     QGroupBox, QDialogButtonBox
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QObject
 from PyQt5.QtGui import QIcon, QPixmap, QPainter, QFont
 
 from file_watcher_gui import FileWatcherManager
@@ -168,6 +171,156 @@ class TrayLogDialog(QDialog):
         self.log_text.setTextCursor(cursor)
 
 
+class ProcessManager:
+    """プロセス管理クラス"""
+    
+    def __init__(self):
+        self.processes: Dict[str, subprocess.Popen] = {}
+        self.process_configs: Dict[str, dict] = {}
+        
+    def load_app_configs(self, config_path="config/app_config.json"):
+        """アプリケーション設定を読み込み"""
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            return config.get('tray_applications', {})
+        except Exception as e:
+            print(f"設定ファイル読み込みエラー: {e}")
+            return {}
+            
+    def start_application(self, app_id: str, app_config: dict) -> Tuple[bool, str]:
+        """アプリケーションを起動"""
+        if app_id in self.processes:
+            if self.is_process_running(app_id):
+                return False, "既に起動中です"
+                
+        try:
+            executable = app_config['executable']
+            args = app_config.get('args', [])
+            working_dir = app_config.get('working_directory', '.')
+            
+            # 実行ファイルが存在するかチェック
+            if not executable.endswith('.exe') and not os.path.isabs(executable):
+                # 相対パスまたは環境変数のコマンドの場合は存在チェックをスキップ
+                pass
+            elif not Path(executable).exists() and not executable.endswith('.exe'):
+                return False, f"実行ファイルが見つかりません: {executable}"
+            
+            # コマンドライン引数を構築
+            cmd = [executable] + args
+            
+            # プロセスを起動
+            process = subprocess.Popen(
+                cmd,
+                cwd=working_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            
+            # 起動が成功したかチェック（少し待つ）
+            time.sleep(0.5)
+            if process.poll() is not None:
+                # プロセスが既に終了している場合
+                stderr = process.stderr.read().decode('utf-8', errors='ignore')
+                return False, f"起動に失敗しました: {stderr[:100]}"
+            
+            self.processes[app_id] = process
+            self.process_configs[app_id] = app_config
+            return True, "起動成功"
+            
+        except FileNotFoundError:
+            return False, f"実行ファイルが見つかりません: {executable}"
+        except Exception as e:
+            return False, f"起動エラー: {str(e)}"
+            
+    def stop_application(self, app_id: str) -> Tuple[bool, str]:
+        """アプリケーションを停止"""
+        if app_id not in self.processes:
+            return False, "プロセスが見つかりません"
+            
+        try:
+            process = self.processes[app_id]
+            if process.poll() is None:  # プロセスがまだ実行中
+                process.terminate()
+                
+                # 正常終了を待つ
+                for _ in range(10):  # 最大10秒待つ
+                    time.sleep(1)
+                    if process.poll() is not None:
+                        break
+                
+                # まだ終了していない場合は強制終了
+                if process.poll() is None:
+                    process.kill()
+                    time.sleep(1)
+                    if process.poll() is None:
+                        return False, "プロセスの強制終了に失敗しました"
+                    
+            del self.processes[app_id]
+            return True, "停止成功"
+            
+        except Exception as e:
+            return False, f"停止エラー: {str(e)}"
+            
+    def restart_application(self, app_id: str) -> Tuple[bool, str]:
+        """アプリケーションを再起動"""
+        if app_id not in self.process_configs:
+            return False, "アプリケーション設定が見つかりません"
+            
+        # 停止
+        if app_id in self.processes:
+            stop_success, stop_message = self.stop_application(app_id)
+            if not stop_success:
+                return False, f"停止に失敗: {stop_message}"
+        
+        time.sleep(1)
+        
+        # 起動
+        start_success, start_message = self.start_application(app_id, self.process_configs[app_id])
+        if start_success:
+            return True, "再起動成功"
+        else:
+            return False, f"起動に失敗: {start_message}"
+        
+    def is_process_running(self, app_id: str) -> bool:
+        """プロセスが実行中かチェック"""
+        if app_id not in self.processes:
+            return False
+            
+        try:
+            process = self.processes[app_id]
+            return process.poll() is None
+        except Exception:
+            return False
+            
+    def get_process_status(self, app_id: str) -> str:
+        """プロセス状態を取得"""
+        if self.is_process_running(app_id):
+            return "実行中"
+        elif app_id in self.processes:
+            return "停止済み"
+        else:
+            return "未起動"
+            
+    def cleanup_dead_processes(self):
+        """終了したプロセスをクリーンアップ"""
+        dead_processes = []
+        for app_id, process in self.processes.items():
+            if process.poll() is not None:  # プロセスが終了している
+                dead_processes.append(app_id)
+                
+        for app_id in dead_processes:
+            if app_id in self.processes:
+                del self.processes[app_id]
+                
+    def stop_all_applications(self):
+        """すべてのアプリケーションを停止"""
+        app_ids = list(self.processes.keys())
+        for app_id in app_ids:
+            self.stop_application(app_id)
+
+
 class FileMonitorTray(QSystemTrayIcon):
     """システムトレイ常駐監視アプリ"""
     
@@ -178,12 +331,22 @@ class FileMonitorTray(QSystemTrayIcon):
         
         self.app = app
         self.file_watcher = FileWatcherManager()
+        self.process_manager = ProcessManager()
         self.config = {}
         self.stats = {'processed_count': 0}
+        self.app_configs = {}
         
         # ダイアログ
         self.settings_dialog = None
         self.log_dialog = None
+        
+        # タイマーでプロセス状態を監視
+        self.process_monitor_timer = QTimer()
+        self.process_monitor_timer.timeout.connect(self.update_process_status)
+        self.process_monitor_timer.start(5000)  # 5秒間隔
+        
+        # アプリケーション設定を読み込み
+        self.load_app_configs()
         
         # 右クリックメニューを作成
         self.create_context_menu()
@@ -202,8 +365,8 @@ class FileMonitorTray(QSystemTrayIcon):
         
         # 起動メッセージ
         self.showMessage(
-            "BillingManager - ファイル監視",
-            "ファイル監視アプリが起動しました",
+            "BillingManager - アプリケーションランチャー",
+            "アプリケーション管理システムが起動しました",
             QSystemTrayIcon.Information,
             3000
         )
@@ -232,16 +395,64 @@ class FileMonitorTray(QSystemTrayIcon):
         """右クリックメニューを作成"""
         menu = QMenu()
         
-        # 監視開始/停止
-        self.start_action = QAction("📁 監視開始", self)
+        # アプリケーション管理セクション
+        if self.app_configs:
+            app_menu = QMenu("🚀 アプリケーション管理")
+            
+            for app_id, app_config in self.app_configs.items():
+                if not app_config.get('enabled', True):
+                    continue
+                    
+                app_submenu = QMenu(app_config['name'])
+                
+                # 起動
+                start_action = QAction(f"▶️ 起動", self)
+                start_action.triggered.connect(lambda checked, aid=app_id: self.start_app(aid))
+                app_submenu.addAction(start_action)
+                
+                # 停止
+                stop_action = QAction(f"⏹️ 停止", self)
+                stop_action.triggered.connect(lambda checked, aid=app_id: self.stop_app(aid))
+                app_submenu.addAction(stop_action)
+                
+                # 再起動
+                restart_action = QAction(f"🔄 再起動", self)
+                restart_action.triggered.connect(lambda checked, aid=app_id: self.restart_app(aid))
+                app_submenu.addAction(restart_action)
+                
+                app_submenu.addSeparator()
+                
+                # ステータス表示
+                status = self.process_manager.get_process_status(app_id)
+                status_action = QAction(f"📊 状態: {status}", self)
+                status_action.setEnabled(False)
+                app_submenu.addAction(status_action)
+                
+                app_menu.addMenu(app_submenu)
+                
+            menu.addMenu(app_menu)
+            menu.addSeparator()
+        
+        # ファイル監視セクション
+        monitor_menu = QMenu("📁 ファイル監視")
+        
+        self.start_action = QAction("▶️ 監視開始", self)
         self.start_action.triggered.connect(self.start_monitoring)
-        menu.addAction(self.start_action)
+        monitor_menu.addAction(self.start_action)
         
         self.stop_action = QAction("⏹️ 監視停止", self)
         self.stop_action.triggered.connect(self.stop_monitoring)
         self.stop_action.setEnabled(False)
-        menu.addAction(self.stop_action)
+        monitor_menu.addAction(self.stop_action)
         
+        monitor_menu.addSeparator()
+        
+        # 統計表示
+        self.stats_action = QAction("📊 統計: 0件処理済み", self)
+        self.stats_action.triggered.connect(self.show_stats)
+        monitor_menu.addAction(self.stats_action)
+        
+        menu.addMenu(monitor_menu)
         menu.addSeparator()
         
         # 設定
@@ -249,22 +460,12 @@ class FileMonitorTray(QSystemTrayIcon):
         settings_action.triggered.connect(self.show_settings)
         menu.addAction(settings_action)
         
-        # 統計表示
-        self.stats_action = QAction("📊 統計: 0件処理済み", self)
-        self.stats_action.triggered.connect(self.show_stats)
-        menu.addAction(self.stats_action)
-        
         # ログ表示
         log_action = QAction("🔍 ログ表示", self)
         log_action.triggered.connect(self.show_log)
         menu.addAction(log_action)
         
         menu.addSeparator()
-        
-        # メインアプリを開く
-        main_app_action = QAction("📱 メインアプリを開く", self)
-        main_app_action.triggered.connect(self.open_main_app)
-        menu.addAction(main_app_action)
         
         # スタートアップ設定
         startup_action = QAction("🚀 スタートアップに登録", self)
@@ -353,13 +554,73 @@ class FileMonitorTray(QSystemTrayIcon):
         self.log_dialog.raise_()
         self.log_dialog.activateWindow()
         
+    def load_app_configs(self):
+        """アプリケーション設定を読み込み"""
+        self.app_configs = self.process_manager.load_app_configs()
+        
+    def start_app(self, app_id: str):
+        """アプリケーションを起動"""
+        if app_id in self.app_configs:
+            config = self.app_configs[app_id]
+            success, message = self.process_manager.start_application(app_id, config)
+            
+            if success:
+                self.showMessage(
+                    "アプリケーション起動",
+                    f"{config['name']} を起動しました",
+                    QSystemTrayIcon.Information,
+                    3000
+                )
+                self.update_menu()
+            else:
+                QMessageBox.critical(None, "起動エラー", f"{config['name']}: {message}")
+                    
+    def stop_app(self, app_id: str):
+        """アプリケーションを停止"""
+        if app_id in self.app_configs:
+            config = self.app_configs[app_id]
+            success, message = self.process_manager.stop_application(app_id)
+            
+            if success:
+                self.showMessage(
+                    "アプリケーション停止",
+                    f"{config['name']} を停止しました",
+                    QSystemTrayIcon.Information,
+                    3000
+                )
+                self.update_menu()
+            else:
+                QMessageBox.critical(None, "停止エラー", f"{config['name']}: {message}")
+                
+    def restart_app(self, app_id: str):
+        """アプリケーションを再起動"""
+        if app_id in self.app_configs:
+            config = self.app_configs[app_id]
+            success, message = self.process_manager.restart_application(app_id)
+            
+            if success:
+                self.showMessage(
+                    "アプリケーション再起動",
+                    f"{config['name']} を再起動しました",
+                    QSystemTrayIcon.Information,
+                    3000
+                )
+                self.update_menu()
+            else:
+                QMessageBox.critical(None, "再起動エラー", f"{config['name']}: {message}")
+                
+    def update_process_status(self):
+        """プロセス状態を更新"""
+        self.process_manager.cleanup_dead_processes()
+        self.update_menu()
+        
+    def update_menu(self):
+        """メニューを更新"""
+        self.create_context_menu()
+        
     def open_main_app(self):
         """メインアプリを開く"""
-        try:
-            app_path = Path(__file__).parent / "app.py"
-            subprocess.Popen([sys.executable, str(app_path)])
-        except Exception as e:
-            QMessageBox.critical(None, "エラー", f"メインアプリの起動に失敗しました: {str(e)}")
+        self.start_app('main_app')
             
     def toggle_startup(self):
         """スタートアップ登録/解除を切り替え"""
@@ -475,14 +736,23 @@ X-GNOME-Autostart-enabled=true
         reply = QMessageBox.question(
             None,
             "終了確認",
-            "ファイル監視を終了しますか？",
+            "アプリケーション管理システムを終了しますか？\n起動中のアプリケーションも停止されます。",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         
         if reply == QMessageBox.Yes:
+            # ファイル監視停止
             if self.file_watcher.is_running:
                 self.file_watcher.stop_monitoring()
+                
+            # すべてのプロセスを停止
+            self.process_manager.stop_all_applications()
+            
+            # タイマー停止
+            if hasattr(self, 'process_monitor_timer'):
+                self.process_monitor_timer.stop()
+                
             self.app.quit()
             
     def on_status_changed(self, is_running, stats):
