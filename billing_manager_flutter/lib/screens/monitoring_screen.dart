@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../services/database_service.dart';
 import '../services/file_watcher_service.dart';
 import '../services/data_export_service.dart';
+import '../services/expense_scheduler_service.dart';
 
 class MonitoringScreen extends StatefulWidget {
   const MonitoringScreen({super.key});
@@ -19,6 +20,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> with SingleTickerPr
   
   FileWatcherService? _fileWatcher;
   DataExportService? _exportService;
+  ExpenseSchedulerService? _schedulerService;
   
   bool _isWatchingFiles = false;
   String _watchDirectory = '';
@@ -28,6 +30,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> with SingleTickerPr
   final List<Tab> _tabs = [
     const Tab(text: 'ファイル監視', icon: Icon(Icons.folder_open)),
     const Tab(text: 'データエクスポート', icon: Icon(Icons.file_download)),
+    const Tab(text: '費用スケジュール', icon: Icon(Icons.schedule)),
     const Tab(text: 'システム状態', icon: Icon(Icons.info)),
   ];
 
@@ -42,6 +45,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> with SingleTickerPr
     final databaseService = Provider.of<DatabaseService>(context, listen: false);
     _fileWatcher = FileWatcherService(databaseService);
     _exportService = DataExportService(databaseService);
+    _schedulerService = ExpenseSchedulerService(databaseService);
     
     // ファイル監視のコールバック設定
     _fileWatcher!.onFileDetected = (action, data) {
@@ -68,6 +72,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> with SingleTickerPr
   void dispose() {
     _tabController.dispose();
     _fileWatcher?.dispose();
+    _schedulerService?.dispose();
     super.dispose();
   }
 
@@ -90,6 +95,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> with SingleTickerPr
         children: [
           _buildFileWatchTab(),
           _buildDataExportTab(),
+          _buildSchedulerTab(),
           _buildSystemStatusTab(),
         ],
       ),
@@ -320,6 +326,154 @@ class _MonitoringScreenState extends State<MonitoringScreen> with SingleTickerPr
     );
   }
 
+  Widget _buildSchedulerTab() {
+    final isSchedulerRunning = _schedulerService?.isRunning ?? false;
+    final nextExecution = _schedulerService?.getNextExecutionTime();
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          // スケジューラー制御
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '月次費用生成スケジューラー',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          if (isSchedulerRunning) {
+                            _schedulerService?.stopScheduler();
+                          } else {
+                            _schedulerService?.startScheduler();
+                          }
+                          setState(() {});
+                        },
+                        icon: Icon(isSchedulerRunning ? Icons.stop : Icons.play_arrow),
+                        label: Text(isSchedulerRunning ? 'スケジューラー停止' : 'スケジューラー開始'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isSchedulerRunning ? Colors.red : Colors.green,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '状態: ${isSchedulerRunning ? "実行中" : "停止中"}',
+                              style: TextStyle(
+                                color: isSchedulerRunning ? Colors.green : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (nextExecution != null)
+                              Text(
+                                '次回実行: ${DateFormat('yyyy/MM/dd HH:mm').format(nextExecution)}',
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // 手動生成ボタン
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '手動生成',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  const Text('マスター費用から月次費用を手動で生成します'),
+                  const SizedBox(height: 12),
+                  
+                  Wrap(
+                    spacing: 8.0,
+                    runSpacing: 8.0,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _generateCurrentMonth(),
+                        icon: const Icon(Icons.today),
+                        label: const Text('今月を生成'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _showMonthSelectionDialog(),
+                        icon: const Icon(Icons.date_range),
+                        label: const Text('指定月を生成'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _showBulkGenerationDialog(),
+                        icon: const Icon(Icons.calendar_month),
+                        label: const Text('複数月を生成'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // 生成統計
+          Expanded(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '生成履歴・統計',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 16),
+                    FutureBuilder<bool>(
+                      future: _schedulerService?.isCurrentMonthGenerated(),
+                      builder: (context, snapshot) {
+                        final isGenerated = snapshot.data ?? false;
+                        return ListTile(
+                          leading: Icon(
+                            isGenerated ? Icons.check_circle : Icons.pending,
+                            color: isGenerated ? Colors.green : Colors.orange,
+                          ),
+                          title: const Text('今月の費用生成状況'),
+                          subtitle: Text(isGenerated ? '生成済み' : '未生成'),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSystemStatusTab() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -342,6 +496,7 @@ class _MonitoringScreenState extends State<MonitoringScreen> with SingleTickerPr
                   _buildSystemInfoRow('プラットフォーム', Platform.operatingSystem),
                   _buildSystemInfoRow('起動時刻', DateFormat('yyyy/MM/dd HH:mm:ss').format(DateTime.now())),
                   _buildSystemInfoRow('ファイル監視状態', _isWatchingFiles ? '監視中' : '停止中'),
+                  _buildSystemInfoRow('スケジューラー状態', _schedulerService?.isRunning == true ? '実行中' : '停止中'),
                 ],
               ),
             ),
@@ -461,5 +616,218 @@ class _MonitoringScreenState extends State<MonitoringScreen> with SingleTickerPr
         ],
       ),
     );
+  }
+
+  Future<void> _generateCurrentMonth() async {
+    try {
+      final result = await _schedulerService?.executeManualGeneration();
+      if (result?.success == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('今月の費用を${result!.generatedCount}件生成しました'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showErrorDialog('生成エラー', result?.errorMessage ?? '不明なエラー');
+      }
+    } catch (e) {
+      _showErrorDialog('生成エラー', '月次費用生成中にエラーが発生しました: $e');
+    }
+  }
+
+  void _showMonthSelectionDialog() {
+    DateTime selectedMonth = DateTime.now();
+    bool overwriteExisting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('指定月の費用生成'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('生成したい月を選択してください'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('対象月: '),
+                  TextButton(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedMonth,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          selectedMonth = DateTime(picked.year, picked.month, 1);
+                        });
+                      }
+                    },
+                    child: Text('${selectedMonth.year}年${selectedMonth.month}月'),
+                  ),
+                ],
+              ),
+              CheckboxListTile(
+                title: const Text('既存データを上書き'),
+                value: overwriteExisting,
+                onChanged: (value) {
+                  setState(() {
+                    overwriteExisting = value ?? false;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _executeMonthGeneration(selectedMonth, overwriteExisting);
+              },
+              child: const Text('生成'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBulkGenerationDialog() {
+    DateTime startMonth = DateTime.now();
+    DateTime endMonth = DateTime.now();
+    bool overwriteExisting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('複数月の一括生成'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('生成したい期間を選択してください'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('開始月: '),
+                  TextButton(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: startMonth,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          startMonth = DateTime(picked.year, picked.month, 1);
+                        });
+                      }
+                    },
+                    child: Text('${startMonth.year}年${startMonth.month}月'),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  const Text('終了月: '),
+                  TextButton(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: endMonth,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          endMonth = DateTime(picked.year, picked.month, 1);
+                        });
+                      }
+                    },
+                    child: Text('${endMonth.year}年${endMonth.month}月'),
+                  ),
+                ],
+              ),
+              CheckboxListTile(
+                title: const Text('既存データを上書き'),
+                value: overwriteExisting,
+                onChanged: (value) {
+                  setState(() {
+                    overwriteExisting = value ?? false;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _executeBulkGeneration(startMonth, endMonth, overwriteExisting);
+              },
+              child: const Text('一括生成'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _executeMonthGeneration(DateTime targetMonth, bool overwriteExisting) async {
+    try {
+      final result = await _schedulerService?.executeManualGeneration(
+        targetMonth: targetMonth,
+        overwriteExisting: overwriteExisting,
+      );
+      
+      if (result?.success == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${targetMonth.year}年${targetMonth.month}月の費用を${result!.generatedCount}件生成しました'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showErrorDialog('生成エラー', result?.errorMessage ?? '不明なエラー');
+      }
+    } catch (e) {
+      _showErrorDialog('生成エラー', '月次費用生成中にエラーが発生しました: $e');
+    }
+  }
+
+  Future<void> _executeBulkGeneration(DateTime startMonth, DateTime endMonth, bool overwriteExisting) async {
+    try {
+      final result = await _schedulerService?.executeBulkGeneration(
+        startMonth: startMonth,
+        endMonth: endMonth,
+        overwriteExisting: overwriteExisting,
+      );
+      
+      if (result?.success == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${result!.generatedMonths.length}ヶ月分の費用を${result.generatedCount}件生成しました'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        _showErrorDialog('生成エラー', result?.errorMessage ?? '不明なエラー');
+      }
+    } catch (e) {
+      _showErrorDialog('生成エラー', '複数月費用生成中にエラーが発生しました: $e');
+    }
   }
 }

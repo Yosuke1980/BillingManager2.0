@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/payment_model.dart';
 import '../models/expense_model.dart';
+import '../models/master_expense_model.dart';
 
 class DatabaseService {
   static Database? _database;
@@ -20,8 +21,9 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -68,7 +70,7 @@ class DatabaseService {
       )
     ''');
 
-    // expense_master テーブル作成
+    // expense_master テーブル作成（既存）
     await db.execute('''
       CREATE TABLE expense_master (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,6 +78,26 @@ class DatabaseService {
         description TEXT,
         default_amount REAL DEFAULT 0,
         is_active INTEGER DEFAULT 1
+      )
+    ''');
+
+    // master_expenses テーブル作成（新規）
+    await db.execute('''
+      CREATE TABLE master_expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        amount REAL NOT NULL,
+        frequency TEXT NOT NULL DEFAULT 'monthly',
+        day_of_month INTEGER NOT NULL DEFAULT 1,
+        description TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        project_name TEXT,
+        department TEXT,
+        payment_method TEXT NOT NULL,
+        tags TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )
     ''');
 
@@ -93,6 +115,31 @@ class DatabaseService {
     ''');
 
     print('データベーステーブルを作成しました');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // master_expenses テーブルを追加
+      await db.execute('''
+        CREATE TABLE master_expenses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          amount REAL NOT NULL,
+          frequency TEXT NOT NULL DEFAULT 'monthly',
+          day_of_month INTEGER NOT NULL DEFAULT 1,
+          description TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          project_name TEXT,
+          department TEXT,
+          payment_method TEXT NOT NULL,
+          tags TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+      print('master_expenses テーブルを追加しました');
+    }
   }
 
   // Payments CRUD操作
@@ -272,6 +319,206 @@ class DatabaseService {
     );
 
     return List.generate(maps.length, (i) => Expense.fromMap(maps[i]));
+  }
+
+  // Master Expenses CRUD操作
+  Future<int> insertMasterExpense(MasterExpenseModel masterExpense) async {
+    final db = await database;
+    return await db.insert('master_expenses', masterExpense.toMap());
+  }
+
+  Future<List<MasterExpenseModel>> getAllMasterExpenses() async {
+    final db = await database;
+    final maps = await db.query('master_expenses', orderBy: 'name ASC');
+    return List.generate(maps.length, (i) => MasterExpenseModel.fromMap(maps[i]));
+  }
+
+  Future<List<MasterExpenseModel>> getActiveMasterExpenses() async {
+    final db = await database;
+    final maps = await db.query(
+      'master_expenses',
+      where: 'is_active = ?',
+      whereArgs: [1],
+      orderBy: 'name ASC',
+    );
+    return List.generate(maps.length, (i) => MasterExpenseModel.fromMap(maps[i]));
+  }
+
+  Future<MasterExpenseModel?> getMasterExpense(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'master_expenses',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    
+    if (maps.isNotEmpty) {
+      return MasterExpenseModel.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<int> updateMasterExpense(MasterExpenseModel masterExpense) async {
+    final db = await database;
+    return await db.update(
+      'master_expenses',
+      masterExpense.toMap(),
+      where: 'id = ?',
+      whereArgs: [masterExpense.id],
+    );
+  }
+
+  Future<int> deleteMasterExpense(int id) async {
+    final db = await database;
+    return await db.delete(
+      'master_expenses',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 月次費用を自動生成
+  Future<ExpenseGenerationResult> generateMonthlyExpenses({
+    DateTime? targetMonth,
+    bool overwriteExisting = false,
+  }) async {
+    try {
+      final targetDate = targetMonth ?? DateTime.now();
+      final yearMonth = '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}';
+      
+      // アクティブなマスター費用を取得
+      final masterExpenses = await getActiveMasterExpenses();
+      
+      if (masterExpenses.isEmpty) {
+        return ExpenseGenerationResult.error('アクティブなマスター費用がありません');
+      }
+
+      final db = await database;
+      int generatedCount = 0;
+      final List<String> generatedMonths = [yearMonth];
+
+      for (final master in masterExpenses) {
+        // 頻度に基づいて生成が必要かチェック
+        if (!_shouldGenerateExpense(master, targetDate)) {
+          continue;
+        }
+
+        // 同じ月に既に生成されているかチェック
+        final existingExpenses = await db.query(
+          'expenses',
+          where: 'project_name = ? AND category = ? AND date LIKE ?',
+          whereArgs: [master.projectName ?? '', master.category, '$yearMonth-%'],
+        );
+
+        if (existingExpenses.isNotEmpty && !overwriteExisting) {
+          continue; // 既存データがあり上書きしない場合はスキップ
+        }
+
+        // 上書きの場合は既存データを削除
+        if (existingExpenses.isNotEmpty && overwriteExisting) {
+          for (final existing in existingExpenses) {
+            await db.delete('expenses', where: 'id = ?', whereArgs: [existing['id']]);
+          }
+        }
+
+        // 支払日を計算
+        final paymentDay = master.dayOfMonth.clamp(1, _getDaysInMonth(targetDate.year, targetDate.month));
+        final expenseDate = DateTime(targetDate.year, targetDate.month, paymentDay);
+
+        // 新しい費用エントリを作成
+        final expense = Expense(
+          date: expenseDate.toIso8601String().substring(0, 10),
+          projectName: master.projectName ?? '',
+          category: master.category,
+          description: '${master.name} (${master.frequency})',
+          amount: master.amount,
+          paymentMethod: master.paymentMethod,
+          receiptNumber: '',
+          approvalStatus: '未承認',
+          approver: '',
+          notes: master.description ?? '',
+          clientName: '',
+          department: master.department ?? '',
+        );
+
+        await insertExpense(expense);
+        generatedCount++;
+      }
+
+      return ExpenseGenerationResult.success(
+        generatedCount: generatedCount,
+        generatedMonths: generatedMonths,
+      );
+
+    } catch (e) {
+      return ExpenseGenerationResult.error('月次費用生成エラー: $e');
+    }
+  }
+
+  /// 複数月の費用を一括生成
+  Future<ExpenseGenerationResult> generateExpensesForRange({
+    required DateTime startMonth,
+    required DateTime endMonth,
+    bool overwriteExisting = false,
+  }) async {
+    try {
+      int totalGenerated = 0;
+      final List<String> generatedMonths = [];
+
+      DateTime currentMonth = DateTime(startMonth.year, startMonth.month, 1);
+      final endDate = DateTime(endMonth.year, endMonth.month, 1);
+
+      while (currentMonth.isBefore(endDate) || currentMonth.isAtSameMomentAs(endDate)) {
+        final result = await generateMonthlyExpenses(
+          targetMonth: currentMonth,
+          overwriteExisting: overwriteExisting,
+        );
+
+        if (result.success) {
+          totalGenerated += result.generatedCount;
+          generatedMonths.addAll(result.generatedMonths);
+        }
+
+        // 次の月に移動
+        if (currentMonth.month == 12) {
+          currentMonth = DateTime(currentMonth.year + 1, 1, 1);
+        } else {
+          currentMonth = DateTime(currentMonth.year, currentMonth.month + 1, 1);
+        }
+      }
+
+      return ExpenseGenerationResult.success(
+        generatedCount: totalGenerated,
+        generatedMonths: generatedMonths,
+      );
+
+    } catch (e) {
+      return ExpenseGenerationResult.error('複数月費用生成エラー: $e');
+    }
+  }
+
+  /// 頻度に基づいて生成が必要かチェック
+  bool _shouldGenerateExpense(MasterExpenseModel master, DateTime targetDate) {
+    final frequency = ExpenseFrequency.fromString(master.frequency);
+    
+    switch (frequency) {
+      case ExpenseFrequency.monthly:
+        return true;
+      case ExpenseFrequency.quarterly:
+        return targetDate.month % 3 == 1; // 1, 4, 7, 10月
+      case ExpenseFrequency.semiAnnually:
+        return targetDate.month == 1 || targetDate.month == 7;
+      case ExpenseFrequency.yearly:
+        return targetDate.month == 1;
+      case ExpenseFrequency.custom:
+        return true; // カスタムは手動で管理
+    }
+  }
+
+  /// 月の日数を取得
+  int _getDaysInMonth(int year, int month) {
+    return DateTime(year, month + 1, 0).day;
   }
 
   // データベースのクローズ

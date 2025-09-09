@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'master_expense_screen.dart';
 
 class MasterDataScreen extends StatefulWidget {
   const MasterDataScreen({super.key});
@@ -12,6 +13,7 @@ class _MasterDataScreenState extends State<MasterDataScreen> with SingleTickerPr
 
   final List<Tab> _tabs = [
     const Tab(text: '費用マスター'),
+    const Tab(text: 'マスター費用'),
     const Tab(text: '支払い先マスター'),
     const Tab(text: 'プロジェクトマスター'),
   ];
@@ -46,6 +48,7 @@ class _MasterDataScreenState extends State<MasterDataScreen> with SingleTickerPr
         controller: _tabController,
         children: [
           _buildExpenseMasterTab(),
+          const MasterExpenseScreen(),
           _buildPayeeMasterTab(),
           _buildProjectMasterTab(),
         ],
