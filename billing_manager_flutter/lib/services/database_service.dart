@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import '../models/payment_model.dart';
 import '../models/expense_model.dart';
 import '../models/master_expense_model.dart';
+import '../models/reconciliation_model.dart';
 
 class DatabaseService {
   static Database? _database;
@@ -21,7 +22,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -114,6 +115,25 @@ class DatabaseService {
       )
     ''');
 
+    // reconciliations テーブル作成
+    await db.execute('''
+      CREATE TABLE reconciliations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payment_id INTEGER,
+        expense_id INTEGER,
+        reconciliation_type TEXT NOT NULL DEFAULT 'manual',
+        status TEXT NOT NULL DEFAULT 'unmatched',
+        amount_difference REAL,
+        notes TEXT,
+        matched_at TEXT NOT NULL,
+        matched_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (payment_id) REFERENCES payments (id),
+        FOREIGN KEY (expense_id) REFERENCES expenses (id)
+      )
+    ''');
+
     print('データベーステーブルを作成しました');
   }
 
@@ -139,6 +159,28 @@ class DatabaseService {
         )
       ''');
       print('master_expenses テーブルを追加しました');
+    }
+    
+    if (oldVersion < 3) {
+      // reconciliations テーブルを追加
+      await db.execute('''
+        CREATE TABLE reconciliations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          payment_id INTEGER,
+          expense_id INTEGER,
+          reconciliation_type TEXT NOT NULL DEFAULT 'manual',
+          status TEXT NOT NULL DEFAULT 'unmatched',
+          amount_difference REAL,
+          notes TEXT,
+          matched_at TEXT NOT NULL,
+          matched_by TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (payment_id) REFERENCES payments (id),
+          FOREIGN KEY (expense_id) REFERENCES expenses (id)
+        )
+      ''');
+      print('reconciliations テーブルを追加しました');
     }
   }
 
@@ -519,6 +561,184 @@ class DatabaseService {
   /// 月の日数を取得
   int _getDaysInMonth(int year, int month) {
     return DateTime(year, month + 1, 0).day;
+  }
+
+  // Reconciliation CRUD操作
+  Future<int> insertReconciliation(ReconciliationRecord reconciliation) async {
+    final db = await database;
+    return await db.insert('reconciliations', reconciliation.toMap());
+  }
+
+  Future<List<ReconciliationRecord>> getAllReconciliations() async {
+    final db = await database;
+    final maps = await db.query('reconciliations', orderBy: 'matched_at DESC');
+    return List.generate(maps.length, (i) => ReconciliationRecord.fromMap(maps[i]));
+  }
+
+  Future<ReconciliationRecord?> getReconciliation(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'reconciliations',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    
+    if (maps.isNotEmpty) {
+      return ReconciliationRecord.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<List<ReconciliationRecord>> getReconciliationsByIds({
+    List<int>? paymentIds,
+    List<int>? expenseIds,
+  }) async {
+    final db = await database;
+    String whereClause = '1=0'; // Start with false condition
+    List<dynamic> whereArgs = [];
+
+    if (paymentIds != null && paymentIds.isNotEmpty) {
+      whereClause += ' OR payment_id IN (${paymentIds.map((_) => '?').join(',')})';
+      whereArgs.addAll(paymentIds);
+    }
+
+    if (expenseIds != null && expenseIds.isNotEmpty) {
+      whereClause += ' OR expense_id IN (${expenseIds.map((_) => '?').join(',')})';
+      whereArgs.addAll(expenseIds);
+    }
+
+    final maps = await db.query(
+      'reconciliations',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'matched_at DESC',
+    );
+
+    return List.generate(maps.length, (i) => ReconciliationRecord.fromMap(maps[i]));
+  }
+
+  Future<List<ReconciliationRecord>> getReconciliationsByPaymentId(int paymentId) async {
+    final db = await database;
+    final maps = await db.query(
+      'reconciliations',
+      where: 'payment_id = ?',
+      whereArgs: [paymentId],
+      orderBy: 'matched_at DESC',
+    );
+    return List.generate(maps.length, (i) => ReconciliationRecord.fromMap(maps[i]));
+  }
+
+  Future<List<ReconciliationRecord>> getReconciliationsByExpenseId(int expenseId) async {
+    final db = await database;
+    final maps = await db.query(
+      'reconciliations',
+      where: 'expense_id = ?',
+      whereArgs: [expenseId],
+      orderBy: 'matched_at DESC',
+    );
+    return List.generate(maps.length, (i) => ReconciliationRecord.fromMap(maps[i]));
+  }
+
+  Future<List<ReconciliationRecord>> searchReconciliations({
+    String? status,
+    String? reconciliationType,
+    String? startDate,
+    String? endDate,
+  }) async {
+    final db = await database;
+    String whereClause = '1=1';
+    List<dynamic> whereArgs = [];
+
+    if (status != null && status.isNotEmpty) {
+      whereClause += ' AND status = ?';
+      whereArgs.add(status);
+    }
+
+    if (reconciliationType != null && reconciliationType.isNotEmpty) {
+      whereClause += ' AND reconciliation_type = ?';
+      whereArgs.add(reconciliationType);
+    }
+
+    if (startDate != null && startDate.isNotEmpty) {
+      whereClause += ' AND matched_at >= ?';
+      whereArgs.add(startDate);
+    }
+
+    if (endDate != null && endDate.isNotEmpty) {
+      whereClause += ' AND matched_at <= ?';
+      whereArgs.add(endDate);
+    }
+
+    final maps = await db.query(
+      'reconciliations',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'matched_at DESC',
+    );
+
+    return List.generate(maps.length, (i) => ReconciliationRecord.fromMap(maps[i]));
+  }
+
+  Future<int> updateReconciliation(ReconciliationRecord reconciliation) async {
+    final db = await database;
+    return await db.update(
+      'reconciliations',
+      reconciliation.toMap(),
+      where: 'id = ?',
+      whereArgs: [reconciliation.id],
+    );
+  }
+
+  Future<int> deleteReconciliation(int id) async {
+    final db = await database;
+    return await db.delete(
+      'reconciliations',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// 照合統計を取得
+  Future<Map<String, dynamic>> getReconciliationStats({
+    String? startDate,
+    String? endDate,
+  }) async {
+    final db = await database;
+    String dateFilter = '';
+    List<dynamic> whereArgs = [];
+
+    if (startDate != null && endDate != null) {
+      dateFilter = ' WHERE matched_at >= ? AND matched_at <= ?';
+      whereArgs = [startDate, endDate];
+    }
+
+    final result = await db.rawQuery('''
+      SELECT 
+        status,
+        COUNT(*) as count,
+        SUM(CASE WHEN amount_difference IS NOT NULL THEN amount_difference ELSE 0 END) as total_difference
+      FROM reconciliations$dateFilter
+      GROUP BY status
+    ''', whereArgs);
+
+    final stats = <String, dynamic>{
+      'matched': 0,
+      'partial': 0,
+      'unmatched': 0,
+      'total_difference': 0.0,
+    };
+
+    for (final row in result) {
+      final status = row['status'] as String;
+      final count = row['count'] as int;
+      final difference = (row['total_difference'] as num?)?.toDouble() ?? 0.0;
+      
+      stats[status] = count;
+      stats['total_difference'] = (stats['total_difference'] as double) + difference;
+    }
+
+    return stats;
   }
 
   // データベースのクローズ

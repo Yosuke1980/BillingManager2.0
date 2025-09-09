@@ -5,6 +5,7 @@ import 'expenses_screen.dart';
 import 'master_data_screen.dart';
 import 'project_filter_screen.dart';
 import 'monitoring_screen.dart';
+import 'reconciliation_screen.dart';
 import '../services/database_service.dart';
 import '../services/csv_import_service.dart';
 
@@ -23,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     const Tab(text: '支払い管理', icon: Icon(Icons.payment)),
     const Tab(text: '費用管理', icon: Icon(Icons.receipt)),
     const Tab(text: 'マスター管理', icon: Icon(Icons.settings)),
+    const Tab(text: '照合管理', icon: Icon(Icons.compare_arrows)),
     const Tab(text: 'プロジェクトフィルタ', icon: Icon(Icons.filter_alt)),
     const Tab(text: 'モニタリング', icon: Icon(Icons.monitor)),
   ];
@@ -31,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     const PaymentsScreen(),
     const ExpensesScreen(),
     const MasterDataScreen(),
+    const ReconciliationScreen(),
     const ProjectFilterScreen(),
     const MonitoringScreen(),
   ];
@@ -91,6 +94,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'マスター',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.compare_arrows),
+            label: '照合',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.filter_alt),
