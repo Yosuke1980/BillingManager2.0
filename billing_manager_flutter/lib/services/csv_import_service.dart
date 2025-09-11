@@ -26,7 +26,7 @@ class CsvImportService {
     
     for (final encoding in encodings) {
       try {
-        final content = encoding.decode(bytes, allowMalformed: false);
+        final content = encoding.decode(bytes);
         // 日本語文字が含まれているかチェック
         if (content.contains(RegExp(r'[あ-ん]|[ア-ン]|[一-龯]')) || encoding == utf8) {
           return content;
