@@ -262,12 +262,20 @@ class CsvImportService {
         return CsvImportResult.error('CSVファイルが空です');
       }
 
-      // マスター費用データ用のヘッダーマッピング
+      // マスター費用データ用のヘッダーマッピング（既存の支払いデータ形式に対応）
       final headerMapping = {
+        // 既存の支払いデータ形式のマッピング
         '費目名': 'name',
-        'カテゴリ': 'category',
+        '支払先名': 'payee_name',
+        '支払先コード': 'payee_code', 
         '金額': 'amount',
         '頻度': 'frequency',
+        '開始日': 'start_date',
+        '終了日': 'end_date',
+        '備考月日': 'notes',
+        
+        // 従来のマスター費用形式のマッピング（下位互換性）
+        'カテゴリ': 'category',
         '支払日': 'day_of_month',
         '説明': 'description',
         'アクティブ': 'is_active',
@@ -327,19 +335,29 @@ class CsvImportService {
         data[mappedKey] = row[i]?.toString() ?? '';
       }
 
-      // 必須フィールドのチェック
-      if (data['name']?.isEmpty != false ||
-          data['category']?.isEmpty != false ||
-          data['payment_method']?.isEmpty != false) {
+      // 必須フィールドのチェック（支払いデータ形式では費目名のみ必須）
+      if (data['name']?.isEmpty != false) {
         return null;
       }
 
-      // 頻度の正規化
+      // カテゴリの決定（支払先名を使用、なければ'一般'）
+      String category = data['category'] ?? data['payee_name'] ?? '一般';
+      
+      // 支払方法の決定（支払先コードを使用、なければ'銀行振込'）
+      String paymentMethod = data['payment_method'] ?? 
+                           (data['payee_code']?.isNotEmpty == true ? '銀行振込' : '現金');
+
+      // 頻度の正規化（支払いデータ形式に対応）
       String frequency = data['frequency']?.toLowerCase() ?? 'monthly';
       switch (frequency) {
+        case '月額定額':
         case '月次':
         case '毎月':
         case 'monthly':
+          frequency = 'monthly';
+          break;
+        case '回数ベース':
+          // 回数ベースはデフォルトで月次とする
           frequency = 'monthly';
           break;
         case '四半期':
@@ -364,16 +382,16 @@ class CsvImportService {
       final now = DateTime.now();
       return MasterExpenseModel(
         name: data['name']!,
-        category: data['category']!,
+        category: category,
         amount: double.tryParse(data['amount']?.replaceAll(',', '') ?? '0') ?? 0,
         frequency: frequency,
         dayOfMonth: int.tryParse(data['day_of_month'] ?? '1') ?? 1,
-        description: data['description']?.isNotEmpty == true ? data['description'] : null,
+        description: data['description'] ?? data['notes'] ?? data['payee_name'],
         isActive: _parseBoolean(data['is_active'] ?? 'true'),
         projectName: data['project_name']?.isNotEmpty == true ? data['project_name'] : null,
         department: data['department']?.isNotEmpty == true ? data['department'] : null,
-        paymentMethod: data['payment_method']!,
-        tags: data['tags']?.isNotEmpty == true ? data['tags'] : null,
+        paymentMethod: paymentMethod,
+        tags: data['tags'] ?? data['payee_code'],
         createdAt: now,
         updatedAt: now,
       );
