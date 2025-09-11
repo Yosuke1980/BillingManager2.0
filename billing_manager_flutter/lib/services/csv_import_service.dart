@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/payment_model.dart';
@@ -10,6 +12,34 @@ class CsvImportService {
   final DatabaseService _databaseService;
 
   CsvImportService(this._databaseService);
+
+  // CSVファイルを複数のエンコーディングで試行して読み込み
+  Future<String> _readCsvWithEncodingDetection(File file) async {
+    final bytes = await file.readAsBytes();
+    
+    // よく使われるエンコーディングを順番に試行
+    final encodings = [
+      utf8,
+      latin1, // SHIFT-JISの近似として
+      // ascii,
+    ];
+    
+    for (final encoding in encodings) {
+      try {
+        final content = encoding.decode(bytes, allowMalformed: false);
+        // 日本語文字が含まれているかチェック
+        if (content.contains(RegExp(r'[あ-ん]|[ア-ン]|[一-龯]')) || encoding == utf8) {
+          return content;
+        }
+      } catch (e) {
+        // このエンコーディングでは読めないので次を試す
+        continue;
+      }
+    }
+    
+    // すべて失敗した場合はUTF-8で強制読み込み（文字化け許容）
+    return utf8.decode(bytes, allowMalformed: true);
+  }
 
   // CSVファイル選択とインポート処理
   Future<CsvImportResult> importPaymentsFromCsv() async {
@@ -26,7 +56,7 @@ class CsvImportService {
       }
 
       final file = File(result.files.first.path!);
-      final csvContent = await file.readAsString();
+      final csvContent = await _readCsvWithEncodingDetection(file);
       
       // CSVパース
       final List<List<dynamic>> rows = const CsvToListConverter().convert(csvContent);
@@ -95,7 +125,7 @@ class CsvImportService {
       }
 
       final file = File(result.files.first.path!);
-      final csvContent = await file.readAsString();
+      final csvContent = await _readCsvWithEncodingDetection(file);
       
       final List<List<dynamic>> rows = const CsvToListConverter().convert(csvContent);
       
@@ -254,7 +284,7 @@ class CsvImportService {
       }
 
       final file = File(result.files.first.path!);
-      final csvContent = await file.readAsString();
+      final csvContent = await _readCsvWithEncodingDetection(file);
       
       final List<List<dynamic>> rows = const CsvToListConverter().convert(csvContent);
       
