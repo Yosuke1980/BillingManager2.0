@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'payment_model.dart';
 import 'expense_model.dart';
@@ -346,6 +347,3 @@ enum ReconciliationType {
     );
   }
 }
-
-// Flutter Materialインポート
-import 'package:flutter/material.dart';
