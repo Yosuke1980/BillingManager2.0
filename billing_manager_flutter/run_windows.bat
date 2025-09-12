@@ -5,22 +5,36 @@ echo.
 echo Starting Flutter application...
 echo.
 
-REM Enhanced Flutter path detection
+REM Enhanced Flutter path detection with .exe and .bat support
 set FLUTTER_PATH=
-REM Check common installation paths
+REM Check common installation paths (both .exe and .bat)
 if exist "C:\flutter\bin\flutter.exe" (
     set FLUTTER_PATH=C:\flutter\bin\flutter.exe
+) else if exist "C:\flutter\bin\flutter.bat" (
+    set FLUTTER_PATH=C:\flutter\bin\flutter.bat
 ) else if exist "C:\tools\flutter\bin\flutter.exe" (
     set FLUTTER_PATH=C:\tools\flutter\bin\flutter.exe
+) else if exist "C:\tools\flutter\bin\flutter.bat" (
+    set FLUTTER_PATH=C:\tools\flutter\bin\flutter.bat
 ) else if exist "%USERPROFILE%\flutter\bin\flutter.exe" (
     set FLUTTER_PATH=%USERPROFILE%\flutter\bin\flutter.exe
+) else if exist "%USERPROFILE%\flutter\bin\flutter.bat" (
+    set FLUTTER_PATH=%USERPROFILE%\flutter\bin\flutter.bat
+) else if exist "%USERPROFILE%\dev\flutter\bin\flutter.exe" (
+    set FLUTTER_PATH=%USERPROFILE%\dev\flutter\bin\flutter.exe
+) else if exist "%USERPROFILE%\dev\flutter\bin\flutter.bat" (
+    set FLUTTER_PATH=%USERPROFILE%\dev\flutter\bin\flutter.bat
 ) else if exist "%LOCALAPPDATA%\flutter\bin\flutter.exe" (
     set FLUTTER_PATH=%LOCALAPPDATA%\flutter\bin\flutter.exe
+) else if exist "%LOCALAPPDATA%\flutter\bin\flutter.bat" (
+    set FLUTTER_PATH=%LOCALAPPDATA%\flutter\bin\flutter.bat
 ) else if exist "C:\src\flutter\bin\flutter.exe" (
     set FLUTTER_PATH=C:\src\flutter\bin\flutter.exe
+) else if exist "C:\src\flutter\bin\flutter.bat" (
+    set FLUTTER_PATH=C:\src\flutter\bin\flutter.bat
 ) else (
-    REM Try to find flutter in PATH
-    for %%i in (flutter.exe) do (
+    REM Try to find flutter in PATH (both extensions)
+    for %%i in (flutter.exe flutter.bat) do (
         if not "%%~$PATH:i"=="" (
             set FLUTTER_PATH=%%~$PATH:i
         )
@@ -35,6 +49,7 @@ if "%FLUTTER_PATH%"=="" (
     echo - C:\flutter\bin
     echo - C:\tools\flutter\bin
     echo - %USERPROFILE%\flutter\bin
+    echo - %USERPROFILE%\dev\flutter\bin
     pause
     exit /b 1
 )
