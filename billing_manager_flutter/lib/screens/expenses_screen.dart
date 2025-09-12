@@ -23,6 +23,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
   String? _approvalStatusFilter;
   DateTime? _startDateFilter;
   DateTime? _endDateFilter;
+  
+  // 選択機能用の状態管理
+  bool _isSelectionMode = false;
+  Set<int> _selectedExpenseIds = {};
+  bool _selectAll = false;
 
   final List<String> _approvalStatusOptions = [
     '全て',
@@ -192,6 +197,81 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     }
   }
 
+  // 選択モードの切り替え
+  void _toggleSelectionMode() {
+    setState(() {
+      _isSelectionMode = !_isSelectionMode;
+      if (!_isSelectionMode) {
+        _selectedExpenseIds.clear();
+        _selectAll = false;
+      }
+    });
+  }
+
+  // 個別選択の切り替え
+  void _toggleExpenseSelection(int expenseId) {
+    setState(() {
+      if (_selectedExpenseIds.contains(expenseId)) {
+        _selectedExpenseIds.remove(expenseId);
+      } else {
+        _selectedExpenseIds.add(expenseId);
+      }
+      _selectAll = _selectedExpenseIds.length == _filteredExpenses.length;
+    });
+  }
+
+  // 全選択の切り替え
+  void _toggleSelectAll() {
+    setState(() {
+      _selectAll = !_selectAll;
+      if (_selectAll) {
+        _selectedExpenseIds = _filteredExpenses.map((e) => e.id!).toSet();
+      } else {
+        _selectedExpenseIds.clear();
+      }
+    });
+  }
+
+  // 選択した項目の一括削除
+  Future<void> _deleteSelectedExpenses() async {
+    if (_selectedExpenseIds.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('一括削除確認'),
+        content: Text('選択した${_selectedExpenseIds.length}件の費用情報を削除しますか？\nこの操作は取り消せません。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final databaseService = Provider.of<DatabaseService>(context, listen: false);
+        for (final expenseId in _selectedExpenseIds) {
+          await databaseService.deleteExpense(expenseId);
+        }
+        _showSuccessSnackBar('${_selectedExpenseIds.length}件の費用情報を削除しました');
+        _selectedExpenseIds.clear();
+        _selectAll = false;
+        _toggleSelectionMode();
+        _loadExpenses();
+      } catch (e) {
+        _showErrorSnackBar('一括削除に失敗しました: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -224,6 +304,34 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
               _filterExpenses();
             },
           ),
+
+          // 選択モード用のコントロールバー
+          if (_isSelectionMode)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.green.shade100,
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _selectAll,
+                    onChanged: (value) => _toggleSelectAll(),
+                  ),
+                  Text('全選択 (${_selectedExpenseIds.length}/${_filteredExpenses.length})'),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: _selectedExpenseIds.isEmpty ? null : _deleteSelectedExpenses,
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    icon: const Icon(Icons.delete, color: Colors.white),
+                    label: const Text('削除', style: TextStyle(color: Colors.white)),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _toggleSelectionMode,
+                    child: const Text('キャンセル'),
+                  ),
+                ],
+              ),
+            ),
           
           // 統計情報
           Container(
@@ -278,21 +386,49 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           itemCount: _filteredExpenses.length,
                           itemBuilder: (context, index) {
                             final expense = _filteredExpenses[index];
-                            return ExpenseListItem(
-                              expense: expense,
-                              onEdit: () => _editExpense(expense),
-                              onDelete: () => _deleteExpense(expense),
-                            );
+                            final isSelected = _selectedExpenseIds.contains(expense.id);
+                            
+                            return _isSelectionMode
+                                ? CheckboxListTile(
+                                    value: isSelected,
+                                    onChanged: (checked) => _toggleExpenseSelection(expense.id!),
+                                    title: Text(expense.description),
+                                    subtitle: Text('${expense.category} - ${NumberFormat('#,###').format(expense.amount)}円'),
+                                    secondary: CircleAvatar(
+                                      backgroundColor: _getApprovalStatusColor(expense.approvalStatus),
+                                      child: Text(expense.approvalStatus.substring(0, 1)),
+                                    ),
+                                  )
+                                : ExpenseListItem(
+                                    expense: expense,
+                                    onEdit: () => _editExpense(expense),
+                                    onDelete: () => _deleteExpense(expense),
+                                  );
                           },
                         ),
                       ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addExpense,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _isSelectionMode
+          ? null
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                FloatingActionButton(
+                  heroTag: "select_expense",
+                  onPressed: _toggleSelectionMode,
+                  backgroundColor: Colors.orange,
+                  child: const Icon(Icons.checklist),
+                ),
+                const SizedBox(width: 16),
+                FloatingActionButton(
+                  heroTag: "add_expense",
+                  onPressed: _addExpense,
+                  child: const Icon(Icons.add),
+                ),
+              ],
+            ),
     );
   }
 
@@ -323,5 +459,18 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         ),
       ),
     );
+  }
+
+  Color _getApprovalStatusColor(String status) {
+    switch (status) {
+      case '未承認':
+        return Colors.orange;
+      case '承認済み':
+        return Colors.green;
+      case '却下':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 }

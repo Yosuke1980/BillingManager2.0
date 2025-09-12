@@ -23,6 +23,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   String? _payeeFilter;
   DateTime? _startDateFilter;
   DateTime? _endDateFilter;
+  
+  // 選択機能用の状態管理
+  bool _isSelectionMode = false;
+  Set<int> _selectedPaymentIds = {};
+  bool _selectAll = false;
 
   final List<String> _statusOptions = [
     '全て',
@@ -182,6 +187,81 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     }
   }
 
+  // 選択モードの切り替え
+  void _toggleSelectionMode() {
+    setState(() {
+      _isSelectionMode = !_isSelectionMode;
+      if (!_isSelectionMode) {
+        _selectedPaymentIds.clear();
+        _selectAll = false;
+      }
+    });
+  }
+
+  // 個別選択の切り替え
+  void _togglePaymentSelection(int paymentId) {
+    setState(() {
+      if (_selectedPaymentIds.contains(paymentId)) {
+        _selectedPaymentIds.remove(paymentId);
+      } else {
+        _selectedPaymentIds.add(paymentId);
+      }
+      _selectAll = _selectedPaymentIds.length == _filteredPayments.length;
+    });
+  }
+
+  // 全選択の切り替え
+  void _toggleSelectAll() {
+    setState(() {
+      _selectAll = !_selectAll;
+      if (_selectAll) {
+        _selectedPaymentIds = _filteredPayments.map((p) => p.id!).toSet();
+      } else {
+        _selectedPaymentIds.clear();
+      }
+    });
+  }
+
+  // 選択した項目の一括削除
+  Future<void> _deleteSelectedPayments() async {
+    if (_selectedPaymentIds.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('一括削除確認'),
+        content: Text('選択した${_selectedPaymentIds.length}件の支払い情報を削除しますか？\nこの操作は取り消せません。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final databaseService = Provider.of<DatabaseService>(context, listen: false);
+        for (final paymentId in _selectedPaymentIds) {
+          await databaseService.deletePayment(paymentId);
+        }
+        _showSuccessSnackBar('${_selectedPaymentIds.length}件の支払い情報を削除しました');
+        _selectedPaymentIds.clear();
+        _selectAll = false;
+        _toggleSelectionMode();
+        _loadPayments();
+      } catch (e) {
+        _showErrorSnackBar('一括削除に失敗しました: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -208,6 +288,34 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               _filterPayments();
             },
           ),
+
+          // 選択モード用のコントロールバー
+          if (_isSelectionMode)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.blue.shade100,
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _selectAll,
+                    onChanged: (value) => _toggleSelectAll(),
+                  ),
+                  Text('全選択 (${_selectedPaymentIds.length}/${_filteredPayments.length})'),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: _selectedPaymentIds.isEmpty ? null : _deleteSelectedPayments,
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    icon: const Icon(Icons.delete, color: Colors.white),
+                    label: const Text('削除', style: TextStyle(color: Colors.white)),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _toggleSelectionMode,
+                    child: const Text('キャンセル'),
+                  ),
+                ],
+              ),
+            ),
           
           // 統計情報
           Container(
@@ -262,21 +370,49 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                           itemCount: _filteredPayments.length,
                           itemBuilder: (context, index) {
                             final payment = _filteredPayments[index];
-                            return PaymentListItem(
-                              payment: payment,
-                              onEdit: () => _editPayment(payment),
-                              onDelete: () => _deletePayment(payment),
-                            );
+                            final isSelected = _selectedPaymentIds.contains(payment.id);
+                            
+                            return _isSelectionMode
+                                ? CheckboxListTile(
+                                    value: isSelected,
+                                    onChanged: (checked) => _togglePaymentSelection(payment.id!),
+                                    title: Text(payment.subject),
+                                    subtitle: Text('${payment.payee} - ${NumberFormat('#,###').format(payment.amount)}円'),
+                                    secondary: CircleAvatar(
+                                      backgroundColor: _getStatusColor(payment.status),
+                                      child: Text(payment.status.substring(0, 1)),
+                                    ),
+                                  )
+                                : PaymentListItem(
+                                    payment: payment,
+                                    onEdit: () => _editPayment(payment),
+                                    onDelete: () => _deletePayment(payment),
+                                  );
                           },
                         ),
                       ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addPayment,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _isSelectionMode
+          ? null
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                FloatingActionButton(
+                  heroTag: "select",
+                  onPressed: _toggleSelectionMode,
+                  backgroundColor: Colors.orange,
+                  child: const Icon(Icons.checklist),
+                ),
+                const SizedBox(width: 16),
+                FloatingActionButton(
+                  heroTag: "add",
+                  onPressed: _addPayment,
+                  child: const Icon(Icons.add),
+                ),
+              ],
+            ),
     );
   }
 
@@ -307,5 +443,20 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         ),
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case '未処理':
+        return Colors.orange;
+      case '処理中':
+        return Colors.blue;
+      case '完了':
+        return Colors.green;
+      case '保留':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 }

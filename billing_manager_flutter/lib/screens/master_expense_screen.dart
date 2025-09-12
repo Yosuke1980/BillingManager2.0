@@ -16,6 +16,11 @@ class _MasterExpenseScreenState extends State<MasterExpenseScreen> {
   List<MasterExpenseModel> _masterExpenses = [];
   List<MasterExpenseModel> _filteredExpenses = [];
   bool _isLoading = false;
+  
+  // 選択機能用の状態管理
+  bool _isSelectionMode = false;
+  Set<int> _selectedExpenseIds = {};
+  bool _selectAll = false;
 
   @override
   void initState() {
@@ -70,17 +75,38 @@ class _MasterExpenseScreenState extends State<MasterExpenseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('マスター費用管理'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadMasterExpenses,
-          ),
-          IconButton(
-            icon: const Icon(Icons.calendar_month),
-            onPressed: _showMonthlyGenerationDialog,
-          ),
-        ],
+        title: Text(_isSelectionMode ? '選択モード' : 'マスター費用管理'),
+        leading: _isSelectionMode 
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _toggleSelectionMode,
+              )
+            : null,
+        actions: _isSelectionMode 
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.select_all),
+                  onPressed: _toggleSelectAll,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete),
+                  onPressed: _selectedExpenseIds.isEmpty ? null : _deleteSelectedExpenses,
+                ),
+              ]
+            : [
+                IconButton(
+                  icon: const Icon(Icons.checklist),
+                  onPressed: _toggleSelectionMode,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadMasterExpenses,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.calendar_month),
+                  onPressed: _showMonthlyGenerationDialog,
+                ),
+              ],
       ),
       body: Column(
         children: [
@@ -114,6 +140,24 @@ class _MasterExpenseScreenState extends State<MasterExpenseScreen> {
             ),
           ),
           
+          // 選択モード用のコントロールバー
+          if (_isSelectionMode)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.blue.shade100,
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: _selectAll,
+                    onChanged: (value) => _toggleSelectAll(),
+                  ),
+                  Text('全選択 (${_selectedExpenseIds.length}/${_filteredExpenses.length})'),
+                  const Spacer(),
+                  Text('${_selectedExpenseIds.length}件選択中'),
+                ],
+              ),
+            ),
+          
           const SizedBox(height: 8),
           
           // マスター費用リスト
@@ -139,16 +183,35 @@ class _MasterExpenseScreenState extends State<MasterExpenseScreen> {
                         itemCount: _filteredExpenses.length,
                         itemBuilder: (context, index) {
                           final expense = _filteredExpenses[index];
-                          return _buildExpenseCard(expense);
+                          final isSelected = _selectedExpenseIds.contains(expense.id);
+                          
+                          return _isSelectionMode
+                              ? CheckboxListTile(
+                                  value: isSelected,
+                                  onChanged: (checked) => _toggleExpenseSelection(expense.id!),
+                                  title: Text(expense.name),
+                                  subtitle: Text('${expense.category} - ¥${NumberFormat('#,###').format(expense.amount)}'),
+                                  secondary: CircleAvatar(
+                                    backgroundColor: expense.isActive ? Colors.green : Colors.grey,
+                                    child: Icon(
+                                      expense.isActive ? Icons.check_circle : Icons.pause_circle,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ),
+                                )
+                              : _buildExpenseCard(expense);
                         },
                       ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showExpenseDialog(),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _isSelectionMode
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showExpenseDialog(),
+              child: const Icon(Icons.add),
+            ),
     );
   }
 
@@ -304,6 +367,83 @@ class _MasterExpenseScreenState extends State<MasterExpenseScreen> {
       );
     } catch (e) {
       _showErrorDialog('削除エラー', '削除に失敗しました: $e');
+    }
+  }
+
+  // 選択モードの切り替え
+  void _toggleSelectionMode() {
+    setState(() {
+      _isSelectionMode = !_isSelectionMode;
+      if (!_isSelectionMode) {
+        _selectedExpenseIds.clear();
+        _selectAll = false;
+      }
+    });
+  }
+
+  // 個別選択の切り替え
+  void _toggleExpenseSelection(int expenseId) {
+    setState(() {
+      if (_selectedExpenseIds.contains(expenseId)) {
+        _selectedExpenseIds.remove(expenseId);
+      } else {
+        _selectedExpenseIds.add(expenseId);
+      }
+      _selectAll = _selectedExpenseIds.length == _filteredExpenses.length;
+    });
+  }
+
+  // 全選択の切り替え
+  void _toggleSelectAll() {
+    setState(() {
+      _selectAll = !_selectAll;
+      if (_selectAll) {
+        _selectedExpenseIds = _filteredExpenses.map((e) => e.id!).toSet();
+      } else {
+        _selectedExpenseIds.clear();
+      }
+    });
+  }
+
+  // 選択した項目の一括削除
+  Future<void> _deleteSelectedExpenses() async {
+    if (_selectedExpenseIds.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('一括削除確認'),
+        content: Text('選択した${_selectedExpenseIds.length}件のマスター費用を削除しますか？\nこの操作は取り消せません。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final databaseService = Provider.of<DatabaseService>(context, listen: false);
+        for (final expenseId in _selectedExpenseIds) {
+          await databaseService.deleteMasterExpense(expenseId);
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${_selectedExpenseIds.length}件のマスター費用を削除しました')),
+        );
+        _selectedExpenseIds.clear();
+        _selectAll = false;
+        _toggleSelectionMode();
+        _loadMasterExpenses();
+      } catch (e) {
+        _showErrorDialog('一括削除エラー', '一括削除に失敗しました: $e');
+      }
     }
   }
 

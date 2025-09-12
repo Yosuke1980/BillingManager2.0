@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/payment_model.dart';
 import '../models/expense_model.dart';
 import '../models/master_expense_model.dart';
@@ -13,32 +14,109 @@ class CsvImportService {
 
   CsvImportService(this._databaseService);
 
-  // CSVファイルを複数のエンコーディングで試行して読み込み
+  // CSVファイルを自動的にUTF-8に変換して読み込み
   Future<String> _readCsvWithEncodingDetection(File file) async {
     final bytes = await file.readAsBytes();
+    print('Debug: File size: ${bytes.length} bytes');
     
-    // よく使われるエンコーディングを順番に試行
-    final encodings = [
-      utf8,
-      latin1, // SHIFT-JISの近似として
-      // ascii,
-    ];
+    // 1. Shift_JISかどうかを判定
+    if (await _isShiftJisEncoded(bytes)) {
+      print('Debug: Detected Shift_JIS encoding, converting to UTF-8');
+      return await _convertShiftJisToUtf8UsingIconv(file);
+    }
     
-    for (final encoding in encodings) {
-      try {
-        final content = encoding.decode(bytes);
-        // 日本語文字が含まれているかチェック
-        if (content.contains(RegExp(r'[あ-ん]|[ア-ン]|[一-龯]')) || encoding == utf8) {
-          return content;
+    // 2. UTF-8として読み込み
+    try {
+      final content = utf8.decode(bytes);
+      // 文字化けチェック：制御文字や変な文字が多すぎないかチェック
+      final weirdCharCount = content.split('').where((c) => 
+        c.codeUnitAt(0) < 32 && c != '\n' && c != '\r' && c != '\t').length;
+      
+      if (weirdCharCount < content.length * 0.1) { // 10%未満なら正常とみなす
+        print('Debug: Using UTF-8 encoding, weird chars: $weirdCharCount/${content.length}');
+        return content;
+      } else {
+        print('Debug: UTF-8 has too many weird chars: $weirdCharCount/${content.length}');
+      }
+    } catch (e) {
+      print('Debug: UTF-8 failed: $e');
+    }
+    
+    // 3. Latin1（バックアップ）を試す
+    try {
+      final content = latin1.decode(bytes);
+      print('Debug: Using Latin1 encoding as fallback');
+      return content;
+    } catch (e) {
+      print('Debug: Latin1 failed: $e');
+    }
+    
+    // 4. 最後の手段：UTF-8でエラーを許容
+    print('Debug: Using UTF-8 with allowMalformed');
+    return utf8.decode(bytes, allowMalformed: true);
+  }
+
+  // Shift_JISエンコーディング判定
+  Future<bool> _isShiftJisEncoded(List<int> bytes) async {
+    // Shift_JISの特徴的なバイトパターンをチェック
+    int shiftJisLikeBytes = 0;
+    for (int i = 0; i < bytes.length - 1; i++) {
+      final byte1 = bytes[i];
+      final byte2 = bytes[i + 1];
+      
+      // Shift_JISの2バイト文字の範囲
+      if ((byte1 >= 0x81 && byte1 <= 0x9f) || (byte1 >= 0xe0 && byte1 <= 0xfc)) {
+        if ((byte2 >= 0x40 && byte2 <= 0x7e) || (byte2 >= 0x80 && byte2 <= 0xfc)) {
+          shiftJisLikeBytes += 2;
+          i++; // 2バイト処理したのでスキップ
         }
-      } catch (e) {
-        // このエンコーディングでは読めないので次を試す
-        continue;
       }
     }
     
-    // すべて失敗した場合はUTF-8で強制読み込み（文字化け許容）
-    return utf8.decode(bytes, allowMalformed: true);
+    // 全体の10%以上がShift_JISパターンならShift_JISと判定
+    final ratio = shiftJisLikeBytes / bytes.length;
+    print('Debug: Shift_JIS pattern ratio: ${ratio * 100}%');
+    return ratio > 0.1;
+  }
+
+  // システムiconvを使用したShift_JIS→UTF-8変換
+  Future<String> _convertShiftJisToUtf8UsingIconv(File originalFile) async {
+    try {
+      // 一時ディレクトリを取得
+      final tempDir = await getTemporaryDirectory();
+      final tempUtf8File = File('${tempDir.path}/temp_utf8_${DateTime.now().millisecondsSinceEpoch}.csv');
+      
+      // iconvコマンドでShift_JIS→UTF-8変換
+      final result = await Process.run('iconv', [
+        '-f', 'SHIFT_JIS',
+        '-t', 'UTF-8',
+        originalFile.path
+      ]);
+      
+      if (result.exitCode == 0) {
+        // 変換成功：UTF-8として書き出し
+        await tempUtf8File.writeAsString(result.stdout as String);
+        final content = await tempUtf8File.readAsString();
+        
+        // 一時ファイル削除
+        if (await tempUtf8File.exists()) {
+          await tempUtf8File.delete();
+        }
+        
+        print('Debug: Successfully converted Shift_JIS to UTF-8 using iconv');
+        final sample = content.length > 100 ? content.substring(0, 100) : content;
+        print('Debug: Converted sample: ${sample.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
+        return content;
+      } else {
+        print('Debug: iconv conversion failed: ${result.stderr}');
+        throw Exception('iconv conversion failed: ${result.stderr}');
+      }
+    } catch (e) {
+      print('Debug: Error during iconv conversion: $e');
+      // フォールバック：UTF-8エラー許容読み込み
+      final bytes = await originalFile.readAsBytes();
+      return utf8.decode(bytes, allowMalformed: true);
+    }
   }
 
   // CSVファイル選択とインポート処理
@@ -357,28 +435,37 @@ class CsvImportService {
     Map<String, String> headerMapping,
   ) {
     try {
-      final Map<String, String> data = {};
+      // デバッグログ出力
+      print('Debug: Headers = $headers');
+      print('Debug: Raw row = $row');
       
-      for (int i = 0; i < headers.length && i < row.length; i++) {
-        final headerKey = headers[i];
-        final mappedKey = headerMapping[headerKey] ?? headerKey.toLowerCase();
-        data[mappedKey] = row[i]?.toString() ?? '';
-      }
+      // 位置ベースで直接データを取得（Mapを使わずに）
+      String? name, payeeName, payeeCode, amountStr, frequencyStr;
+      
+      if (row.length >= 2) name = row[1]?.toString();           // 2番目：名前（費目名）
+      if (row.length >= 3) payeeName = row[2]?.toString();      // 3番目：支払先名
+      if (row.length >= 4) payeeCode = row[3]?.toString();      // 4番目：支払先コード  
+      if (row.length >= 5) amountStr = row[4]?.toString();      // 5番目：金額
+      if (row.length >= 6) frequencyStr = row[5]?.toString();   // 6番目：頻度
+      
+      print('Debug: Name (index 1) = $name');
+      print('Debug: PayeeName (index 2) = $payeeName');
+      print('Debug: Amount (index 4) = $amountStr');
 
       // 必須フィールドのチェック（支払いデータ形式では費目名のみ必須）
-      if (data['name']?.isEmpty != false) {
+      if (name?.trim().isEmpty != false) {
+        print('Debug: Name field is empty or null');
         return null;
       }
 
       // カテゴリの決定（支払先名を使用、なければ'一般'）
-      String category = data['category'] ?? data['payee_name'] ?? '一般';
+      String category = payeeName ?? '一般';
       
       // 支払方法の決定（支払先コードを使用、なければ'銀行振込'）
-      String paymentMethod = data['payment_method'] ?? 
-                           (data['payee_code']?.isNotEmpty == true ? '銀行振込' : '現金');
+      String paymentMethod = (payeeCode?.isNotEmpty == true ? '銀行振込' : '現金');
 
       // 頻度の正規化（支払いデータ形式に対応）
-      String frequency = data['frequency']?.toLowerCase() ?? 'monthly';
+      String frequency = frequencyStr?.toLowerCase() ?? 'monthly';
       switch (frequency) {
         case '月額定額':
         case '月次':
@@ -411,17 +498,17 @@ class CsvImportService {
 
       final now = DateTime.now();
       return MasterExpenseModel(
-        name: data['name']!,
+        name: name!,
         category: category,
-        amount: double.tryParse(data['amount']?.replaceAll(',', '') ?? '0') ?? 0,
+        amount: double.tryParse((amountStr ?? '0').replaceAll(',', '')) ?? 0,
         frequency: frequency,
-        dayOfMonth: int.tryParse(data['day_of_month'] ?? '1') ?? 1,
-        description: data['description'] ?? data['notes'] ?? data['payee_name'],
-        isActive: _parseBoolean(data['is_active'] ?? 'true'),
-        projectName: data['project_name']?.isNotEmpty == true ? data['project_name'] : null,
-        department: data['department']?.isNotEmpty == true ? data['department'] : null,
+        dayOfMonth: 1,
+        description: payeeName ?? name,
+        isActive: true,
+        projectName: null,
+        department: null,
         paymentMethod: paymentMethod,
-        tags: data['tags'] ?? data['payee_code'],
+        tags: payeeCode,
         createdAt: now,
         updatedAt: now,
       );
