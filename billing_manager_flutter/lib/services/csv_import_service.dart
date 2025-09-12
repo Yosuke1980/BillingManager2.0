@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 import '../models/payment_model.dart';
 import '../models/expense_model.dart';
 import '../models/master_expense_model.dart';
@@ -79,44 +80,132 @@ class CsvImportService {
     return ratio > 0.1;
   }
 
-  // システムiconvを使用したShift_JIS→UTF-8変換
+  // クロスプラットフォーム対応のShift_JIS→UTF-8変換
   Future<String> _convertShiftJisToUtf8UsingIconv(File originalFile) async {
     try {
-      // 一時ディレクトリを取得
-      final tempDir = await getTemporaryDirectory();
-      final tempUtf8File = File('${tempDir.path}/temp_utf8_${DateTime.now().millisecondsSinceEpoch}.csv');
-      
-      // iconvコマンドでShift_JIS→UTF-8変換
-      final result = await Process.run('iconv', [
-        '-f', 'SHIFT_JIS',
-        '-t', 'UTF-8',
-        originalFile.path
+      // プラットフォーム検出
+      if (Platform.isWindows) {
+        // Windows: PowerShellを使用した変換
+        return await _convertShiftJisOnWindows(originalFile);
+      } else if (Platform.isMacOS || Platform.isLinux) {
+        // macOS/Linux: iconvコマンドを使用
+        return await _convertShiftJisUsingIconv(originalFile);
+      } else {
+        // その他プラットフォーム: フォールバック変換
+        return await _convertShiftJisFallback(originalFile);
+      }
+    } catch (e) {
+      print('Debug: Error during Shift_JIS conversion: $e');
+      // 最終フォールバック：UTF-8エラー許容読み込み
+      final bytes = await originalFile.readAsBytes();
+      return utf8.decode(bytes, allowMalformed: true);
+    }
+  }
+
+  // Windows用のShift_JIS変換
+  Future<String> _convertShiftJisOnWindows(File originalFile) async {
+    try {
+      // PowerShellを使用してShift_JIS→UTF-8変換
+      final result = await Process.run('powershell', [
+        '-Command',
+        'Get-Content "${originalFile.path}" -Encoding Default | Out-String -Width 4096'
       ]);
       
       if (result.exitCode == 0) {
-        // 変換成功：UTF-8として書き出し
-        await tempUtf8File.writeAsString(result.stdout as String);
-        final content = await tempUtf8File.readAsString();
-        
-        // 一時ファイル削除
-        if (await tempUtf8File.exists()) {
-          await tempUtf8File.delete();
-        }
-        
-        print('Debug: Successfully converted Shift_JIS to UTF-8 using iconv');
+        print('Debug: Successfully converted Shift_JIS to UTF-8 using PowerShell');
+        final content = result.stdout as String;
         final sample = content.length > 100 ? content.substring(0, 100) : content;
         print('Debug: Converted sample: ${sample.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
         return content;
       } else {
-        print('Debug: iconv conversion failed: ${result.stderr}');
-        throw Exception('iconv conversion failed: ${result.stderr}');
+        throw Exception('PowerShell conversion failed: ${result.stderr}');
       }
     } catch (e) {
-      print('Debug: Error during iconv conversion: $e');
-      // フォールバック：UTF-8エラー許容読み込み
-      final bytes = await originalFile.readAsBytes();
-      return utf8.decode(bytes, allowMalformed: true);
+      print('Debug: PowerShell conversion failed, trying fallback: $e');
+      return await _convertShiftJisFallback(originalFile);
     }
+  }
+
+  // macOS/Linux用のiconv変換
+  Future<String> _convertShiftJisUsingIconv(File originalFile) async {
+    final result = await Process.run('iconv', [
+      '-f', 'SHIFT_JIS',
+      '-t', 'UTF-8',
+      originalFile.path
+    ]);
+    
+    if (result.exitCode == 0) {
+      print('Debug: Successfully converted Shift_JIS to UTF-8 using iconv');
+      final content = result.stdout as String;
+      final sample = content.length > 100 ? content.substring(0, 100) : content;
+      print('Debug: Converted sample: ${sample.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
+      return content;
+    } else {
+      throw Exception('iconv conversion failed: ${result.stderr}');
+    }
+  }
+
+  // フォールバック変換（プラットフォーム非依存）
+  Future<String> _convertShiftJisFallback(File originalFile) async {
+    final bytes = await originalFile.readAsBytes();
+    
+    // 拡張Shift_JISマッピングテーブル
+    final Map<List<int>, String> shiftJisMap = {
+      // ヘッダー用基本文字
+      [0x88, 0xc4]: '案', [0x8c, 0x8f]: '件', [0x96, 0xbc]: '名',
+      [0x8e, 0x78]: '支', [0x95, 0xa5]: '払', [0x82, 0xa2]: 'い',
+      [0x90, 0xe6]: '先', [0x83, 0x52]: 'コ', [0x81, 0x5b]: 'ー', [0x83, 0x68]: 'ド',
+      [0x8b, 0xe0]: '金', [0x8a, 0x7a]: '額', [0x8e, 0xed]: '種', [0x95, 0xca]: '別',
+      [0x8a, 0x4a]: '開', [0x8e, 0x6e]: '始', [0x93, 0xfa]: '日',
+      [0x8f, 0x49]: '終', [0x97, 0xb9]: '了', [0x95, 0xfa]: '放', [0x91, 0x97]: '送',
+      [0x97, 0x6a]: '曜', [0x8c, 0x8e]: '月', [0x8a, 0x7d]: '額',
+      [0x8c, 0x55]: '固', [0x92, 0xe8]: '定',
+      // 会社関連
+      [0x8a, 0x94]: '株', [0x8e, 0xae]: '式', [0x89, 0xef]: '会', [0x8e, 0xd0]: '社',
+      [0x97, 0x4d]: '有', [0x8c, 0xc0]: '限', [0x8d, 0x87]: '合', [0x93, 0xaf]: '同',
+      // 一般的な漢字
+      [0x90, 0xa7]: '制', [0x8d, 0xec]: '作', [0x8e, 0x67]: '使', [0x97, 0x70]: '用',
+      [0x97, 0xbf]: '料', [0x8f, 0x6f]: '出', [0x89, 0xf1]: '演', [0x82, 0xc5]: 'で',
+      [0x82, 0xcc]: 'の', [0x82, 0xc9]: 'に', [0x82, 0xcd]: 'は', [0x82, 0xc6]: 'と',
+      // カタカナ
+      [0x83, 0x41]: 'ア', [0x83, 0x43]: 'イ', [0x83, 0x45]: 'ウ', [0x83, 0x47]: 'エ', [0x83, 0x49]: 'オ',
+      [0x83, 0x4a]: 'カ', [0x83, 0x4c]: 'キ', [0x83, 0x4e]: 'ク', [0x83, 0x50]: 'ケ', [0x83, 0x52]: 'コ',
+      [0x83, 0x54]: 'サ', [0x83, 0x56]: 'シ', [0x83, 0x58]: 'ス', [0x83, 0x5a]: 'セ', [0x83, 0x5c]: 'ソ',
+      [0x83, 0x5e]: 'タ', [0x83, 0x60]: 'チ', [0x83, 0x62]: 'ツ', [0x83, 0x64]: 'テ', [0x83, 0x66]: 'ト',
+      [0x83, 0x69]: 'ナ', [0x83, 0x6a]: 'ニ', [0x83, 0x6c]: 'ヌ', [0x83, 0x6d]: 'ネ', [0x83, 0x6e]: 'ノ',
+      [0x83, 0x6f]: 'ハ', [0x83, 0x72]: 'ヒ', [0x83, 0x74]: 'フ', [0x83, 0x77]: 'ヘ', [0x83, 0x7a]: 'ホ',
+      [0x83, 0x7d]: 'マ', [0x83, 0x7e]: 'ミ', [0x83, 0x80]: 'ム', [0x83, 0x81]: 'メ', [0x83, 0x82]: 'モ',
+      [0x83, 0x84]: 'ヤ', [0x83, 0x86]: 'ユ', [0x83, 0x88]: 'ヨ',
+      [0x83, 0x89]: 'ラ', [0x83, 0x8a]: 'リ', [0x83, 0x8b]: 'ル', [0x83, 0x8c]: 'レ', [0x83, 0x8d]: 'ロ',
+      [0x83, 0x8f]: 'ワ', [0x83, 0x92]: 'ヲ', [0x83, 0x93]: 'ン',
+    };
+    
+    final result = StringBuffer();
+    for (int i = 0; i < bytes.length; i++) {
+      if (bytes[i] >= 0x81 && bytes[i] <= 0xfc && i + 1 < bytes.length) {
+        // Shift_JIS 2バイト文字の可能性
+        final key = [bytes[i], bytes[i + 1]];
+        if (shiftJisMap.containsKey(key)) {
+          result.write(shiftJisMap[key]!);
+          i++; // 2バイト消費
+          continue;
+        }
+      }
+      
+      // ASCII文字はそのまま
+      if (bytes[i] < 0x80) {
+        result.write(String.fromCharCode(bytes[i]));
+      } else {
+        // 未対応の文字は「?」で置換
+        result.write('?');
+      }
+    }
+    
+    print('Debug: Used fallback Shift_JIS conversion');
+    final content = result.toString();
+    final sample = content.length > 100 ? content.substring(0, 100) : content;
+    print('Debug: Fallback sample: ${sample.replaceAll('\n', '\\n').replaceAll('\r', '\\r')}');
+    return content;
   }
 
   // CSVファイル選択とインポート処理
