@@ -22,17 +22,28 @@ if errorlevel 1 (
 echo Found Flutter in PATH
 echo.
 
+REM Check Flutter doctor first
+echo Checking Flutter setup...
+flutter doctor
+
 REM Enable Windows desktop support
 echo Enabling Windows desktop support...
 flutter config --enable-windows-desktop
 
-REM Install dependencies
+REM Clean and get dependencies
+echo Cleaning project...
+flutter clean
+
 echo Installing dependencies...
 flutter pub get
 
-REM Start the application
+REM Check available devices
+echo Checking available devices...
+flutter devices
+
+REM Start the application with verbose output
 echo Starting application...
-flutter run -d windows
+flutter run -d windows --verbose
 
 echo.
 echo Application has exited.
