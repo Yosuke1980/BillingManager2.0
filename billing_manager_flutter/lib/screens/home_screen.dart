@@ -213,6 +213,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             },
             child: const Text('費用データ'),
           ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _importMasterExpensesCsv();
+            },
+            child: const Text('マスター費用'),
+          ),
         ],
       ),
     );
@@ -259,6 +266,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       if (result.success) {
         _showImportResultDialog(
           '費用データインポート完了',
+          '成功: ${result.successCount}件\nエラー: ${result.errorCount}件',
+          result.errors,
+        );
+      } else {
+        _showErrorDialog('インポートエラー', result.errorMessage ?? '不明なエラーが発生しました');
+      }
+    } catch (e) {
+      _showErrorDialog('インポートエラー', 'インポート処理中にエラーが発生しました: $e');
+    }
+  }
+
+  Future<void> _importMasterExpensesCsv() async {
+    try {
+      final databaseService = Provider.of<DatabaseService>(context, listen: false);
+      final csvService = CsvImportService(databaseService);
+      
+      // インポート処理実行
+      final result = await csvService.importMasterExpensesFromCsv();
+      
+      if (result.cancelled) {
+        return; // キャンセルされた場合は何もしない
+      }
+      
+      if (result.success) {
+        _showImportResultDialog(
+          'マスター費用データインポート完了',
           '成功: ${result.successCount}件\nエラー: ${result.errorCount}件',
           result.errors,
         );

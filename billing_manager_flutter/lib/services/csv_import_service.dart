@@ -1,14 +1,45 @@
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/payment_model.dart';
 import '../models/expense_model.dart';
+import '../models/master_expense_model.dart';
 import 'database_service.dart';
 
 class CsvImportService {
   final DatabaseService _databaseService;
 
   CsvImportService(this._databaseService);
+
+  // CSVファイルを複数のエンコーディングで試行して読み込み
+  Future<String> _readCsvWithEncodingDetection(File file) async {
+    final bytes = await file.readAsBytes();
+    
+    // よく使われるエンコーディングを順番に試行
+    final encodings = [
+      utf8,
+      latin1, // SHIFT-JISの近似として
+      // ascii,
+    ];
+    
+    for (final encoding in encodings) {
+      try {
+        final content = encoding.decode(bytes);
+        // 日本語文字が含まれているかチェック
+        if (content.contains(RegExp(r'[あ-ん]|[ア-ン]|[一-龯]')) || encoding == utf8) {
+          return content;
+        }
+      } catch (e) {
+        // このエンコーディングでは読めないので次を試す
+        continue;
+      }
+    }
+    
+    // すべて失敗した場合はUTF-8で強制読み込み（文字化け許容）
+    return utf8.decode(bytes, allowMalformed: true);
+  }
 
   // CSVファイル選択とインポート処理
   Future<CsvImportResult> importPaymentsFromCsv() async {
@@ -25,7 +56,7 @@ class CsvImportService {
       }
 
       final file = File(result.files.first.path!);
-      final csvContent = await file.readAsString();
+      final csvContent = await _readCsvWithEncodingDetection(file);
       
       // CSVパース
       final List<List<dynamic>> rows = const CsvToListConverter().convert(csvContent);
@@ -94,7 +125,7 @@ class CsvImportService {
       }
 
       final file = File(result.files.first.path!);
-      final csvContent = await file.readAsString();
+      final csvContent = await _readCsvWithEncodingDetection(file);
       
       final List<List<dynamic>> rows = const CsvToListConverter().convert(csvContent);
       
@@ -237,6 +268,177 @@ class CsvImportService {
     } catch (e) {
       return null;
     }
+  }
+
+  // マスター費用データのCSVインポート
+  Future<CsvImportResult> importMasterExpensesFromCsv() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return CsvImportResult.cancelled();
+      }
+
+      final file = File(result.files.first.path!);
+      final csvContent = await _readCsvWithEncodingDetection(file);
+      
+      final List<List<dynamic>> rows = const CsvToListConverter().convert(csvContent);
+      
+      if (rows.isEmpty) {
+        return CsvImportResult.error('CSVファイルが空です');
+      }
+
+      // マスター費用データ用のヘッダーマッピング（既存の支払いデータ形式に対応）
+      final headerMapping = {
+        // 既存の支払いデータ形式のマッピング
+        '費目名': 'name',
+        '支払先名': 'payee_name',
+        '支払先コード': 'payee_code', 
+        '金額': 'amount',
+        '頻度': 'frequency',
+        '開始日': 'start_date',
+        '終了日': 'end_date',
+        '備考月日': 'notes',
+        
+        // 従来のマスター費用形式のマッピング（下位互換性）
+        'カテゴリ': 'category',
+        '支払日': 'day_of_month',
+        '説明': 'description',
+        'アクティブ': 'is_active',
+        'プロジェクト名': 'project_name',
+        '部署': 'department',
+        '支払方法': 'payment_method',
+        'タグ': 'tags',
+      };
+
+      final headers = rows.first.map((header) => header.toString()).toList();
+      final dataRows = rows.skip(1).toList();
+
+      int successCount = 0;
+      int errorCount = 0;
+      final List<String> errors = [];
+
+      for (int i = 0; i < dataRows.length; i++) {
+        try {
+          final row = dataRows[i];
+          final masterExpense = _parseMasterExpenseFromRow(headers, row, headerMapping);
+          
+          if (masterExpense != null) {
+            await _databaseService.insertMasterExpense(masterExpense);
+            successCount++;
+          } else {
+            errorCount++;
+            errors.add('行 ${i + 2}: データが不完全です');
+          }
+        } catch (e) {
+          errorCount++;
+          errors.add('行 ${i + 2}: $e');
+        }
+      }
+
+      return CsvImportResult.success(
+        successCount: successCount,
+        errorCount: errorCount,
+        errors: errors,
+      );
+    } catch (e) {
+      return CsvImportResult.error('インポート処理中にエラーが発生しました: $e');
+    }
+  }
+
+  // マスター費用データの行パース
+  MasterExpenseModel? _parseMasterExpenseFromRow(
+    List<String> headers,
+    List<dynamic> row,
+    Map<String, String> headerMapping,
+  ) {
+    try {
+      final Map<String, String> data = {};
+      
+      for (int i = 0; i < headers.length && i < row.length; i++) {
+        final headerKey = headers[i];
+        final mappedKey = headerMapping[headerKey] ?? headerKey.toLowerCase();
+        data[mappedKey] = row[i]?.toString() ?? '';
+      }
+
+      // 必須フィールドのチェック（支払いデータ形式では費目名のみ必須）
+      if (data['name']?.isEmpty != false) {
+        return null;
+      }
+
+      // カテゴリの決定（支払先名を使用、なければ'一般'）
+      String category = data['category'] ?? data['payee_name'] ?? '一般';
+      
+      // 支払方法の決定（支払先コードを使用、なければ'銀行振込'）
+      String paymentMethod = data['payment_method'] ?? 
+                           (data['payee_code']?.isNotEmpty == true ? '銀行振込' : '現金');
+
+      // 頻度の正規化（支払いデータ形式に対応）
+      String frequency = data['frequency']?.toLowerCase() ?? 'monthly';
+      switch (frequency) {
+        case '月額定額':
+        case '月次':
+        case '毎月':
+        case 'monthly':
+          frequency = 'monthly';
+          break;
+        case '回数ベース':
+          // 回数ベースはデフォルトで月次とする
+          frequency = 'monthly';
+          break;
+        case '四半期':
+        case '3ヶ月':
+        case 'quarterly':
+          frequency = 'quarterly';
+          break;
+        case '半期':
+        case '6ヶ月':
+        case 'semi_annually':
+          frequency = 'semi_annually';
+          break;
+        case '年次':
+        case '毎年':
+        case 'yearly':
+          frequency = 'yearly';
+          break;
+        default:
+          frequency = 'monthly';
+      }
+
+      final now = DateTime.now();
+      return MasterExpenseModel(
+        name: data['name']!,
+        category: category,
+        amount: double.tryParse(data['amount']?.replaceAll(',', '') ?? '0') ?? 0,
+        frequency: frequency,
+        dayOfMonth: int.tryParse(data['day_of_month'] ?? '1') ?? 1,
+        description: data['description'] ?? data['notes'] ?? data['payee_name'],
+        isActive: _parseBoolean(data['is_active'] ?? 'true'),
+        projectName: data['project_name']?.isNotEmpty == true ? data['project_name'] : null,
+        department: data['department']?.isNotEmpty == true ? data['department'] : null,
+        paymentMethod: paymentMethod,
+        tags: data['tags'] ?? data['payee_code'],
+        createdAt: now,
+        updatedAt: now,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Boolean値のパース
+  bool _parseBoolean(String value) {
+    final lowerValue = value.toLowerCase().trim();
+    return lowerValue == 'true' || 
+           lowerValue == '1' || 
+           lowerValue == 'はい' || 
+           lowerValue == 'yes' || 
+           lowerValue == 'アクティブ' ||
+           lowerValue == '有効';
   }
 
   // 日付フォーマット統一
