@@ -38,6 +38,12 @@ flutter run -d windows
 ### 文字化け問題
 - Windows版では PowerShell を使用したShift_JIS変換を実装
 - CSV ファイルのエンコーディングは自動判定・変換されます
+- バッチファイルはUTF-8エンコーディング（chcp 65001）で動作します
+
+### バッチファイル実行時の文字化け
+- `run_windows.bat`実行時に文字化けが発生する場合:
+  - コマンドプロンプトで`chcp 65001`を実行してからバッチファイルを実行
+  - または、PowerShellで実行: `powershell -ExecutionPolicy Bypass -File run_windows.bat`
 
 ### ビルドエラー
 ```cmd
