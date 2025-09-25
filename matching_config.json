@@ -1,0 +1,119 @@
+{
+  "matching_system": {
+    "version": "1.0",
+    "description": "照合システム設定ファイル",
+    "main_matching": {
+      "name": "メイン照合機能",
+      "method": "match_with_payments",
+      "trigger": "💰 支払いと照合ボタン",
+      "description": "費用管理と支払い情報の全項目を照合"
+    },
+    "matching_conditions": {
+      "priority_order": [
+        {
+          "priority": 1,
+          "condition": "支払い先コード完全一致",
+          "sql_condition": "payee_code = ?",
+          "description": "支払い先コードによる完全一致検索"
+        },
+        {
+          "priority": 2,
+          "condition": "金額の完全一致",
+          "sql_condition": "amount = ?",
+          "description": "金額による完全一致検索"
+        },
+        {
+          "priority": 3,
+          "condition": "同一月フィルタ",
+          "sql_condition": "substr(payment_date, 1, 7) = ?",
+          "example": "2025-04",
+          "description": "支払日の年月による絞り込み"
+        }
+      ]
+    },
+    "judgment_results": [
+      {
+        "status": "未着・催促要",
+        "icon": "❌",
+        "condition": "支払いデータが全く存在しない",
+        "color": "#f8d7da",
+        "action": "催促が必要"
+      },
+      {
+        "status": "要確認・金額確認要",
+        "icon": "⚡",
+        "condition": "支払いデータはあるが金額に差異",
+        "color": "#fff3cd",
+        "action": "金額確認が必要"
+      },
+      {
+        "status": "到着済み・対応不要",
+        "icon": "✅",
+        "condition": "金額が完全一致",
+        "color": "#d4edda",
+        "action": "対応不要"
+      }
+    ],
+    "database_structure": {
+      "expense_db": {
+        "name": "expenses.db",
+        "date_format": "YYYY-MM-DD",
+        "example": "2025-04-01",
+        "description": "費用管理データベース"
+      },
+      "payment_db": {
+        "name": "billing.db",
+        "date_format": "YYYY/MM/DD",
+        "example": "2025/04/01",
+        "description": "支払い情報データベース"
+      }
+    },
+    "matching_statistics": {
+      "metrics": [
+        {
+          "name": "一致件数カウント",
+          "type": "完全一致",
+          "description": "金額と支払い先が完全に一致する件数"
+        },
+        {
+          "name": "全体照合状況",
+          "type": "色分けによる視覚化",
+          "colors": {
+            "green": "#c8e6c9",
+            "yellow": "#fff9c4",
+            "red": "#f8d7da"
+          }
+        }
+      ]
+    },
+    "matching_algorithm": {
+      "steps": [
+        {
+          "step": 1,
+          "action": "支払い先コードによる検索",
+          "sql": "SELECT * FROM payments WHERE payee_code = ?"
+        },
+        {
+          "step": 2,
+          "action": "金額による完全一致確認",
+          "condition": "amount = target_amount"
+        },
+        {
+          "step": 3,
+          "action": "同一月での絞り込み",
+          "condition": "substr(payment_date, 1, 7) = target_month"
+        },
+        {
+          "step": 4,
+          "action": "結果判定と色分け表示",
+          "output": "視覚的なステータス表示"
+        }
+      ]
+    },
+    "configuration_notes": {
+      "update_date": "2025-09-26",
+      "maintainer": "BillingManager System",
+      "usage": "このファイルは照合ロジックの設定を管理します"
+    }
+  }
+}
