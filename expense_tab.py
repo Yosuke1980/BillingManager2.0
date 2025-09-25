@@ -2501,7 +2501,7 @@ class ExpenseTab(QWidget):
                 target_item.setSelected(True)
 
                 # 編集ダイアログを開く
-                self.edit_record()
+                self.show_edit_form()
             else:
                 # 該当項目が見つからない場合はデータを再読み込み
                 self.refresh_data_with_filters()
