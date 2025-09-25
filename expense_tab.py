@@ -2358,6 +2358,15 @@ class ExpenseTab(QWidget):
             expense_tree.setRootIsDecorated(False)
             expense_layout.addWidget(expense_tree)
 
+            # 費用テーブル用の編集ボタン
+            expense_button_layout = QHBoxLayout()
+            edit_expense_button = QPushButton("✏️ 選択項目を編集")
+            edit_expense_button.setMinimumSize(120, 28)
+            edit_expense_button.clicked.connect(lambda: self.edit_expense_from_comparison(expense_tree, dialog))
+            expense_button_layout.addWidget(edit_expense_button)
+            expense_button_layout.addStretch()
+            expense_layout.addLayout(expense_button_layout)
+
             # スプリッターに追加
             splitter.addWidget(payment_frame)
             splitter.addWidget(expense_frame)
@@ -2408,6 +2417,9 @@ class ExpenseTab(QWidget):
                 expense_item.setText(2, str(row[1]) if row[1] else "")  # 案件名
                 expense_item.setText(3, str(row[6]) if row[6] else "")  # 状態
 
+                # データベースのIDを隠しデータとして保存
+                expense_item.setData(0, Qt.UserRole, str(row[0]))  # ID
+
                 # 選択された項目を強調表示
                 if (str(row[1]) == project_name and
                     str(row[3]) == payee_code and
@@ -2443,6 +2455,61 @@ class ExpenseTab(QWidget):
         except Exception as e:
             log_message(f"同月同支払い先比較エラー: {e}")
             QMessageBox.critical(self, "エラー", f"同月同支払い先比較の表示に失敗しました: {e}")
+
+    def edit_expense_from_comparison(self, expense_tree, parent_dialog):
+        """比較画面から費用項目を編集"""
+        try:
+            selected_items = expense_tree.selectedItems()
+            if not selected_items:
+                QMessageBox.information(parent_dialog, "情報", "編集する費用項目を選択してください")
+                return
+
+            selected_item = selected_items[0]
+            expense_id = selected_item.data(0, Qt.UserRole)
+
+            if not expense_id:
+                QMessageBox.warning(parent_dialog, "警告", "選択された項目のIDが取得できません")
+                return
+
+            # 比較ダイアログを閉じる
+            parent_dialog.accept()
+
+            # メインの費用テーブルで該当項目を選択して編集
+            self.select_and_edit_expense_by_id(expense_id)
+
+        except Exception as e:
+            log_message(f"比較画面からの費用編集エラー: {e}")
+            QMessageBox.critical(parent_dialog, "エラー", f"費用編集に失敗しました: {e}")
+
+    def select_and_edit_expense_by_id(self, expense_id):
+        """指定されたIDの費用項目を選択して編集"""
+        try:
+            # メインの費用テーブルから該当項目を検索
+            root = self.tree.invisibleRootItem()
+            target_item = None
+
+            for i in range(root.childCount()):
+                item = root.child(i)
+                if item.text(0) == str(expense_id):  # IDで一致確認
+                    target_item = item
+                    break
+
+            if target_item:
+                # 項目を選択
+                self.tree.clearSelection()
+                self.tree.setCurrentItem(target_item)
+                target_item.setSelected(True)
+
+                # 編集ダイアログを開く
+                self.edit_record()
+            else:
+                # 該当項目が見つからない場合はデータを再読み込み
+                self.refresh_data_with_filters()
+                QMessageBox.information(self, "情報", "項目が見つからないため、データを再読み込みしました。再度お試しください。")
+
+        except Exception as e:
+            log_message(f"ID指定での費用項目選択エラー: {e}")
+            QMessageBox.critical(self, "エラー", f"項目の選択に失敗しました: {e}")
 
     def analyze_missing_invoice(self, selected_amount, payment_rows):
         """請求書未着を分析"""
