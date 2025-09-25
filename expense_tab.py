@@ -27,6 +27,7 @@ import csv
 import os
 from datetime import datetime, timedelta
 from utils import format_amount, log_message
+from matching_utils import MatchingLogic, get_matching_logic
 
 # 不要なインポートを削除
 import sqlite3
