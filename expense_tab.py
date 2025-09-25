@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QCompleter,
     QSplitter,
     QDialog,
+    QAbstractItemView,
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, pyqtSlot, QStringListModel
 from PyQt5.QtGui import QColor, QFont, QBrush
@@ -252,7 +253,7 @@ class ExpenseTab(QWidget):
         create_button.clicked.connect(self.create_record)
         record_group_layout.addWidget(create_button)
 
-        delete_button = QPushButton("🗑️ 削除")
+        delete_button = QPushButton("🗑️ 選択削除")
         delete_button.setMinimumSize(self.button_min_width, self.button_min_height)
         delete_button.clicked.connect(self.delete_record)
         record_group_layout.addWidget(delete_button)
@@ -310,6 +311,8 @@ class ExpenseTab(QWidget):
         self.tree.setHeaderLabels(
             ["ID", "案件名", "支払い先", "コード", "金額", "支払日", "状態"]
         )
+        # 複数選択を有効化
+        self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         table_layout.addWidget(self.tree)
 
         # 列の設定
@@ -1507,7 +1510,7 @@ class ExpenseTab(QWidget):
             QMessageBox.critical(self, "エラー", f"フォーム表示に失敗しました: {e}")
 
     def delete_record(self):
-        """選択された費用レコードを削除"""
+        """選択された費用レコードを削除（複数選択対応）"""
         selected_items = self.tree.selectedItems()
         if not selected_items:
             QMessageBox.information(
@@ -1515,28 +1518,50 @@ class ExpenseTab(QWidget):
             )
             return
 
-        # 選択項目の値を取得
-        selected_item = selected_items[0]
-        expense_id = selected_item.text(0)
-        project_name = selected_item.text(1)
+        # 複数選択の場合の確認ダイアログ
+        item_count = len(selected_items)
+        if item_count == 1:
+            # 単一選択の場合
+            selected_item = selected_items[0]
+            expense_id = selected_item.text(0)
+            project_name = selected_item.text(1)
 
-        # 確認ダイアログを表示
-        reply = QMessageBox.question(
-            self,
-            "確認",
-            f"費用データ「{project_name}（ID: {expense_id}）」を削除しますか？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
+            reply = QMessageBox.question(
+                self,
+                "確認",
+                f"費用データ「{project_name}（ID: {expense_id}）」を削除しますか？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+        else:
+            # 複数選択の場合
+            project_names = [item.text(1) for item in selected_items[:3]]  # 最初の3件を表示
+            preview = "、".join(project_names)
+            if item_count > 3:
+                preview += f"...他{item_count - 3}件"
+
+            reply = QMessageBox.question(
+                self,
+                "確認",
+                f"{item_count}件の費用データを削除しますか？\n\n対象項目：{preview}",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
 
         if reply != QMessageBox.Yes:
             return
 
         try:
-            # データを削除
-            self.db_manager.delete_expense(expense_id)
+            # 削除対象のIDリストを作成
+            expense_ids = [item.text(0) for item in selected_items]
 
-            message = f"費用データ ID: {expense_id} を削除しました"
+            # データを削除（バッチ処理）
+            deleted_count = 0
+            for expense_id in expense_ids:
+                self.db_manager.delete_expense(expense_id)
+                deleted_count += 1
+
+            message = f"{deleted_count}件の費用データを削除しました"
             log_message(message)
             self.refresh_data_with_filters()
             self.app.status_label.setText(message)
