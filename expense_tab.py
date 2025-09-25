@@ -2305,54 +2305,59 @@ class ExpenseTab(QWidget):
             
             layout = QVBoxLayout(dialog)
             
-            # ヘッダー情報
+            # シンプルなヘッダー情報
             header = QFrame()
-            header.setStyleSheet("background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #2196f3;")
-            header_layout = QVBoxLayout(header)
-            
-            title_label = QLabel("🔍 同月同支払い先比較")
-            title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #1565c0; margin-bottom: 5px;")
+            header.setStyleSheet("background-color: #f8f9fa; padding: 10px; border-radius: 4px; margin-bottom: 5px;")
+            header_layout = QHBoxLayout(header)
+
+            title_label = QLabel(f"🔍 {payee} ({payment_month})")
+            title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #333;")
             header_layout.addWidget(title_label)
-            
-            info_label = QLabel(f"💼 選択費用: {project_name} | 🏢 支払い先: {payee} ({payee_code}) | 📅 月: {payment_month} | 💰 金額: {amount}")
-            info_label.setStyleSheet("font-size: 12px; color: #1565c0;")
-            header_layout.addWidget(info_label)
-            
-            result_label = QLabel(f"📊 検索結果: 支払い{len(payment_rows)}件 | 費用{len(expense_rows)}件")
-            result_label.setStyleSheet("font-size: 11px; color: #666; margin-top: 5px;")
+
+            header_layout.addStretch()
+
+            result_label = QLabel(f"支払い{len(payment_rows)}件 | 費用{len(expense_rows)}件")
+            result_label.setStyleSheet("font-size: 12px; color: #666;")
             header_layout.addWidget(result_label)
-            
+
             layout.addWidget(header)
-            
-            # 目視確認用の説明
-            help_label = QLabel("💡 目視確認用: 左右のリストを比較して、請求書の到着状況や金額の一致を確認してください")
-            help_label.setStyleSheet("font-size: 12px; color: #666; margin-bottom: 10px; padding: 8px; background-color: #f8f9fa; border-radius: 4px;")
-            layout.addWidget(help_label)
             
             # メインエリア（左右分割）
             splitter = QSplitter(Qt.Horizontal)
             layout.addWidget(splitter)
-            
+
             # 左側：支払いテーブル
-            payment_frame = QGroupBox("💳 支払いテーブル")
-            payment_frame.setStyleSheet("QGroupBox { font-weight: bold; color: #1976d2; }")
+            payment_frame = QFrame()
+            payment_frame.setStyleSheet("border: 1px solid #ddd; border-radius: 4px;")
             payment_layout = QVBoxLayout(payment_frame)
-            
+            payment_layout.setContentsMargins(5, 5, 5, 5)
+
+            payment_header = QLabel("💳 支払いテーブル")
+            payment_header.setStyleSheet("font-weight: bold; color: #1976d2; padding: 5px; background-color: #e3f2fd; border-radius: 3px;")
+            payment_layout.addWidget(payment_header)
+
             payment_tree = QTreeWidget()
-            payment_tree.setHeaderLabels(["金額", "支払日", "状態", "件名", "案件名", "支払い先コード"])
+            payment_tree.setHeaderLabels(["金額", "支払日", "案件名", "状態"])
             payment_tree.setAlternatingRowColors(True)
+            payment_tree.setRootIsDecorated(False)
             payment_layout.addWidget(payment_tree)
-            
+
             # 右側：費用テーブル
-            expense_frame = QGroupBox("💰 費用テーブル")
-            expense_frame.setStyleSheet("QGroupBox { font-weight: bold; color: #d32f2f; }")
+            expense_frame = QFrame()
+            expense_frame.setStyleSheet("border: 1px solid #ddd; border-radius: 4px;")
             expense_layout = QVBoxLayout(expense_frame)
-            
+            expense_layout.setContentsMargins(5, 5, 5, 5)
+
+            expense_header = QLabel("💰 費用テーブル")
+            expense_header.setStyleSheet("font-weight: bold; color: #d32f2f; padding: 5px; background-color: #ffebee; border-radius: 3px;")
+            expense_layout.addWidget(expense_header)
+
             expense_tree = QTreeWidget()
-            expense_tree.setHeaderLabels(["金額", "支払日", "状態", "案件名", "支払い先コード", "ID"])
+            expense_tree.setHeaderLabels(["金額", "支払日", "案件名", "状態"])
             expense_tree.setAlternatingRowColors(True)
+            expense_tree.setRootIsDecorated(False)
             expense_layout.addWidget(expense_tree)
-            
+
             # スプリッターに追加
             splitter.addWidget(payment_frame)
             splitter.addWidget(expense_frame)
@@ -2368,57 +2373,52 @@ class ExpenseTab(QWidget):
             # 支払いデータを追加
             for row in payment_rows:
                 payment_item = QTreeWidgetItem()
-                
+
                 row_amount_str = format_amount(row[4]) if row[4] else ""
                 payment_item.setText(0, row_amount_str)  # 金額
                 payment_item.setText(1, str(row[5]) if row[5] else "")  # 支払日
-                payment_item.setText(2, str(row[6]) if row[6] else "")  # 状態
-                payment_item.setText(3, str(row[0]) if row[0] else "")  # 件名
-                payment_item.setText(4, str(row[1]) if row[1] else "")  # 案件名
-                payment_item.setText(5, str(row[3]) if row[3] else "")  # 支払い先コード
-                
+                payment_item.setText(2, str(row[1]) if row[1] else "")  # 案件名
+                payment_item.setText(3, str(row[6]) if row[6] else "")  # 状態
+
                 # 金額による色分け
                 try:
                     row_amount = float(str(row[4]).replace("¥", "").replace(",", ""))
                     diff = abs(row_amount - selected_amount_float)
-                    
+
                     if diff == 0:
                         # 完全一致 - 緑
-                        payment_item.setBackground(0, QColor("#c8e6c9"))
-                        payment_item.setBackground(1, QColor("#c8e6c9"))
+                        for i in range(4):
+                            payment_item.setBackground(i, QColor("#c8e6c9"))
                     elif diff <= 1000:
                         # 1000円以内の差 - 黄
-                        payment_item.setBackground(0, QColor("#fff9c4"))
-                        payment_item.setBackground(1, QColor("#fff9c4"))
+                        for i in range(4):
+                            payment_item.setBackground(i, QColor("#fff9c4"))
                 except:
                     pass
-                
+
                 payment_tree.addTopLevelItem(payment_item)
             
             # 費用データを追加
             for row in expense_rows:
                 expense_item = QTreeWidgetItem()
-                
+
                 row_amount_str = format_amount(row[4]) if row[4] else ""
                 expense_item.setText(0, row_amount_str)  # 金額
                 expense_item.setText(1, str(row[5]) if row[5] else "")  # 支払日
-                expense_item.setText(2, str(row[6]) if row[6] else "")  # 状態
-                expense_item.setText(3, str(row[1]) if row[1] else "")  # 案件名
-                expense_item.setText(4, str(row[3]) if row[3] else "")  # 支払い先コード
-                expense_item.setText(5, str(row[0]) if row[0] else "")  # ID
-                
+                expense_item.setText(2, str(row[1]) if row[1] else "")  # 案件名
+                expense_item.setText(3, str(row[6]) if row[6] else "")  # 状態
+
                 # 選択された項目を強調表示
-                if (str(row[1]) == project_name and 
-                    str(row[3]) == payee_code and 
+                if (str(row[1]) == project_name and
+                    str(row[3]) == payee_code and
                     str(row[5]) == payment_date):
-                    expense_item.setBackground(0, QColor("#ffeb3b"))  # 選択項目は黄色
-                    expense_item.setBackground(1, QColor("#ffeb3b"))
-                    expense_item.setBackground(2, QColor("#ffeb3b"))
+                    for i in range(4):
+                        expense_item.setBackground(i, QColor("#ffeb3b"))  # 選択項目は黄色
                     font = QFont()
                     font.setBold(True)
-                    for i in range(6):
+                    for i in range(4):
                         expense_item.setFont(i, font)
-                
+
                 expense_tree.addTopLevelItem(expense_item)
             
             # 列幅調整
@@ -2428,17 +2428,14 @@ class ExpenseTab(QWidget):
             
             # ボタンエリア
             button_layout = QHBoxLayout()
-            
-            goto_button = QPushButton("🔗 支払いタブで詳細確認")
-            goto_button.clicked.connect(lambda: self.goto_payments_tab_with_filter(payee, payee_code, payment_month))
-            button_layout.addWidget(goto_button)
-            
-            button_layout.addStretch()
-            
+            button_layout.setContentsMargins(5, 10, 5, 5)
+
             close_button = QPushButton("閉じる")
+            close_button.setMinimumSize(80, 32)
             close_button.clicked.connect(dialog.accept)
+            button_layout.addStretch()
             button_layout.addWidget(close_button)
-            
+
             layout.addLayout(button_layout)
             
             dialog.exec_()
