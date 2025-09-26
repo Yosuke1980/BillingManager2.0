@@ -115,5 +115,530 @@
       "maintainer": "BillingManager System",
       "usage": "このファイルは照合ロジックの設定を管理します"
     }
+  },
+  "gas_environment": {
+    "description": "Google Apps Script環境設定",
+    "spreadsheet_config": {
+      "master_spreadsheet_id": "",
+      "spreadsheet_name": "ラジオ局支払い・費用管理システム",
+      "sheets": {
+        "payments": "支払い情報",
+        "expenses": "費用管理",
+        "expense_master": "費用マスター",
+        "payee_master": "支払い先マスター",
+        "project_filter": "案件管理",
+        "matching_log": "照合ログ",
+        "settings": "システム設定"
+      },
+      "sheet_colors": {
+        "payments": "#e3f2fd",
+        "expenses": "#f3e5f5",
+        "expense_master": "#e8f5e8",
+        "payee_master": "#fff3e0",
+        "project_filter": "#fce4ec"
+      }
+    },
+    "deployment": {
+      "web_app_url": "",
+      "version": "1.0",
+      "triggers": {
+        "onOpen": "メニューバー自動作成",
+        "onChange": "データ変更時の自動処理",
+        "timeDriven": "定期実行処理"
+      },
+      "permissions": [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/script.external_request"
+      ],
+      "execution_settings": {
+        "timeout_seconds": 300,
+        "concurrent_executions": 1,
+        "lock_service": true
+      }
+    },
+    "google_drive": {
+      "folder_structure": {
+        "root_folder": "BillingManager_GAS",
+        "csv_import_folder": "CSV_Import",
+        "backup_folder": "Backups",
+        "logs_folder": "Logs"
+      },
+      "file_naming": {
+        "csv_pattern": "billing_*.csv",
+        "backup_pattern": "backup_YYYYMMDD_HHMMSS",
+        "log_pattern": "log_YYYYMMDD.txt"
+      }
+    }
+  },
+  "schemas": {
+    "description": "データベーススキーマ定義（SQLite→Google Sheets変換用）",
+    "payments": {
+      "sheet_name": "支払い情報",
+      "columns": [
+        {"name": "id", "type": "number", "auto_increment": true, "description": "ID（自動採番）"},
+        {"name": "subject", "type": "text", "max_length": 200, "description": "件名"},
+        {"name": "project_name", "type": "text", "max_length": 100, "required": true, "description": "案件名"},
+        {"name": "payee", "type": "text", "max_length": 100, "required": true, "description": "支払い先"},
+        {"name": "payee_code", "type": "text", "pattern": "^[0-9]{4}$", "description": "支払い先コード（4桁）"},
+        {"name": "amount", "type": "currency", "required": true, "description": "金額"},
+        {"name": "payment_date", "type": "date", "format": "YYYY/MM/DD", "required": true, "description": "支払日"},
+        {"name": "status", "type": "select", "options": ["未処理", "処理中", "照合済", "完了"], "default": "未処理", "description": "ステータス"}
+      ],
+      "header_row": 1,
+      "data_start_row": 2,
+      "freeze_rows": 1,
+      "freeze_columns": 3
+    },
+    "expenses": {
+      "sheet_name": "費用管理",
+      "columns": [
+        {"name": "id", "type": "number", "auto_increment": true, "description": "ID（自動採番）"},
+        {"name": "project_name", "type": "text", "max_length": 100, "required": true, "description": "案件名"},
+        {"name": "payee", "type": "text", "max_length": 100, "required": true, "description": "支払い先"},
+        {"name": "payee_code", "type": "text", "pattern": "^[0-9]{4}$", "description": "支払い先コード（4桁）"},
+        {"name": "amount", "type": "currency", "required": true, "description": "金額"},
+        {"name": "payment_date", "type": "date", "format": "YYYY-MM-DD", "required": true, "description": "支払日"},
+        {"name": "status", "type": "select", "options": ["未処理", "処理中", "照合済", "完了"], "default": "未処理", "description": "ステータス"},
+        {"name": "source_type", "type": "select", "options": ["manual", "master", "csv_import"], "default": "manual", "description": "データソース"},
+        {"name": "master_id", "type": "number", "description": "マスターID（参照）"}
+      ],
+      "header_row": 1,
+      "data_start_row": 2,
+      "freeze_rows": 1,
+      "freeze_columns": 3
+    },
+    "expense_master": {
+      "sheet_name": "費用マスター",
+      "columns": [
+        {"name": "id", "type": "number", "auto_increment": true, "description": "ID（自動採番）"},
+        {"name": "project_name", "type": "text", "max_length": 100, "required": true, "description": "案件名"},
+        {"name": "payee", "type": "text", "max_length": 100, "required": true, "description": "支払い先"},
+        {"name": "payee_code", "type": "text", "pattern": "^[0-9]{4}$", "description": "支払い先コード（4桁）"},
+        {"name": "amount", "type": "currency", "required": true, "description": "基本金額"},
+        {"name": "payment_type", "type": "select", "options": ["月額固定", "回数ベース"], "default": "月額固定", "description": "支払い種別"},
+        {"name": "broadcast_days", "type": "text", "description": "放送曜日（カンマ区切り）"},
+        {"name": "start_date", "type": "date", "description": "開始日"},
+        {"name": "end_date", "type": "date", "description": "終了日"},
+        {"name": "status", "type": "select", "options": ["有効", "無効", "一時停止"], "default": "有効", "description": "ステータス"}
+      ],
+      "header_row": 1,
+      "data_start_row": 2,
+      "freeze_rows": 1,
+      "freeze_columns": 3
+    },
+    "payee_master": {
+      "sheet_name": "支払い先マスター",
+      "columns": [
+        {"name": "id", "type": "number", "auto_increment": true, "description": "ID（自動採番）"},
+        {"name": "payee_name", "type": "text", "max_length": 100, "required": true, "unique": true, "description": "支払い先名"},
+        {"name": "payee_code", "type": "text", "pattern": "^[0-9]{4}$", "required": true, "description": "支払い先コード（4桁）"},
+        {"name": "created_date", "type": "datetime", "auto_value": "current_timestamp", "description": "作成日時"},
+        {"name": "updated_date", "type": "datetime", "auto_value": "current_timestamp", "description": "更新日時"}
+      ],
+      "header_row": 1,
+      "data_start_row": 2,
+      "freeze_rows": 1,
+      "freeze_columns": 2
+    }
+  },
+  "ui_config": {
+    "description": "Google Sheets UI設定",
+    "menu_items": [
+      {
+        "name": "🔄 CSV読み込み",
+        "function": "importCSV",
+        "description": "CSVファイルからデータを読み込み",
+        "shortcut": "Ctrl+I"
+      },
+      {
+        "name": "💰 支払いと照合",
+        "function": "runMatching",
+        "description": "費用管理と支払い情報の照合実行",
+        "shortcut": "Ctrl+M"
+      },
+      {
+        "name": "📊 マスター生成",
+        "function": "generateMaster",
+        "description": "指定月の費用データを生成",
+        "shortcut": "Ctrl+G"
+      },
+      {
+        "name": "📈 統計表示",
+        "function": "showStatistics",
+        "description": "照合統計の表示"
+      },
+      {
+        "name": "🔍 データ検索",
+        "function": "searchData",
+        "description": "データの検索・フィルタ",
+        "shortcut": "Ctrl+F"
+      },
+      {
+        "name": "💾 CSVエクスポート",
+        "function": "exportCSV",
+        "description": "データをCSV形式で出力",
+        "shortcut": "Ctrl+E"
+      },
+      {
+        "name": "🔧 設定",
+        "function": "showSettings",
+        "description": "システム設定画面"
+      }
+    ],
+    "conditional_formatting": {
+      "status_colors": {
+        "未処理": {"background": "#f8f9fa", "font": "#495057"},
+        "処理中": {"background": "#fff3cd", "font": "#856404"},
+        "照合済": {"background": "#d4edda", "font": "#155724"},
+        "完了": {"background": "#d1ecf1", "font": "#0c5460"}
+      },
+      "judgment_colors": {
+        "未着・催促要": {"background": "#f8d7da", "font": "#721c24"},
+        "要確認・金額確認要": {"background": "#fff3cd", "font": "#856404"},
+        "到着済み・対応不要": {"background": "#d4edda", "font": "#155724"}
+      },
+      "urgency_colors": {
+        "低": {"background": "#e2f3ff", "font": "#084298"},
+        "通常": {"background": "#ffffff", "font": "#000000"},
+        "高": {"background": "#fff3cd", "font": "#856404"},
+        "緊急": {"background": "#f8d7da", "font": "#721c24"}
+      }
+    },
+    "data_validation": {
+      "status_options": ["未処理", "処理中", "照合済", "完了"],
+      "urgency_options": ["低", "通常", "高", "緊急"],
+      "project_status_options": ["準備中", "進行中", "完了", "保留"],
+      "payment_type_options": ["月額固定", "回数ベース"],
+      "weekdays": ["月", "火", "水", "木", "金", "土", "日"]
+    },
+    "protected_ranges": {
+      "payments": {
+        "columns": ["A:A"],
+        "description": "ID列（自動採番のため編集不可）"
+      },
+      "expenses": {
+        "columns": ["A:A"],
+        "description": "ID列（自動採番のため編集不可）"
+      }
+    },
+    "chart_config": {
+      "matching_statistics": {
+        "type": "PIE",
+        "title": "照合状況統計",
+        "position": {"row": 1, "column": 15}
+      },
+      "monthly_trend": {
+        "type": "LINE",
+        "title": "月別支払い推移",
+        "position": {"row": 10, "column": 15}
+      }
+    }
+  },
+  "business_logic": {
+    "description": "業務ロジック設定",
+    "payee_code_format": {
+      "length": 4,
+      "padding": "zero",
+      "validation_pattern": "^[0-9]{4}$",
+      "example": "0001",
+      "description": "支払い先コードの4桁0埋め処理"
+    },
+    "amount_calculation": {
+      "count_based": {
+        "enabled": true,
+        "weekdays": ["月", "火", "水", "木", "金", "土", "日"],
+        "use_previous_month": true,
+        "calculation_method": "前月実績ベース",
+        "description": "放送曜日に基づく回数ベース金額計算"
+      },
+      "currency_formatting": {
+        "locale": "ja-JP",
+        "currency": "JPY",
+        "display": "¥1,234",
+        "precision": 0
+      }
+    },
+    "auto_completion": {
+      "payee_suggestions": {
+        "enabled": true,
+        "source": "payee_master",
+        "min_chars": 1,
+        "max_suggestions": 10
+      },
+      "project_templates": {
+        "enabled": true,
+        "auto_fill_fields": ["client_name", "department", "approver"]
+      }
+    },
+    "validation_rules": {
+      "required_fields": {
+        "payments": ["project_name", "payee", "amount", "payment_date"],
+        "expenses": ["project_name", "payee", "amount", "payment_date"],
+        "expense_master": ["project_name", "payee", "amount", "payment_type"]
+      },
+      "data_integrity": {
+        "payee_code_uniqueness": true,
+        "amount_positive": true,
+        "date_format_check": true,
+        "duplicate_prevention": {
+          "enabled": true,
+          "check_fields": ["project_name", "payee", "amount", "payment_date"]
+        }
+      }
+    },
+    "workflow": {
+      "status_transitions": {
+        "未処理": ["処理中", "照合済"],
+        "処理中": ["照合済", "未処理"],
+        "照合済": ["完了"],
+        "完了": []
+      },
+      "approval_process": {
+        "required_for_amounts_over": 100000,
+        "approver_column": "approver",
+        "notification_method": "email"
+      }
+    },
+    "master_generation": {
+      "schedule": {
+        "enabled": true,
+        "trigger": "monthly",
+        "day_of_month": 25,
+        "time": "09:00"
+      },
+      "default_values": {
+        "payment_type": "月額固定",
+        "status": "有効",
+        "urgency_level": "通常"
+      }
+    }
+  },
+  "function_mapping": {
+    "description": "PyQt5からGASへの関数マッピング定義",
+    "database_operations": {
+      "import_csv_data": {
+        "gas_function": "importCSVToSheet",
+        "parameters": ["csv_data", "header_mapping"],
+        "return_type": "number",
+        "description": "CSVデータをGoogle Sheetsに読み込み"
+      },
+      "get_payment_data": {
+        "gas_function": "getPaymentData",
+        "parameters": ["search_term"],
+        "return_type": "array",
+        "description": "支払いデータを取得"
+      },
+      "get_expense_data": {
+        "gas_function": "getExpenseData",
+        "parameters": ["search_term"],
+        "return_type": "array",
+        "description": "費用データを取得"
+      },
+      "save_expense": {
+        "gas_function": "saveExpenseData",
+        "parameters": ["data", "is_new"],
+        "return_type": "number",
+        "description": "費用データを保存"
+      },
+      "delete_expense": {
+        "gas_function": "deleteExpenseData",
+        "parameters": ["expense_id"],
+        "return_type": "boolean",
+        "description": "費用データを削除"
+      },
+      "match_expenses_with_payments": {
+        "gas_function": "matchExpensesWithPayments",
+        "parameters": [],
+        "return_type": "object",
+        "description": "費用と支払いの照合実行"
+      },
+      "generate_expenses_from_master": {
+        "gas_function": "generateExpensesFromMaster",
+        "parameters": ["target_year", "target_month"],
+        "return_type": "object",
+        "description": "マスターから費用データを生成"
+      }
+    },
+    "utility_functions": {
+      "format_payee_code": {
+        "gas_function": "formatPayeeCode",
+        "parameters": ["code", "length"],
+        "return_type": "string",
+        "description": "支払い先コードの0埋め処理",
+        "pyqt_path": "utils.format_payee_code"
+      },
+      "calculate_count_based_amount": {
+        "gas_function": "calculateCountBasedAmount",
+        "parameters": ["base_amount", "broadcast_days", "target_year", "target_month", "use_previous_month"],
+        "return_type": "object",
+        "description": "回数ベース金額計算",
+        "pyqt_path": "utils.calculate_count_based_amount"
+      },
+      "format_amount": {
+        "gas_function": "formatAmount",
+        "parameters": ["amount"],
+        "return_type": "string",
+        "description": "金額フォーマット",
+        "pyqt_path": "utils.format_amount"
+      },
+      "log_message": {
+        "gas_function": "logMessage",
+        "parameters": ["message"],
+        "return_type": "void",
+        "description": "ログ出力（Sheetsに記録）",
+        "pyqt_path": "utils.log_message"
+      },
+      "validate_date_string": {
+        "gas_function": "validateDateString",
+        "parameters": ["date_str"],
+        "return_type": "boolean",
+        "description": "日付文字列の妥当性チェック",
+        "pyqt_path": "utils.validate_date_string"
+      }
+    },
+    "ui_operations": {
+      "show_payment_comparison_all": {
+        "gas_function": "showPaymentComparisonDialog",
+        "parameters": ["expense_data"],
+        "return_type": "void",
+        "description": "支払い照合結果の表示",
+        "implementation": "sidebar_html"
+      },
+      "refresh_data": {
+        "gas_function": "refreshSheetData",
+        "parameters": ["sheet_name"],
+        "return_type": "void",
+        "description": "シートデータの再読み込み"
+      },
+      "export_csv": {
+        "gas_function": "exportSheetToCSV",
+        "parameters": ["sheet_name", "file_name"],
+        "return_type": "void",
+        "description": "CSVエクスポート機能"
+      },
+      "show_search": {
+        "gas_function": "showSearchDialog",
+        "parameters": [],
+        "return_type": "void",
+        "description": "検索ダイアログ表示",
+        "implementation": "html_service"
+      }
+    },
+    "matching_logic": {
+      "get_matching_logic": {
+        "gas_function": "getMatchingLogic",
+        "parameters": [],
+        "return_type": "object",
+        "description": "照合ロジックインスタンス取得",
+        "pyqt_path": "matching_utils.get_matching_logic"
+      },
+      "build_matching_query": {
+        "gas_function": "buildMatchingQuery",
+        "parameters": ["payee_code", "payee", "amount", "payment_month"],
+        "return_type": "object",
+        "description": "照合用クエリ構築",
+        "pyqt_path": "matching_utils.MatchingLogic.build_matching_query"
+      }
+    }
+  },
+  "csv_config": {
+    "description": "CSV読み込み・出力設定",
+    "import_settings": {
+      "encoding": "shift_jis",
+      "delimiter": ",",
+      "quote_character": "\"",
+      "escape_character": "\\",
+      "header_row": 1,
+      "data_start_row": 2,
+      "skip_empty_lines": true,
+      "trim_whitespace": true,
+      "max_rows": 10000,
+      "error_handling": {
+        "invalid_data": "skip_row",
+        "missing_columns": "fill_empty",
+        "encoding_error": "replace_character"
+      }
+    },
+    "header_mapping": {
+      "description": "CSVヘッダーとデータベースフィールドのマッピング",
+      "payments": {
+        "おもて情報.件名": "subject",
+        "明細情報.明細項目": "project_name",
+        "おもて情報.請求元": "payee",
+        "おもて情報.支払先コード": "payee_code",
+        "明細情報.金額": "amount",
+        "おもて情報.自社支払期限": "payment_date",
+        "状態": "status"
+      },
+      "expenses": {
+        "案件名": "project_name",
+        "支払い先": "payee",
+        "支払い先コード": "payee_code",
+        "金額": "amount",
+        "支払日": "payment_date",
+        "ステータス": "status"
+      },
+      "flexible_matching": {
+        "enabled": true,
+        "case_sensitive": false,
+        "partial_match": true,
+        "alternative_headers": {
+          "project_name": ["案件名", "プロジェクト名", "明細項目", "件名"],
+          "payee": ["支払い先", "請求元", "支払先", "業者名"],
+          "payee_code": ["支払い先コード", "支払先コード", "業者コード", "コード"],
+          "amount": ["金額", "支払金額", "請求金額", "費用"],
+          "payment_date": ["支払日", "支払期限", "自社支払期限", "決済日"]
+        }
+      }
+    },
+    "export_settings": {
+      "encoding": "utf-8",
+      "delimiter": ",",
+      "quote_character": "\"",
+      "include_header": true,
+      "date_format": "YYYY-MM-DD",
+      "currency_format": "number_only",
+      "null_value_handling": "empty_string",
+      "file_naming": {
+        "prefix": "billing_export_",
+        "timestamp_format": "YYYYMMDD_HHMMSS",
+        "extension": ".csv"
+      }
+    },
+    "validation": {
+      "required_columns": {
+        "payments": ["project_name", "payee", "amount", "payment_date"],
+        "expenses": ["project_name", "payee", "amount", "payment_date"]
+      },
+      "data_types": {
+        "amount": "number",
+        "payment_date": "date",
+        "payee_code": "text"
+      },
+      "constraints": {
+        "amount_min": 0,
+        "amount_max": 100000000,
+        "payee_code_pattern": "^[0-9]{4}$",
+        "date_range": {
+          "min": "2020-01-01",
+          "max": "2030-12-31"
+        }
+      }
+    },
+    "google_drive_integration": {
+      "enabled": true,
+      "import_folder": "CSV_Import",
+      "export_folder": "CSV_Export",
+      "auto_detection": {
+        "enabled": true,
+        "file_pattern": "billing_*.csv",
+        "check_interval": "hourly"
+      },
+      "permissions": {
+        "import_folder": "view_only",
+        "export_folder": "edit"
+      }
+    }
   }
 }
