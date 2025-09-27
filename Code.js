@@ -8,6 +8,24 @@
 // スプレッドシートID（実際のスプレッドシートIDに変更してください）
 const SPREADSHEET_ID = '18lmdCjSM8Sf_GUXdJOet1R198OX7NMJAb0QU1hgbsDQ';
 
+// Python版のSQLiteテーブル構造に合わせた統一フィールド定義
+const UNIFIED_FIELDS = {
+  PAYMENTS: [
+    'ID', '件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態',
+    '種別', 'クライアント名', '部署', '案件状態', '案件開始日', '案件終了日', 
+    '予算', '承認者', '緊急度', '作成日時'
+  ],
+  EXPENSES: [
+    'ID', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態',
+    'ソース種別', 'マスターID', 'クライアント名', '部署', '案件状態', 
+    '案件開始日', '案件終了日', '予算', '承認者', '緊急度', '作成日時'
+  ],
+  EXPENSE_MASTER: [
+    'ID', '案件名', '支払い先', '支払い先コード', '金額', '種別', '開始日', '終了日', 
+    '放送曜日', 'クライアント名', '部署', '案件状態', '予算', '承認者', '緊急度', '作成日時'
+  ]
+};
+
 // シート名定数
 const SHEET_NAMES = {
   PAYMENTS: '支払いデータ',
@@ -64,31 +82,41 @@ function getOrCreateSheet(sheetName, headers = []) {
 }
 
 /**
- * 初期化処理
+ * 初期化処理 - 統一されたフィールド構造を使用
  */
 function initializeSheets() {
   try {
-    // 支払いデータシート
-    getOrCreateSheet(SHEET_NAMES.PAYMENTS, [
-      'ID', '件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態', '作成日時'
-    ]);
+    console.log('=== 統一データ構造での初期化開始 ===');
     
-    // 費用データシート
-    getOrCreateSheet(SHEET_NAMES.EXPENSES, [
-      'ID', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態', '作成日時'
-    ]);
+    // 支払いデータシート（拡張フィールド対応）
+    getOrCreateSheet(SHEET_NAMES.PAYMENTS, UNIFIED_FIELDS.PAYMENTS);
+    console.log('支払いデータシート初期化完了:', UNIFIED_FIELDS.PAYMENTS.length, '列');
     
-    // 費用マスターシート
-    getOrCreateSheet(SHEET_NAMES.EXPENSE_MASTER, [
-      'ID', '案件名', '支払い先', '支払い先コード', '金額', '種別', '開始日', '終了日', '放送曜日', '作成日時'
-    ]);
+    // 費用データシート（拡張フィールド対応）
+    getOrCreateSheet(SHEET_NAMES.EXPENSES, UNIFIED_FIELDS.EXPENSES);
+    console.log('費用データシート初期化完了:', UNIFIED_FIELDS.EXPENSES.length, '列');
+    
+    // 費用マスターシート（拡張フィールド対応）
+    getOrCreateSheet(SHEET_NAMES.EXPENSE_MASTER, UNIFIED_FIELDS.EXPENSE_MASTER);
+    console.log('費用マスターシート初期化完了:', UNIFIED_FIELDS.EXPENSE_MASTER.length, '列');
     
     // 設定シート
     getOrCreateSheet(SHEET_NAMES.CONFIG, [
-      'キー', '値', '説明'
+      'キー', '値', '説明', '作成日時', '更新日時'
     ]);
+    console.log('設定シート初期化完了');
     
-    return { success: true, message: 'シートの初期化が完了しました' };
+    // データ構造の移行（既存データがある場合）
+    const migrationResult = migrateExistingData();
+    console.log('データ移行結果:', migrationResult);
+    
+    console.log('=== 統一データ構造での初期化完了 ===');
+    
+    return { 
+      success: true, 
+      message: 'シートの初期化が完了しました（統一データ構造）',
+      migrationResult: migrationResult
+    };
   } catch (error) {
     console.error('初期化エラー:', error);
     return { success: false, message: error.toString() };
@@ -96,12 +124,202 @@ function initializeSheets() {
 }
 
 /**
- * 統一版 支払いデータ取得関数
+ * 既存データの移行処理
+ */
+function migrateExistingData() {
+  try {
+    console.log('=== 既存データ移行開始 ===');
+    
+    const migrationStats = {
+      payments: { migrated: 0, errors: 0 },
+      expenses: { migrated: 0, errors: 0 },
+      master: { migrated: 0, errors: 0 }
+    };
+    
+    // 各シートのデータ移行
+    const sheetConfigs = [
+      { 
+        name: SHEET_NAMES.PAYMENTS, 
+        fields: UNIFIED_FIELDS.PAYMENTS,
+        key: 'payments'
+      },
+      { 
+        name: SHEET_NAMES.EXPENSES, 
+        fields: UNIFIED_FIELDS.EXPENSES,
+        key: 'expenses'
+      },
+      { 
+        name: SHEET_NAMES.EXPENSE_MASTER, 
+        fields: UNIFIED_FIELDS.EXPENSE_MASTER,
+        key: 'master'
+      }
+    ];
+    
+    sheetConfigs.forEach(config => {
+      try {
+        const result = migrateSheetData(config.name, config.fields);
+        migrationStats[config.key] = result;
+        console.log(`${config.name}移行完了:`, result);
+      } catch (error) {
+        console.error(`${config.name}移行エラー:`, error);
+        migrationStats[config.key] = { migrated: 0, errors: 1, error: error.toString() };
+      }
+    });
+    
+    console.log('=== 既存データ移行完了 ===');
+    
+    return {
+      success: true,
+      stats: migrationStats,
+      message: `データ移行完了 - 支払い:${migrationStats.payments.migrated}件、費用:${migrationStats.expenses.migrated}件、マスター:${migrationStats.master.migrated}件`
+    };
+    
+  } catch (error) {
+    console.error('データ移行全体エラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: 'データ移行に失敗しました'
+    };
+  }
+}
+
+/**
+ * 個別シートのデータ移行
+ */
+function migrateSheetData(sheetName, targetFields) {
+  try {
+    const sheet = getOrCreateSheet(sheetName, targetFields);
+    const lastRow = sheet.getLastRow();
+    
+    if (lastRow <= 1) {
+      return { migrated: 0, errors: 0, message: 'データなし' };
+    }
+    
+    // 現在のヘッダーを確認
+    const currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    
+    // ヘッダーが既に新しい構造の場合はスキップ
+    if (currentHeaders.length >= targetFields.length && 
+        currentHeaders.slice(0, targetFields.length).every((header, index) => header === targetFields[index])) {
+      return { migrated: 0, errors: 0, message: '既に新しい構造' };
+    }
+    
+    // 既存データを読み取り
+    const existingData = sheet.getRange(2, 1, lastRow - 1, currentHeaders.length).getValues();
+    
+    // データを新しい構造に変換
+    const migratedData = existingData.map((row, rowIndex) => {
+      try {
+        const newRow = new Array(targetFields.length).fill('');
+        
+        // 既存フィールドをマッピング
+        currentHeaders.forEach((currentHeader, currentIndex) => {
+          const targetIndex = targetFields.indexOf(currentHeader);
+          if (targetIndex !== -1) {
+            newRow[targetIndex] = row[currentIndex];
+          }
+        });
+        
+        // 新しいフィールドのデフォルト値設定
+        const now = new Date();
+        const createdAtIndex = targetFields.indexOf('作成日時');
+        if (createdAtIndex !== -1 && !newRow[createdAtIndex]) {
+          newRow[createdAtIndex] = now;
+        }
+        
+        // デフォルト値の設定
+        setDefaultValues(newRow, targetFields, sheetName);
+        
+        return newRow;
+      } catch (error) {
+        console.error(`行 ${rowIndex + 2} 移行エラー:`, error);
+        return null;
+      }
+    }).filter(row => row !== null);
+    
+    if (migratedData.length > 0) {
+      // シートをクリアして新しいデータで更新
+      sheet.clear();
+      sheet.getRange(1, 1, 1, targetFields.length).setValues([targetFields]);
+      sheet.getRange(1, 1, 1, targetFields.length).setFontWeight('bold');
+      
+      if (migratedData.length > 0) {
+        sheet.getRange(2, 1, migratedData.length, targetFields.length).setValues(migratedData);
+      }
+    }
+    
+    return {
+      migrated: migratedData.length,
+      errors: existingData.length - migratedData.length,
+      message: `${migratedData.length}件のデータを移行`
+    };
+    
+  } catch (error) {
+    console.error(`シート ${sheetName} 移行エラー:`, error);
+    return {
+      migrated: 0,
+      errors: 1,
+      error: error.toString(),
+      message: '移行に失敗'
+    };
+  }
+}
+
+/**
+ * デフォルト値の設定
+ */
+function setDefaultValues(row, fields, sheetName) {
+  // 状態のデフォルト値
+  const statusIndex = fields.indexOf('状態');
+  if (statusIndex !== -1 && !row[statusIndex]) {
+    row[statusIndex] = '未処理';
+  }
+  
+  // 案件状態のデフォルト値
+  const projectStatusIndex = fields.indexOf('案件状態');
+  if (projectStatusIndex !== -1 && !row[projectStatusIndex]) {
+    row[projectStatusIndex] = '進行中';
+  }
+  
+  // 緊急度のデフォルト値
+  const urgencyIndex = fields.indexOf('緊急度');
+  if (urgencyIndex !== -1 && !row[urgencyIndex]) {
+    row[urgencyIndex] = '通常';
+  }
+  
+  // 種別のデフォルト値（費用マスター用）
+  if (sheetName === SHEET_NAMES.EXPENSE_MASTER) {
+    const typeIndex = fields.indexOf('種別');
+    if (typeIndex !== -1 && !row[typeIndex]) {
+      row[typeIndex] = '月額固定';
+    }
+  }
+  
+  // ソース種別のデフォルト値（費用データ用）
+  if (sheetName === SHEET_NAMES.EXPENSES) {
+    const sourceTypeIndex = fields.indexOf('ソース種別');
+    if (sourceTypeIndex !== -1 && !row[sourceTypeIndex]) {
+      row[sourceTypeIndex] = 'manual';
+    }
+  }
+}
+
+/**
+ * エラーハンドリング強化版 - 統一版 支払いデータ取得関数
  */
 function getPaymentData(searchTerm = '') {
+  const startTime = new Date();
+  const functionName = 'getPaymentData';
+  
   try {
-    console.log('=== 統一版 支払いデータ取得開始 ===');
+    console.log(`=== ${functionName} 開始 ===`);
     console.log('検索条件:', searchTerm);
+    
+    // 入力パラメータの検証
+    if (typeof searchTerm !== 'string') {
+      throw new Error(`Invalid parameter: searchTerm must be string, received ${typeof searchTerm}`);
+    }
     
     const sheet = getOrCreateSheet(SHEET_NAMES.PAYMENTS, [
       'ID', '件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態', '作成日時'
@@ -869,4 +1087,265 @@ function extractYearMonth(dateValue) {
  */
 function generateId() {
   return 'ID_' + Utilities.getUuid().substring(0, 8) + '_' + new Date().getTime();
+}
+
+/**
+ * システムヘルスチェック - 簡易版
+ */
+function checkSystemHealth() {
+  try {
+    console.log('=== システムヘルスチェック開始 ===');
+
+    const health = {
+      timestamp: new Date(),
+      spreadsheetAccess: false,
+      dataIntegrity: false,
+      errorRate: 0,
+      avgResponseTime: 0
+    };
+
+    // スプレッドシートアクセステスト
+    try {
+      const ss = getSpreadsheet();
+      ss.getName(); // アクセステスト
+      health.spreadsheetAccess = true;
+      console.log('スプレッドシートアクセス: OK');
+    } catch (error) {
+      health.spreadsheetAccess = false;
+      health.error = error.toString();
+      console.error('スプレッドシートアクセス: NG -', error);
+    }
+
+    // データ整合性チェック
+    if (health.spreadsheetAccess) {
+      try {
+        const integrityResult = checkDataIntegrity();
+        health.dataIntegrity = integrityResult.success;
+        console.log('データ整合性:', health.dataIntegrity ? 'OK' : 'NG');
+      } catch (error) {
+        health.dataIntegrity = false;
+        console.error('データ整合性チェック失敗:', error);
+      }
+    }
+
+    console.log('=== システムヘルスチェック完了 ===');
+
+    return {
+      success: true,
+      health: health,
+      message: `ヘルスチェック完了 - スプレッドシート: ${health.spreadsheetAccess ? 'OK' : 'NG'}, データ整合性: ${health.dataIntegrity ? 'OK' : 'NG'}`
+    };
+
+  } catch (error) {
+    console.error('システムヘルスチェック全体エラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: 'ヘルスチェックに失敗しました'
+    };
+  }
+}
+
+/**
+ * マスターからの費用データインポート関数（Additional.jsに存在しない場合のフォールバック）
+ */
+function importMasterFromCsv(csvContent) {
+  try {
+    console.log('=== 費用マスターCSVインポート開始 ===');
+    const lines = csvContent.trim().split(/\r?\n/);
+
+    if (lines.length < 2) {
+      throw new Error('CSVファイルが空または不正です');
+    }
+
+    const sheet = getOrCreateSheet(SHEET_NAMES.EXPENSE_MASTER);
+    let importedCount = 0;
+    let errorCount = 0;
+    const errorDetails = [];
+
+    // ヘッダー行をスキップして処理
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const row = parseCSVLine(line);
+
+        if (row.length < 6) {
+          const error = `行 ${i+1}: 列数不足 (${row.length}列)`;
+          errorDetails.push(error);
+          errorCount++;
+          continue;
+        }
+
+        const newId = generateId();
+        const newRow = [
+          newId,
+          cleanString(row[1]) || 'インポート案件',
+          cleanString(row[2]) || 'インポート会社',
+          cleanString(row[3]) || '',
+          parseFloat(cleanString(row[4]).replace(/[^\d.-]/g, '')) || 0,
+          cleanString(row[5]) || '月額固定',
+          parseDate(cleanString(row[6])) || new Date(),
+          parseDate(cleanString(row[7])) || new Date(),
+          cleanString(row[8]) || '',
+          new Date()
+        ];
+
+        sheet.appendRow(newRow);
+        importedCount++;
+
+      } catch (rowError) {
+        const error = `行 ${i+1}: ${rowError.toString()}`;
+        errorDetails.push(error);
+        errorCount++;
+      }
+    }
+
+    console.log('=== 費用マスターCSVインポート完了 ===');
+
+    return {
+      success: true,
+      imported: importedCount,
+      errors: errorCount,
+      errorDetails: errorDetails,
+      message: `${importedCount}件の費用マスターデータをインポートしました${errorCount > 0 ? ` (エラー: ${errorCount}件)` : ''}`
+    };
+
+  } catch (error) {
+    console.error('費用マスターCSVインポートエラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: '費用マスターデータのインポートに失敗しました'
+    };
+  }
+}
+
+/**
+ * 費用からの費用データインポート関数（Additional.jsに存在しない場合のフォールバック）
+ */
+function importExpensesFromCsv(csvContent) {
+  try {
+    console.log('=== 費用データCSVインポート開始 ===');
+    const lines = csvContent.trim().split(/\r?\n/);
+
+    if (lines.length < 2) {
+      throw new Error('CSVファイルが空または不正です');
+    }
+
+    const sheet = getOrCreateSheet(SHEET_NAMES.EXPENSES);
+    let importedCount = 0;
+    let errorCount = 0;
+    const errorDetails = [];
+
+    // ヘッダー行をスキップして処理
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const row = parseCSVLine(line);
+
+        if (row.length < 6) {
+          const error = `行 ${i+1}: 列数不足 (${row.length}列)`;
+          errorDetails.push(error);
+          errorCount++;
+          continue;
+        }
+
+        const newId = generateId();
+        const newRow = [
+          newId,
+          cleanString(row[1]) || 'インポート案件',
+          cleanString(row[2]) || 'インポート会社',
+          cleanString(row[3]) || '',
+          parseFloat(cleanString(row[4]).replace(/[^\d.-]/g, '')) || 0,
+          parseDate(cleanString(row[5])) || new Date(),
+          cleanString(row[6]) || '未処理',
+          new Date()
+        ];
+
+        sheet.appendRow(newRow);
+        importedCount++;
+
+      } catch (rowError) {
+        const error = `行 ${i+1}: ${rowError.toString()}`;
+        errorDetails.push(error);
+        errorCount++;
+      }
+    }
+
+    console.log('=== 費用データCSVインポート完了 ===');
+
+    return {
+      success: true,
+      imported: importedCount,
+      errors: errorCount,
+      errorDetails: errorDetails,
+      message: `${importedCount}件の費用データをインポートしました${errorCount > 0 ? ` (エラー: ${errorCount}件)` : ''}`
+    };
+
+  } catch (error) {
+    console.error('費用データCSVインポートエラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: '費用データのインポートに失敗しました'
+    };
+  }
+}
+
+/**
+ * ヘルパー関数群（フォールバック用）
+ */
+function cleanString(str) {
+  if (str === null || str === undefined) return '';
+  return str.toString().trim().replace(/^["']|["']$/g, '');
+}
+
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+
+  try {
+    // YYYY-MM-DD形式を試行
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return new Date(dateStr);
+    }
+
+    // 日本語形式を試行
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++; // Skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
 }
