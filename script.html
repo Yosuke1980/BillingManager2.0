@@ -78,15 +78,20 @@ function loadData() {
 
     // Server function call
     google.script.run
-        .withSuccessHandler(function(data) {
-            allData[currentView] = data || [];
+        .withSuccessHandler(function(result) {
+            // サーバーは {success: true, data: [...]} または配列を返す可能性がある
+            const rows = (result && result.success) ? result.data : result;
+            allData[currentView] = Array.isArray(rows) ? rows : [];
             filteredData = allData[currentView];
+            console.log('Data loaded for', currentView, ':', filteredData.length, 'items');
             updateTable();
             showLoading(false);
         })
         .withFailureHandler(function(error) {
             console.error('データ読み込みエラー:', error);
             showError('データの読み込みに失敗しました: ' + error.message);
+            allData[currentView] = [];
+            filteredData = [];
             showLoading(false);
         })[functionName]();
 }
@@ -104,23 +109,16 @@ function updateUI() {
 }
 
 function updateTable() {
-    switch(currentView) {
-        case 'payment':
-            updatePaymentTable();
-            break;
-        case 'expense':
-            updateExpenseTable();
-            break;
-        case 'master':
-            updateMasterTable();
-            break;
-    }
-}
+    // ビュー別のtbody要素マッピング
+    const bodyMap = {
+        payment: '#paymentsTableBody',
+        expense: '#expensesTableBody',
+        master: '#mastersTableBody'
+    };
 
-function updatePaymentTable() {
-    const tbody = document.querySelector('#paymentsTableBody');
+    const tbody = document.querySelector(bodyMap[currentView]);
     if (!tbody) {
-        console.error('paymentsTableBody not found');
+        console.error(`${currentView}TableBody not found`);
         return;
     }
 
@@ -129,9 +127,9 @@ function updatePaymentTable() {
     if (!filteredData || filteredData.length === 0) {
         const row = tbody.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = 7; // 支払いテーブルは7列
-        cell.textContent = 'データがありません';
-        cell.className = 'text-center text-muted py-4';
+        cell.colSpan = 7; // 基本7列（必要に応じて調整）
+        cell.className = 'loading';
+        cell.innerHTML = '<i class="bi bi-arrow-clockwise pulse"></i><p>データを読み込み中...</p>';
         return;
     }
 
@@ -140,88 +138,30 @@ function updatePaymentTable() {
     const endIndex = startIndex + itemsPerPage;
     const pageData = filteredData.slice(startIndex, endIndex);
 
-    // テーブル行作成 - HTMLの列に合わせて修正
+    // ビュー別の表示カラム定義（HTMLのth順序に対応）
+    const colsByView = {
+        payment: ['件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+        expense: ['案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+        master: ['案件名', '支払い先', '支払い先コード', '金額', '種別', '開始日', '終了日']
+    };
+
+    const cols = colsByView[currentView] || [];
+
     pageData.forEach(item => {
         const row = tbody.insertRow();
-        // 支払いテーブルの列: 件名, 案件名, 支払い先, コード, 金額, 支払日, 状態
-        const columns = ['subject', 'projectName', 'payee', 'payeeCode', 'amount', 'paymentDate', 'status'];
-        columns.forEach(key => {
+        cols.forEach(key => {
             const cell = row.insertCell();
-            cell.textContent = item[key] || '';
-        });
-    });
+            let value = item[key] || '';
 
-    updatePagination();
-}
+            // 金額の場合は数値フォーマット
+            if (key === '金額' && value !== '') {
+                const numValue = Number(value);
+                if (!isNaN(numValue)) {
+                    value = numValue.toLocaleString('ja-JP');
+                }
+            }
 
-function updateExpenseTable() {
-    const tbody = document.querySelector('#expensesTableBody');
-    if (!tbody) {
-        console.error('expensesTableBody not found');
-        return;
-    }
-
-    tbody.innerHTML = '';
-
-    if (!filteredData || filteredData.length === 0) {
-        const row = tbody.insertRow();
-        const cell = row.insertCell();
-        cell.colSpan = 6; // 費用テーブルの列数に応じて調整
-        cell.textContent = 'データがありません';
-        cell.className = 'text-center text-muted py-4';
-        return;
-    }
-
-    // ページネーション計算
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const pageData = filteredData.slice(startIndex, endIndex);
-
-    // テーブル行作成
-    pageData.forEach(item => {
-        const row = tbody.insertRow();
-        // 費用テーブルの基本列
-        const columns = ['date', 'category', 'description', 'amount', 'status'];
-        columns.forEach(key => {
-            const cell = row.insertCell();
-            cell.textContent = item[key] || '';
-        });
-    });
-
-    updatePagination();
-}
-
-function updateMasterTable() {
-    const tbody = document.querySelector('#mastersTableBody');
-    if (!tbody) {
-        console.error('mastersTableBody not found');
-        return;
-    }
-
-    tbody.innerHTML = '';
-
-    if (!filteredData || filteredData.length === 0) {
-        const row = tbody.insertRow();
-        const cell = row.insertCell();
-        cell.colSpan = 5; // マスターテーブルの列数に応じて調整
-        cell.textContent = 'データがありません';
-        cell.className = 'text-center text-muted py-4';
-        return;
-    }
-
-    // ページネーション計算
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const pageData = filteredData.slice(startIndex, endIndex);
-
-    // テーブル行作成
-    pageData.forEach(item => {
-        const row = tbody.insertRow();
-        // マスターテーブルの基本列
-        const columns = ['category', 'description', 'amount', 'frequency'];
-        columns.forEach(key => {
-            const cell = row.insertCell();
-            cell.textContent = item[key] || '';
+            cell.textContent = value;
         });
     });
 
@@ -304,3 +244,34 @@ function setNextMonth() { alert('setNextMonth() stub'); }
 function setPreviousMonth() { alert('setPreviousMonth() stub'); }
 function previewMasterReflection() { alert('previewMasterReflection() stub'); }
 function executeMasterReflection() { alert('executeMasterReflection() stub'); }
+
+// 初期化処理
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded - initializing application');
+
+    // 初期表示は「支払い」タブ
+    currentView = 'payment';
+
+    // Bootstrap 5タブイベント対応
+    document.querySelectorAll('[data-bs-target="#payment"],[data-bs-target="#expense"],[data-bs-target="#master"]')
+        .forEach(btn => {
+            btn.addEventListener('shown.bs.tab', (e) => {
+                const target = e.target.getAttribute('data-bs-target'); // "#payment" など
+                console.log('Tab switched to:', target);
+
+                // data-bs-target からビュー名を判定
+                currentView = (target === '#payment') ? 'payment' :
+                             (target === '#expense') ? 'expense' : 'master';
+
+                console.log('Current view changed to:', currentView);
+
+                // データ読み込み
+                loadData();
+            });
+        });
+
+    // 初期データ読み込み
+    loadData();
+
+    console.log('Application initialized');
+});
