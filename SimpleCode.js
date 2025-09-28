@@ -271,10 +271,11 @@ function importPythonAppData() {
 }
 
 function importCSVData(csvText, dataType, clearExisting = false) {
-  try {
-    console.log(`CSVデータインポート開始: ${dataType}`);
+  console.log(`CSVデータインポート開始: ${dataType}, クリア: ${clearExisting}`);
 
-    if (!csvText || !csvText.trim()) {
+  try {
+    // 入力検証
+    if (!csvText?.trim()) {
       throw new Error('CSVデータが空です');
     }
 
@@ -283,53 +284,145 @@ function importCSVData(csvText, dataType, clearExisting = false) {
       throw new Error('CSVデータにヘッダーとデータ行が必要です');
     }
 
-    const spreadsheet = getOrCreateSpreadsheet();
+    console.log(`CSV行数: ${lines.length}行 (ヘッダー含む)`);
+
+    // スプレッドシート取得の再試行機能
+    let spreadsheet = null;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries && !spreadsheet) {
+      console.log(`スプレッドシート取得試行 ${retryCount + 1}/${maxRetries}`);
+      spreadsheet = getOrCreateSpreadsheet();
+
+      if (!spreadsheet) {
+        console.warn(`スプレッドシート取得失敗 (試行 ${retryCount + 1}/${maxRetries})`);
+        retryCount++;
+        if (retryCount < maxRetries) {
+          console.log('1秒待機してリトライします...');
+          Utilities.sleep(1000);
+        }
+      } else {
+        debugSpreadsheetState(spreadsheet, 'CSV取得後');
+        break;
+      }
+    }
+
     if (!spreadsheet) {
-      throw new Error('スプレッドシートにアクセスできません。新しいスプレッドシートを作成してください。');
+      throw new Error('スプレッドシートの作成/取得に失敗しました。システム初期化を実行してください。');
     }
 
+    // シート名取得と検証
     const sheetName = getSheetNameByDataType(dataType);
-
-    if (clearExisting) {
-      clearSheetData(spreadsheet, sheetName);
+    if (!sheetName) {
+      throw new Error(`無効なデータタイプ: ${dataType}`);
     }
 
-    // CSVパース（簡易版）
+    console.log(`対象シート: ${sheetName}`);
+
+    // シート存在確認と自動作成
+    let sheet = getSafeSheet(spreadsheet, sheetName);
+    if (!sheet) {
+      console.log(`シート「${sheetName}」が存在しないため作成します`);
+      const headers = getHeadersForSheet(sheetName);
+      if (headers.length === 0) {
+        throw new Error(`シート「${sheetName}」のヘッダー情報が見つかりません`);
+      }
+      sheet = initializeSheet(spreadsheet, sheetName, headers);
+      if (!sheet) {
+        throw new Error(`シート「${sheetName}」の作成に失敗しました`);
+      }
+    }
+
+    // 既存データクリア
+    if (clearExisting) {
+      console.log('既存データをクリア中...');
+      try {
+        const lastRow = sheet.getLastRow();
+        if (lastRow > 1) {
+          sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clear();
+          console.log(`${lastRow - 1}行のデータをクリアしました`);
+        }
+      } catch (clearError) {
+        console.error('データクリアエラー:', clearError);
+        throw new Error(`データクリア失敗: ${clearError.message}`);
+      }
+    }
+
+    // CSVパース（改良版）
+    console.log('CSVデータを解析中...');
     const data = [];
+    const errors = [];
+
     for (let i = 1; i < lines.length; i++) {
-      const row = lines[i].split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
-      if (row.some(cell => cell)) { // 空行をスキップ
+      try {
+        const line = lines[i].trim();
+        if (!line) continue; // 空行をスキップ
+
+        const row = parseCsvLine(line);
+        if (row.length === 0) continue;
+
         // IDが無い場合は生成
         if (!row[0] || row[0] === '') {
           row[0] = `${dataType.toUpperCase()}${Date.now()}${i}`;
         }
+
         // 作成日・更新日を追加
         row.push(new Date(), new Date());
         data.push(row);
+
+      } catch (parseError) {
+        const errorMsg = `行 ${i + 1}: ${parseError.message}`;
+        console.warn(errorMsg);
+        errors.push(errorMsg);
       }
     }
 
+    console.log(`解析完了: ${data.length}行のデータを抽出`);
+
+    // データ挿入
     if (data.length > 0) {
-      insertSampleData(spreadsheet, sheetName, data);
+      console.log('データ挿入を開始...');
+      try {
+        const startRow = sheet.getLastRow() + 1;
+        console.log(`${startRow}行目から${data.length}行のデータを挿入`);
+
+        sheet.getRange(startRow, 1, data.length, data[0].length).setValues(data);
+        console.log('データ挿入が完了しました');
+
+      } catch (insertError) {
+        console.error('データ挿入エラー:', insertError);
+        throw new Error(`データ挿入失敗: ${insertError.message}`);
+      }
+    } else {
+      console.warn('挿入するデータがありません');
     }
 
-    console.log('CSVデータインポート完了');
-    return {
+    const result = {
       success: true,
       message: `${dataType}データのCSVインポートが完了しました`,
       results: {
         imported: data.length,
         skipped: lines.length - 1 - data.length,
-        errors: []
+        errors: errors
       }
     };
+
+    console.log('CSVデータインポート完了:', result);
+    return result;
+
   } catch (error) {
-    console.error('CSVインポートエラー:', error);
-    return {
+    console.error('importCSVData詳細エラー:', error);
+    console.error('エラースタック:', error.stack);
+
+    const errorResult = {
       success: false,
-      message: error.message,
+      message: `CSVインポートエラー: ${error.message}`,
       results: { imported: 0, skipped: 0, errors: [error.message] }
     };
+
+    console.log('エラー結果:', errorResult);
+    return errorResult;
   }
 }
 
@@ -1019,12 +1112,29 @@ function getOrCreateSpreadsheet() {
 }
 
 function initializeSheet(spreadsheet, sheetName, headers) {
-  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (!spreadsheet) {
+    console.error('initializeSheet: スプレッドシートがnullです');
+    return null;
+  }
+
+  let sheet = getSafeSheet(spreadsheet, sheetName);
 
   if (!sheet) {
-    sheet = spreadsheet.insertSheet(sheetName);
+    try {
+      sheet = spreadsheet.insertSheet(sheetName);
+      console.log(`initializeSheet: シート「${sheetName}」を新規作成しました`);
+    } catch (error) {
+      console.error(`initializeSheet: シート作成エラー (${sheetName}):`, error);
+      return null;
+    }
   } else {
-    sheet.clear();
+    try {
+      sheet.clear();
+      console.log(`initializeSheet: シート「${sheetName}」をクリアしました`);
+    } catch (error) {
+      console.error(`initializeSheet: シートクリアエラー (${sheetName}):`, error);
+      return null;
+    }
   }
 
   // ヘッダー設定
@@ -1052,25 +1162,28 @@ function getSheetData(sheetName) {
   try {
     const spreadsheet = getOrCreateSpreadsheet();
     if (!spreadsheet) {
-      console.warn(`スプレッドシートにアクセスできません`);
+      console.warn(`getSheetData: スプレッドシートにアクセスできません`);
       return [];
     }
 
-    const sheet = spreadsheet.getSheetByName(sheetName);
+    const sheet = getSafeSheet(spreadsheet, sheetName);
     if (!sheet) {
-      console.warn(`シート ${sheetName} が見つかりません`);
+      console.warn(`getSheetData: シート ${sheetName} が見つかりません`);
       return [];
     }
 
     const lastRow = sheet.getLastRow();
     if (lastRow <= 1) {
+      console.log(`getSheetData: シート ${sheetName} にデータがありません`);
       return [];
     }
 
     const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
-    return data.filter(row => row.some(cell => cell !== '' && cell !== null));
+    const filteredData = data.filter(row => row.some(cell => cell !== '' && cell !== null));
+    console.log(`getSheetData: シート ${sheetName} から ${filteredData.length} 行のデータを取得`);
+    return filteredData;
   } catch (error) {
-    console.error(`シートデータ取得エラー (${sheetName}):`, error);
+    console.error(`getSheetData: シートデータ取得エラー (${sheetName}):`, error);
     return [];
   }
 }
@@ -1086,7 +1199,7 @@ function insertSampleData(spreadsheet, sheetName, data) {
     return;
   }
 
-  let sheet = spreadsheet.getSheetByName(sheetName);
+  let sheet = getSafeSheet(spreadsheet, sheetName);
   if (!sheet) {
     // シートが存在しない場合は作成
     console.log(`insertSampleData: シート「${sheetName}」が存在しないため作成します`);
@@ -1117,7 +1230,7 @@ function clearSheetData(spreadsheet, sheetName) {
     return;
   }
 
-  let sheet = spreadsheet.getSheetByName(sheetName);
+  let sheet = getSafeSheet(spreadsheet, sheetName);
   if (!sheet) {
     // シートが存在しない場合は作成
     console.log(`clearSheetData: シート「${sheetName}」が存在しないため作成します`);
@@ -1131,10 +1244,14 @@ function clearSheetData(spreadsheet, sheetName) {
   }
 
   if (sheet) {
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clear();
-      console.log(`clearSheetData: シート「${sheetName}」のデータを清了しました`);
+    try {
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clear();
+        console.log(`clearSheetData: シート「${sheetName}」のデータをクリアしました`);
+      }
+    } catch (error) {
+      console.error(`clearSheetData: データクリアエラー (${sheetName}):`, error);
     }
   }
 }
@@ -1191,6 +1308,44 @@ function getHeadersForSheet(sheetName) {
     [CONFIG.SHEETS.MASTERS]: CONFIG.HEADERS.MASTERS
   };
   return mapping[sheetName] || [];
+}
+
+// ========== 安全なシート操作関数 ==========
+
+function getSafeSheet(spreadsheet, sheetName) {
+  if (!spreadsheet) {
+    console.error('getSafeSheet: スプレッドシートがnull');
+    return null;
+  }
+
+  try {
+    const sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet) {
+      console.warn(`getSafeSheet: シート「${sheetName}」が存在しません`);
+    }
+    return sheet;
+  } catch (error) {
+    console.error(`getSafeSheet: シート取得エラー (${sheetName}):`, error);
+    return null;
+  }
+}
+
+function debugSpreadsheetState(spreadsheet, context) {
+  console.log(`=== デバッグ情報 (${context}) ===`);
+  console.log('スプレッドシート:', spreadsheet ? 'OK' : 'NULL');
+  if (spreadsheet) {
+    try {
+      console.log('ID:', spreadsheet.getId());
+      console.log('名前:', spreadsheet.getName());
+      console.log('URL:', spreadsheet.getUrl());
+      const sheets = spreadsheet.getSheets();
+      console.log('シート数:', sheets.length);
+      console.log('シート名:', sheets.map(s => s.getName()).join(', '));
+    } catch (error) {
+      console.error('スプレッドシート情報取得エラー:', error);
+    }
+  }
+  console.log('========================');
 }
 
 // ========== 追加のラッパー関数（HTML互換性） ==========
