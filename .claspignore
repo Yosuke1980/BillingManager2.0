@@ -1,0 +1,10 @@
+# GASに不要なファイルを除外
+.git/
+.github/
+.vscode/
+.claude/
+README.md
+CLAUDE.md
+.gitignore
+advanced_features.js
+matching_config.json

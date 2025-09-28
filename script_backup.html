@@ -1,0 +1,1793 @@
+// グローバル変数
+let currentView = 'payments';
+let allData = {
+  payments: [],
+  expenses: [],
+  masters: []
+};
+let filteredData = [];
+let currentPage = 1;
+const itemsPerPage = 20;
+
+// 初期化
+document.addEventListener('DOMContentLoaded', function() {
+  initializeApp();
+});
+
+function initializeApp() {
+  console.log('アプリ初期化開始');
+  
+  // エラー詳細ログ機能を追加
+  window.addEventListener('error', function(e) {
+    console.error('JavaScript エラー:', e.error);
+    showError('JavaScript エラーが発生しました: ' + e.message);
+  });
+  
+  // タブ切り替えイベント
+  document.querySelectorAll('.nav-link').forEach(tab => {
+    tab.addEventListener('click', function(e) {
+      e.preventDefault();
+      const targetView = this.getAttribute('href').substring(1);
+      switchView(targetView);
+    });
+  });
+
+  // フォームイベント
+  setupFormEvents();
+  
+  // 初期データ読み込み
+  loadData();
+}
+
+function setupFormEvents() {
+  // 新規追加ボタン
+  const addBtn = document.getElementById('addBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', showAddModal);
+  }
+
+  // 検索ボタン
+  const searchBtn = document.getElementById('searchBtn');
+  if (searchBtn) {
+    searchBtn.addEventListener('click', performSearch);
+  }
+
+  // クリアボタン
+  const clearBtn = document.getElementById('clearBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', clearFilters);
+  }
+
+  // CSVエクスポート
+  const exportBtn = document.getElementById('exportBtn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', exportCSV);
+  }
+
+  // CSVインポート
+  const importBtn = document.getElementById('importBtn');
+  if (importBtn) {
+    importBtn.addEventListener('click', () => document.getElementById('csvFile').click());
+  }
+
+  const csvFile = document.getElementById('csvFile');
+  if (csvFile) {
+    csvFile.addEventListener('change', handleCSVImport);
+  }
+}
+
+// ビュー切り替え
+function switchView(view) {
+  currentView = view;
+  
+  // タブアクティブ状態更新
+  document.querySelectorAll('.nav-link').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  document.querySelector(`[href="#${view}"]`).classList.add('active');
+
+  // データ読み込み
+  loadData();
+  updateUI();
+}
+
+// データ読み込み
+function loadData() {
+  console.log('データ読み込み開始 - ビュー:', currentView);
+  showLoading(true);
+  
+  let functionName;
+  switch(currentView) {
+    case 'payments':
+      functionName = 'getPaymentData';
+      break;
+    case 'expenses':
+      functionName = 'getExpenseData';
+      break;
+    case 'masters':
+      functionName = 'getMasterData';
+      break;
+    default:
+      functionName = 'getPaymentData';
+  }
+  
+  console.log('呼び出し関数:', functionName);
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      console.log('データ読み込み成功:', result);
+      if (result && result.success) {
+        allData[currentView] = result.data || [];
+        filteredData = [...allData[currentView]];
+        currentPage = 1;
+        updateDataTable();
+        showLoading(false);
+      } else {
+        console.error('データ読み込みエラー:', result);
+        showLoading(false);
+        showError('データの読み込みに失敗しました: ' + (result ? result.error : '不明なエラー'));
+      }
+    })
+    .withFailureHandler(function(error) {
+      console.error('通信エラー:', error);
+      showLoading(false);
+      showError('サーバーとの通信に失敗しました: ' + error.message);
+    })[functionName]();
+}
+
+// UI更新
+function updateUI() {
+  const viewTitle = document.getElementById('viewTitle');
+  const addBtnText = document.getElementById('addBtn');
+  
+  const titles = {
+    'payments': '支払いデータ管理',
+    'expenses': '費用データ管理', 
+    'masters': 'マスターデータ管理'
+  };
+  
+  const addTexts = {
+    'payments': '新規支払い追加',
+    'expenses': '新規費用追加',
+    'masters': '新規マスター追加'
+  };
+
+  if (viewTitle) viewTitle.textContent = titles[currentView];
+  if (addBtnText) addBtnText.textContent = addTexts[currentView];
+}
+
+// データテーブル更新
+function updateDataTable() {
+  const tableBody = document.getElementById('dataTableBody');
+  if (!tableBody) return;
+
+  // ページネーション計算
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const pageData = filteredData.slice(startIndex, endIndex);
+
+  // テーブルヘッダー更新
+  updateTableHeaders();
+
+  // テーブル本体更新
+  tableBody.innerHTML = '';
+  
+  if (pageData.length === 0) {
+    const row = tableBody.insertRow();
+    const cell = row.insertCell();
+    cell.colSpan = getColumnCount();
+    cell.innerHTML = '<div class="text-center text-muted py-4">データがありません</div>';
+    return;
+  }
+
+  pageData.forEach((item, index) => {
+    const row = tableBody.insertRow();
+    populateTableRow(row, item, startIndex + index);
+  });
+
+  updatePagination();
+}
+
+// テーブルヘッダー更新
+function updateTableHeaders() {
+  const tableHead = document.getElementById('dataTableHead');
+  if (!tableHead) return;
+
+  const headers = getTableHeaders();
+  tableHead.innerHTML = '';
+  
+  const row = tableHead.insertRow();
+  headers.forEach(header => {
+    const th = document.createElement('th');
+    th.textContent = header;
+    th.scope = 'col';
+    row.appendChild(th);
+  });
+  
+  // アクション列
+  const actionTh = document.createElement('th');
+  actionTh.textContent = 'アクション';
+  actionTh.scope = 'col';
+  actionTh.style.width = '120px';
+  row.appendChild(actionTh);
+}
+
+// テーブルヘッダー取得
+function getTableHeaders() {
+  const headers = {
+    'payments': ['件名', '案件名', '支払い先', '金額', '支払日', '状態'],
+    'expenses': ['案件名', '支払い先', '金額', '支払日', '状態'],
+    'masters': ['案件名', '支払い先', '金額', '種別']
+  };
+  return headers[currentView] || [];
+}
+
+// カラム数取得
+function getColumnCount() {
+  return getTableHeaders().length + 1; // +1 for action column
+}
+
+// テーブル行データ設定
+function populateTableRow(row, item, index) {
+  switch(currentView) {
+    case 'payments':
+      populatePaymentRow(row, item, index);
+      break;
+    case 'expenses':
+      populateExpenseRow(row, item, index);
+      break;
+    case 'masters':
+      populateMasterRow(row, item, index);
+      break;
+  }
+}
+
+// 支払いデータ行
+function populatePaymentRow(row, item, index) {
+  row.insertCell().textContent = item['件名'] || '';
+  row.insertCell().textContent = item['案件名'] || '';
+  row.insertCell().textContent = item['支払い先'] || '';
+  row.insertCell().textContent = formatCurrency(item['金額']);
+  row.insertCell().textContent = formatDate(item['支払日']);
+  
+  const statusCell = row.insertCell();
+  statusCell.innerHTML = `<span class="badge ${getStatusBadgeClass(item['状態'])}">${item['状態'] || ''}</span>`;
+  
+  addActionButtons(row, item, index);
+}
+
+// 費用データ行
+function populateExpenseRow(row, item, index) {
+  row.insertCell().textContent = item['案件名'] || '';
+  row.insertCell().textContent = item['支払い先'] || '';
+  row.insertCell().textContent = formatCurrency(item['金額']);
+  row.insertCell().textContent = formatDate(item['支払日']);
+  
+  const statusCell = row.insertCell();
+  statusCell.innerHTML = `<span class="badge ${getStatusBadgeClass(item['状態'])}">${item['状態'] || ''}</span>`;
+  
+  addActionButtons(row, item, index);
+}
+
+// マスターデータ行
+function populateMasterRow(row, item, index) {
+  row.insertCell().textContent = item['案件名'] || '';
+  row.insertCell().textContent = item['支払い先'] || '';
+  row.insertCell().textContent = formatCurrency(item['金額']);
+  row.insertCell().textContent = item['種別'] || '';
+  
+  addActionButtons(row, item, index);
+}
+
+// アクションボタン追加
+function addActionButtons(row, item, index) {
+  const actionCell = row.insertCell();
+  actionCell.innerHTML = `
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-primary" onclick="editItem(${index})">
+        <i class="fas fa-edit"></i>
+      </button>
+      <button class="btn btn-outline-danger" onclick="deleteItem(${index})">
+        <i class="fas fa-trash"></i>
+      </button>
+    </div>
+  `;
+}
+
+// ステータスバッジクラス取得
+function getStatusBadgeClass(status) {
+  const statusClasses = {
+    '未処理': 'bg-warning',
+    '処理中': 'bg-info',
+    '完了': 'bg-success',
+    '保留': 'bg-secondary',
+    'エラー': 'bg-danger'
+  };
+  return statusClasses[status] || 'bg-secondary';
+}
+
+// 通貨フォーマット
+function formatCurrency(amount) {
+  if (!amount) return '¥0';
+  return '¥' + Number(amount).toLocaleString('ja-JP');
+}
+
+// 日付フォーマット
+function formatDate(date) {
+  if (!date) return '';
+  if (typeof date === 'string') {
+    return date;
+  }
+  return new Date(date).toLocaleDateString('ja-JP');
+}
+
+// ページネーション更新
+function updatePagination() {
+  const pagination = document.getElementById('pagination');
+  if (!pagination) return;
+
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  
+  pagination.innerHTML = '';
+  
+  if (totalPages <= 1) return;
+
+  // 前へボタン
+  const prevLi = document.createElement('li');
+  prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+  prevLi.innerHTML = '<a class="page-link" href="#" onclick="changePage(' + (currentPage - 1) + ')">前へ</a>';
+  pagination.appendChild(prevLi);
+
+  // ページ番号
+  const startPage = Math.max(1, currentPage - 2);
+  const endPage = Math.min(totalPages, currentPage + 2);
+
+  for (let i = startPage; i <= endPage; i++) {
+    const li = document.createElement('li');
+    li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+    li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i})">${i}</a>`;
+    pagination.appendChild(li);
+  }
+
+  // 次へボタン
+  const nextLi = document.createElement('li');
+  nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+  nextLi.innerHTML = '<a class="page-link" href="#" onclick="changePage(' + (currentPage + 1) + ')">次へ</a>';
+  pagination.appendChild(nextLi);
+
+  // 件数表示
+  updateRecordInfo();
+}
+
+// 件数情報更新
+function updateRecordInfo() {
+  const recordInfo = document.getElementById('recordInfo');
+  if (!recordInfo) return;
+
+  const startIndex = (currentPage - 1) * itemsPerPage + 1;
+  const endIndex = Math.min(currentPage * itemsPerPage, filteredData.length);
+  
+  recordInfo.textContent = `${startIndex}-${endIndex} / ${filteredData.length}件`;
+}
+
+// ページ変更
+function changePage(page) {
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  if (page < 1 || page > totalPages) return;
+  
+  currentPage = page;
+  updateDataTable();
+}
+
+// 検索実行
+function performSearch() {
+  const searchText = document.getElementById('searchText')?.value || '';
+  const statusFilter = document.getElementById('statusFilter')?.value || '';
+  const amountMin = document.getElementById('amountMin')?.value || '';
+  const amountMax = document.getElementById('amountMax')?.value || '';
+  const dateFrom = document.getElementById('dateFrom')?.value || '';
+  const dateTo = document.getElementById('dateTo')?.value || '';
+
+  filteredData = allData[currentView].filter(item => {
+    // テキスト検索
+    if (searchText) {
+      const searchLower = searchText.toLowerCase();
+      const searchableFields = ['件名', '案件名', '支払い先', '支払い先コード', '種別'];
+      const matches = searchableFields.some(field => 
+        String(item[field] || '').toLowerCase().includes(searchLower)
+      );
+      if (!matches) return false;
+    }
+
+    // ステータスフィルタ
+    if (statusFilter && item['状態'] !== statusFilter) {
+      return false;
+    }
+
+    // 金額フィルタ
+    const amount = Number(item['金額']) || 0;
+    if (amountMin && amount < Number(amountMin)) return false;
+    if (amountMax && amount > Number(amountMax)) return false;
+
+    // 日付フィルタ
+    const itemDate = new Date(item['支払日']);
+    if (dateFrom && itemDate < new Date(dateFrom)) return false;
+    if (dateTo && itemDate > new Date(dateTo)) return false;
+
+    return true;
+  });
+
+  currentPage = 1;
+  updateDataTable();
+}
+
+// フィルタクリア
+function clearFilters() {
+  document.getElementById('searchText').value = '';
+  document.getElementById('statusFilter').value = '';
+  document.getElementById('amountMin').value = '';
+  document.getElementById('amountMax').value = '';
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+
+  filteredData = [...allData[currentView]];
+  currentPage = 1;
+  updateDataTable();
+}
+
+// 新規追加モーダル表示
+function showAddModal() {
+  const modal = new bootstrap.Modal(document.getElementById('editModal'));
+  setupModalForAdd();
+  modal.show();
+}
+
+// 編集
+function editItem(index) {
+  const item = filteredData[index];
+  const modal = new bootstrap.Modal(document.getElementById('editModal'));
+  setupModalForEdit(item);
+  modal.show();
+}
+
+// モーダル新規追加用設定
+function setupModalForAdd() {
+  document.getElementById('editModalLabel').textContent = `新規${getCurrentViewLabel()}追加`;
+  document.getElementById('editForm').reset();
+  document.getElementById('editForm').setAttribute('data-mode', 'add');
+  populateFormFields({});
+}
+
+// モーダル編集用設定
+function setupModalForEdit(item) {
+  document.getElementById('editModalLabel').textContent = `${getCurrentViewLabel()}編集`;
+  document.getElementById('editForm').setAttribute('data-mode', 'edit');
+  document.getElementById('editForm').setAttribute('data-id', item['ID'] || '');
+  populateFormFields(item);
+}
+
+// 現在のビューラベル取得
+function getCurrentViewLabel() {
+  const labels = {
+    'payments': '支払いデータ',
+    'expenses': '費用データ',
+    'masters': 'マスターデータ'
+  };
+  return labels[currentView] || '';
+}
+
+// フォームフィールド設定
+function populateFormFields(item) {
+  const fields = getFormFields();
+  fields.forEach(field => {
+    const element = document.getElementById(field);
+    if (element) {
+      element.value = item[field] || '';
+    }
+  });
+}
+
+// フォームフィールド取得
+function getFormFields() {
+  const fields = {
+    'payments': ['件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+    'expenses': ['案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+    'masters': ['案件名', '支払い先', '支払い先コード', '金額', '種別']
+  };
+  return fields[currentView] || [];
+}
+
+// フォーム保存
+function saveForm() {
+  const form = document.getElementById('editForm');
+  const mode = form.getAttribute('data-mode');
+  const id = form.getAttribute('data-id');
+
+  const formData = {};
+  getFormFields().forEach(field => {
+    const element = document.getElementById(field);
+    if (element) {
+      formData[field] = element.value;
+    }
+  });
+
+  // バリデーション
+  if (!validateFormData(formData)) {
+    return;
+  }
+
+  showLoading(true);
+
+  let functionName, successMessage;
+  if (mode === 'add') {
+    functionName = `add${currentView.charAt(0).toUpperCase() + currentView.slice(1, -1)}`;
+    successMessage = '新規追加が完了しました';
+  } else {
+    functionName = `update${currentView.charAt(0).toUpperCase() + currentView.slice(1, -1)}`;
+    formData['ID'] = id;
+    successMessage = '更新が完了しました';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess(successMessage);
+        const modal = bootstrap.Modal.getInstance(document.getElementById('editModal'));
+        modal.hide();
+        loadData();
+      } else {
+        showError('保存に失敗しました: ' + result.error);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('保存に失敗しました: ' + error.message);
+    })[functionName](formData);
+}
+
+// フォームデータバリデーション
+function validateFormData(data) {
+  const requiredFields = {
+    'payments': ['件名', '支払い先', '金額'],
+    'expenses': ['案件名', '支払い先', '金額'],
+    'masters': ['案件名', '支払い先', '金額']
+  };
+
+  const required = requiredFields[currentView] || [];
+  
+  for (const field of required) {
+    if (!data[field] || data[field].trim() === '') {
+      showError(`${field}は必須項目です`);
+      return false;
+    }
+  }
+
+  // 金額の数値チェック
+  if (data['金額'] && isNaN(Number(data['金額']))) {
+    showError('金額は数値で入力してください');
+    return false;
+  }
+
+  return true;
+}
+
+// 削除
+function deleteItem(index) {
+  const item = filteredData[index];
+  
+  if (!confirm(`この${getCurrentViewLabel()}を削除しますか？`)) {
+    return;
+  }
+
+  showLoading(true);
+
+  const functionName = `delete${currentView.charAt(0).toUpperCase() + currentView.slice(1, -1)}`;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('削除が完了しました');
+        loadData();
+      } else {
+        showError('削除に失敗しました: ' + result.error);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('削除に失敗しました: ' + error.message);
+    })[functionName](item['ID']);
+}
+
+// CSVエクスポート
+function exportCSV() {
+  showLoading(true);
+  
+  const functionName = `export${currentView.charAt(0).toUpperCase() + currentView.slice(1)}CSV`;
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        downloadCSV(result.data, `${currentView}_${new Date().toISOString().split('T')[0]}.csv`);
+        showSuccess('CSVエクスポートが完了しました');
+      } else {
+        showError('エクスポートに失敗しました: ' + result.error);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エクスポートに失敗しました: ' + error.message);
+    })[functionName]();
+}
+
+// CSV ダウンロード
+function downloadCSV(csvContent, filename) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// CSVインポート
+function handleCSVImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  showLoading(true);
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const csv = e.target.result;
+    const functionName = `import${currentView.charAt(0).toUpperCase() + currentView.slice(1)}CSV`;
+    
+    google.script.run
+      .withSuccessHandler(function(result) {
+        showLoading(false);
+        if (result.success) {
+          showSuccess(`${result.imported || 0}件のデータをインポートしました`);
+          loadData();
+        } else {
+          showError('インポートに失敗しました: ' + result.error);
+        }
+      })
+      .withFailureHandler(function(error) {
+        showLoading(false);
+        showError('インポートに失敗しました: ' + error.message);
+      })[functionName](csv);
+  };
+  
+  reader.readAsText(file, 'UTF-8');
+  event.target.value = ''; // ファイル選択をクリア
+}
+
+// ローディング表示
+function showLoading(show) {
+  const loading = document.getElementById('loading');
+  if (loading) {
+    loading.style.display = show ? 'block' : 'none';
+  }
+}
+
+// 成功メッセージ表示
+function showSuccess(message) {
+  showAlert(message, 'success');
+}
+
+// エラーメッセージ表示
+function showError(message) {
+  showAlert(message, 'danger');
+}
+
+// アラート表示
+function showAlert(message, type) {
+  const alertContainer = document.getElementById('alertContainer') || createAlertContainer();
+  
+  const alert = document.createElement('div');
+  alert.className = `alert alert-${type} alert-dismissible fade show`;
+  alert.innerHTML = `
+    ${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  
+  alertContainer.appendChild(alert);
+  
+  // 5秒後に自動で閉じる
+  setTimeout(() => {
+    if (alert.parentNode) {
+      alert.remove();
+    }
+  }, 5000);
+}
+
+// アラートコンテナ作成
+function createAlertContainer() {
+  const container = document.createElement('div');
+  container.id = 'alertContainer';
+  container.className = 'position-fixed top-0 end-0 p-3';
+  container.style.zIndex = '9999';
+  document.body.appendChild(container);
+  return container;
+}
+
+// 照合機能（追加機能）
+function runMatching() {
+  if (!confirm('支払いデータと費用データの照合を実行しますか？\n時間がかかる場合があります。')) {
+    return;
+  }
+
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess(`照合が完了しました。${result.matched || 0}件の一致を発見しました。`);
+        loadData();
+      } else {
+        showError('照合処理に失敗しました: ' + result.error);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('照合処理に失敗しました: ' + error.message);
+    })
+    .matchExpensesWithPayments();
+}
+
+// システム診断
+function runDiagnosis() {
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      showDiagnosisResults(result);
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('診断に失敗しました: ' + error.message);
+    })
+    .runCompleteDiagnosis();
+}
+
+// 診断結果表示
+function showDiagnosisResults(result) {
+  const modal = new bootstrap.Modal(document.createElement('div'));
+  // 診断結果をモーダルで表示する処理
+  // 詳細実装は必要に応じて追加
+  console.log('診断結果:', result);
+  showSuccess('システム診断が完了しました。コンソールで結果を確認してください。');
+}
+// ========== HTML UI関数のラッパー ==========
+
+/**
+ * 新しいスプレッドシートを作成
+ */
+function createNewSpreadsheet() {
+  showLoading(true, 'スプレッドシートを作成中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('新しいスプレッドシートを作成しました');
+        showAlert(`
+          <strong>新しいスプレッドシートが作成されました</strong><br>
+          <small>ID: ${result.spreadsheetId}</small><br>
+          <a href="${result.spreadsheetUrl}" target="_blank">スプレッドシートを開く</a>
+        `);
+      } else {
+        showError('スプレッドシート作成に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .createNewSpreadsheet();
+}
+
+/**
+ * システム初期化
+ */
+function initializeCompleteSystem() {
+  if (!confirm('システム全体を初期化しますか？\n既存のデータは保持されますが、設定とシート構造が再作成されます。')) {
+    return;
+  }
+  
+  showLoading(true, 'システムを初期化中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('システム初期化が完了しました');
+        loadData();
+      } else {
+        showError('初期化に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .initializeCompleteSystem();
+}
+
+/**
+ * サンプルデータ作成
+ */
+function createSampleData() {
+  if (!confirm('サンプルデータを作成しますか？')) {
+    return;
+  }
+  
+  showLoading(true, 'サンプルデータを作成中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('サンプルデータを作成しました');
+        loadData();
+      } else {
+        showError('作成に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .createSampleData();
+}
+
+/**
+ * システム状態確認
+ */
+function checkSystemStatus() {
+  showLoading(true, 'システム状態を確認中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('システム状態確認完了');
+        const status = result.status;
+        showAlert(`
+          <strong>システム状態</strong><br>
+          <small>スプレッドシート: ${status.spreadsheet ? '正常' : 'エラー'}</small><br>
+          <small>シート数: ${Object.keys(status.sheets).length}</small><br>
+          <small>確認時刻: ${new Date(status.timestamp).toLocaleString()}</small>
+        `);
+      } else {
+        showError('状態確認に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .checkSystemStatus();
+}
+
+/**
+ * システム診断実行
+ */
+function runSystemDiagnosis() {
+  showLoading(true, 'システム診断を実行中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('システム診断完了');
+        const diagnosis = result.diagnosis;
+        showAlert(`
+          <strong>診断結果: ${diagnosis.summary.status}</strong><br>
+          <small>チェック通過: ${diagnosis.summary.passedChecks}/${diagnosis.summary.totalChecks}</small><br>
+          <small>実行時刻: ${new Date(diagnosis.timestamp).toLocaleString()}</small>
+        `);
+      } else {
+        showError('診断に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .runSystemDiagnosis();
+}
+
+/**
+ * データ整合性チェック
+ */
+function checkDataIntegrity() {
+  showLoading(true, 'データ整合性をチェック中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('データ整合性チェック完了');
+        const integrity = result.integrity;
+        showAlert(`
+          <strong>整合性チェック結果</strong><br>
+          <small>正常レコード: ${integrity.summary.validRecords}</small><br>
+          <small>問題レコード: ${integrity.summary.invalidRecords}</small><br>
+          <small>総レコード数: ${integrity.summary.totalRecords}</small>
+        `);
+      } else {
+        showError('チェックに失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .checkDataIntegrity();
+}
+
+/**
+ * パフォーマンス統計表示
+ */
+function showPerformanceStats() {
+  showLoading(true, 'パフォーマンス統計を取得中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('パフォーマンス統計取得完了');
+        const stats = result.stats;
+        showAlert(`
+          <strong>パフォーマンス統計</strong><br>
+          <small>データサイズ - 支払い: ${stats.dataSize.payments}件</small><br>
+          <small>データサイズ - 費用: ${stats.dataSize.expenses}件</small><br>
+          <small>データサイズ - マスター: ${stats.dataSize.masters}件</small><br>
+          <small>システム状態: ${stats.systemHealth}</small>
+        `);
+      } else {
+        showError('統計取得に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .showPerformanceStats();
+}
+
+/**
+ * 緊急修復実行
+ */
+function runEmergencyRepair() {
+  if (!confirm('緊急修復を実行しますか？\nシステムの不整合やエラーを自動で修復を試みます。')) {
+    return;
+  }
+  
+  showLoading(true, '緊急修復を実行中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('緊急修復完了');
+        const repair = result.repair;
+        showAlert(`
+          <strong>修復結果</strong><br>
+          <small>成功アクション: ${repair.summary.successActions}</small><br>
+          <small>失敗アクション: ${repair.summary.failedActions}</small><br>
+          <small>合計アクション: ${repair.summary.totalActions}</small>
+        `);
+        loadData();
+      } else {
+        showError('修復に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .runEmergencyRepair();
+}
+
+/**
+ * 全データ更新
+ */
+function refreshAllData() {
+  loadData();
+}
+
+/**
+ * システム状態を表示
+ */
+function showSystemStatus() {
+  checkSystemStatus();
+}
+
+// ========== CSV データインポート関数 ==========
+
+/**
+ * Pythonアプリの実データをインポート
+ */
+function importPythonAppData() {
+  if (!confirm('Pythonアプリの実データをインポートしますか？\n既存のサンプルデータは削除され、実際のラジオ局データに置き換えられます。')) {
+    return;
+  }
+  
+  showLoading(true, '実データをインポート中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('実データのインポートが完了しました');
+        showAlert(`
+          <strong>📻 実際のラジオ局データをインポートしました</strong><br>
+          <small>支払いデータ: ${result.results.payments}件</small><br>
+          <small>費用データ: ${result.results.expenses}件</small><br>
+          <small>マスターデータ: ${result.results.masters}件</small><br>
+          <br>
+          <strong>含まれる実データ例:</strong><br>
+          <small>${result.details['サンプル企業']}</small><br>
+          <small>${result.details['データの種類']}</small>
+        `);
+        loadData(); // 画面更新
+      } else {
+        showError('データインポートに失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .importPythonAppData();
+}
+
+/**
+ * CSVデータをインポート
+ */
+function importCSVData(csvText, dataType) {
+  if (!csvText || !csvText.trim()) {
+    showError('CSVデータが空です');
+    return;
+  }
+  
+  showLoading(true, 'CSVデータをインポート中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        showSuccess('CSVデータのインポートが完了しました');
+        showAlert(`
+          <strong>CSVインポート完了</strong><br>
+          <small>データタイプ: ${dataType}</small><br>
+          <small>成功: ${result.results.imported}件</small><br>
+          <small>失敗: ${result.results.skipped}件</small><br>
+          ${result.results.errors.length > 0 ? '<br><small>エラー詳細:<br>' + result.results.errors.slice(0, 3).join('<br>') + '</small>' : ''}
+        `);
+        loadData(); // 画面更新
+      } else {
+        showError('CSVインポートに失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .importCSVData(csvText, dataType, true); // clearExisting = true
+}
+
+/**
+ * CSVファイル選択とインポート
+ */
+function showCSVImportDialog() {
+  // CSV インポートダイアログを表示
+  const dialogHTML = `
+    <div id="csvImportModal" class="modal fade" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">CSVデータインポート</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">データタイプ</label>
+              <select class="form-select" id="csvDataType">
+                <option value="payments">支払いデータ</option>
+                <option value="expenses">費用データ</option>
+                <option value="masters">マスターデータ</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">CSVファイル</label>
+              <input type="file" class="form-control" id="csvFileInput" accept=".csv" />
+              <div class="form-text">CSVファイルを選択してください（ヘッダー行必須）</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">またはCSVテキストを直接貼り付け</label>
+              <textarea class="form-control" id="csvTextInput" rows="6" placeholder="id,subject,project_name,payee..."></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+            <button type="button" class="btn btn-primary" onclick="executeCSVImport()">インポート実行</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // 既存のモーダルを削除
+  const existingModal = document.getElementById('csvImportModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  // 新しいモーダルを追加
+  document.body.insertAdjacentHTML('beforeend', dialogHTML);
+  
+  // モーダルを表示
+  const modal = new bootstrap.Modal(document.getElementById('csvImportModal'));
+  modal.show();
+  
+  // ファイル選択イベント
+  document.getElementById('csvFileInput').addEventListener('change', function(event) {
+    const file = event.target.files[0];
+    if (file && file.type === 'text/csv') {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('csvTextInput').value = e.target.result;
+      };
+      reader.readAsText(file);
+    }
+  });
+}
+
+/**
+ * CSVインポート実行
+ */
+function executeCSVImport() {
+  const dataType = document.getElementById('csvDataType').value;
+  const csvText = document.getElementById('csvTextInput').value.trim();
+  
+  if (!csvText) {
+    showError('CSVデータを入力してください');
+    return;
+  }
+  
+  // モーダルを閉じる
+  const modal = bootstrap.Modal.getInstance(document.getElementById('csvImportModal'));
+  modal.hide();
+  
+  // インポート実行
+  importCSVData(csvText, dataType);
+}
+
+// ========== データ検証関数（拡張版） ==========
+
+/**
+ * データ件数検証
+ */
+function verifyDataCounts() {
+  showLoading(true, 'データ件数を検証中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        const verification = result.verification;
+        showSuccess('データ件数検証完了');
+        showAlert(`
+          <strong>データ件数検証結果: ${verification.summary.status}</strong><br>
+          <small>支払いデータ: ${verification.counts.payments}件</small><br>
+          <small>費用データ: ${verification.counts.expenses}件</small><br>
+          <small>マスターデータ: ${verification.counts.masters}件</small><br>
+          <small>総レコード数: ${verification.summary.totalRecords}件</small><br>
+          ${verification.summary.discrepancies.length > 0 ? '<br><small style="color:orange;">不整合:<br>' + verification.summary.discrepancies.join('<br>') + '</small>' : ''}
+        `);
+      } else {
+        showError('データ件数検証に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .verifyDataCounts();
+}
+
+/**
+ * データ重複チェック
+ */
+function checkDataDuplicates() {
+  showLoading(true, 'データ重複をチェック中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        const duplicateCheck = result.duplicateCheck;
+        showSuccess('データ重複チェック完了');
+        showAlert(`
+          <strong>データ重複チェック結果</strong><br>
+          <small>重複件数: ${duplicateCheck.summary.totalDuplicates}件</small><br>
+          <small>影響テーブル: ${duplicateCheck.summary.affectedTables.join(', ') || 'なし'}</small><br>
+          ${duplicateCheck.summary.totalDuplicates > 0 ? '<br><small style="color:orange;">重複が検出されました。データクリーニングを検討してください。</small>' : '<br><small style="color:green;">重複は検出されませんでした。</small>'}
+        `);
+      } else {
+        showError('データ重複チェックに失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .checkDataDuplicates();
+}
+
+/**
+ * フィールド値範囲チェック
+ */
+function validateFieldRanges() {
+  showLoading(true, 'フィールド値範囲をチェック中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        const validation = result.validation;
+        showSuccess('フィールド値範囲チェック完了');
+        showAlert(`
+          <strong>フィールド値範囲チェック結果</strong><br>
+          <small>問題件数: ${validation.summary.totalIssues}件</small><br>
+          <small>金額エラー: ${validation.summary.categories.amount}件</small><br>
+          <small>コードエラー: ${validation.summary.categories.code}件</small><br>
+          <small>テキストエラー: ${validation.summary.categories.text}件</small><br>
+          ${validation.summary.totalIssues > 0 ? '<br><small style="color:orange;">フィールド値の問題が検出されました。</small>' : '<br><small style="color:green;">すべてのフィールド値が適切です。</small>'}
+        `);
+      } else {
+        showError('フィールド値範囲チェックに失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .validateFieldRanges();
+}
+
+/**
+ * 統合データ検証（全検証を実行）
+ */
+function runCompleteDataValidation() {
+  if (!confirm('統合データ検証を実行しますか？\nすべてのデータ検証テストを順次実行します。')) {
+    return;
+  }
+  
+  showLoading(true, '統合データ検証を実行中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      if (result.success) {
+        const validation = result.validation;
+        const status = validation.summary.overallStatus;
+        const statusColor = status === 'PASS' ? 'green' : status === 'WARNING' ? 'orange' : 'red';
+        
+        showSuccess('統合データ検証完了');
+        showAlert(`
+          <strong style="color:${statusColor};">統合データ検証結果: ${status}</strong><br>
+          <small>実行テスト数: ${validation.summary.totalTests}</small><br>
+          <small>成功テスト: ${validation.summary.passedTests}</small><br>
+          <small>失敗テスト: ${validation.summary.failedTests}</small><br>
+          <br>
+          <strong>実行されたテスト:</strong><br>
+          <small>✓ データ件数検証</small><br>
+          <small>✓ データ重複チェック</small><br>
+          <small>✓ フィールド値範囲チェック</small><br>
+          <small>✓ データ整合性チェック</small><br>
+          <br>
+          <small>詳細は各個別チェック機能で確認できます。</small>
+        `);
+      } else {
+        showError('統合データ検証に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('エラーが発生しました: ' + error.message);
+    })
+    .runCompleteDataValidation();
+}
+
+// ========== デバッグ関数 ==========
+
+/**
+ * システムデバッグ実行
+ */
+function runSystemDebug() {
+  showLoading(true, 'システムデバッグを実行中...');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      console.log('デバッグ結果:', result);
+      if (result.success) {
+        showAlert(`
+          <strong>システムデバッグ結果</strong><br>
+          <small>スプレッドシートID: ${result.spreadsheetId}</small><br>
+          <small>スプレッドシート名: ${result.spreadsheetName}</small><br>
+          <br>
+          <strong>シート行数:</strong><br>
+          <small>支払いシート: ${result.sheetRows.payments}行</small><br>
+          <small>費用シート: ${result.sheetRows.expenses}行</small><br>
+          <small>マスターシート: ${result.sheetRows.masters}行</small><br>
+          <br>
+          <strong>データ取得結果:</strong><br>
+          <small>支払い: ${result.dataResults.payments.success ? '成功' : '失敗'} (${result.dataResults.payments.totalRows}件)</small><br>
+          <small>費用: ${result.dataResults.expenses.success ? '成功' : '失敗'} (${result.dataResults.expenses.totalRows}件)</small><br>
+          <small>マスター: ${result.dataResults.masters.success ? '成功' : '失敗'} (${result.dataResults.masters.totalRows}件)</small>
+        `);
+        showSuccess('デバッグ完了。詳細はコンソールを確認してください。');
+      } else {
+        showError('デバッグに失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('デバッグエラー: ' + error.message);
+    })
+    .debugBasicFunctions();
+}
+
+/**
+ * 緊急システム初期化（データ込み）
+ */
+function emergencySystemSetup() {
+  if (!confirm('緊急システム初期化を実行しますか？\nシステム全体を初期化し、実データをインポートします。')) {
+    return;
+  }
+  
+  showLoading(true, '緊急システム初期化を実行中...');
+  
+  // 1. システム初期化
+  google.script.run
+    .withSuccessHandler(function(result) {
+      console.log('システム初期化結果:', result);
+      if (result.success) {
+        showSuccess('システム初期化完了。実データをインポート中...');
+        
+        // 2. 実データインポート
+        google.script.run
+          .withSuccessHandler(function(importResult) {
+            console.log('データインポート結果:', importResult);
+            showLoading(false);
+            if (importResult.success) {
+              showSuccess('緊急システム初期化が完了しました！');
+              loadData(); // データを再読み込み
+            } else {
+              showError('データインポートに失敗: ' + importResult.message);
+            }
+          })
+          .withFailureHandler(function(error) {
+            showLoading(false);
+            showError('データインポートエラー: ' + error.message);
+          })
+          .importPythonAppData();
+      } else {
+        showLoading(false);
+        showError('システム初期化に失敗: ' + result.message);
+      }
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      showError('システム初期化エラー: ' + error.message);
+    })
+    .initializeCompleteSystem();
+}
+
+// === 費用マスター月次反映機能 ===
+
+function openMasterReflectionModal() {
+    const modal = new bootstrap.Modal(document.getElementById('masterReflectionModal'));
+
+    // 現在の年月をデフォルトに設定
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    document.getElementById('reflectionYear').value = currentYear;
+    document.getElementById('reflectionMonth').value = currentMonth;
+
+    // プレビューをクリア
+    document.getElementById('reflectionPreview').innerHTML = '';
+    document.getElementById('reflectionSummary').innerHTML = '';
+
+    modal.show();
+}
+
+function previewMasterReflection() {
+    const year = parseInt(document.getElementById('reflectionYear').value);
+    const month = parseInt(document.getElementById('reflectionMonth').value);
+
+    if (!year || !month || month < 1 || month > 12) {
+        showError('正しい年月を入力してください');
+        return;
+    }
+
+    showMessage('プレビューを生成中...', 'info');
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                displayReflectionPreview(result);
+                showMessage('プレビューを生成しました', 'success');
+            } else {
+                showError(result ? result.message : 'プレビューの生成に失敗しました');
+                document.getElementById('reflectionPreview').innerHTML = '';
+                document.getElementById('reflectionSummary').innerHTML = '';
+            }
+        })
+        .withFailureHandler(function(error) {
+            console.error('プレビュー生成エラー:', error);
+            showError(`プレビューの生成に失敗しました: ${error}`);
+            document.getElementById('reflectionPreview').innerHTML = '';
+            document.getElementById('reflectionSummary').innerHTML = '';
+        })
+        .previewExpensesFromMaster(year, month);
+}
+
+function displayReflectionPreview(result) {
+    const previewDiv = document.getElementById('reflectionPreview');
+    const summaryDiv = document.getElementById('reflectionSummary');
+
+    // サマリー表示
+    if (result.summary) {
+        summaryDiv.innerHTML = `
+            <div class="alert alert-info">
+                <h6><i class="bi bi-info-circle"></i> ${result.targetPeriod} 反映予定</h6>
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>対象件数:</strong> ${result.summary.total}件
+                    </div>
+                    <div class="col-md-3">
+                        <strong>新規作成:</strong> ${result.summary.newItems}件
+                    </div>
+                    <div class="col-md-3">
+                        <strong>重複スキップ:</strong> ${result.summary.duplicates}件
+                    </div>
+                    <div class="col-md-3">
+                        <strong>合計金額:</strong> ¥${(result.summary.totalAmount || 0).toLocaleString()}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // プレビューテーブル表示
+    if (result.preview && result.preview.length > 0) {
+        let html = `
+            <div class="table-responsive">
+                <table class="table table-striped table-sm">
+                    <thead>
+                        <tr>
+                            <th>案件名</th>
+                            <th>支払い先</th>
+                            <th>種別</th>
+                            <th>回数</th>
+                            <th>金額</th>
+                            <th>アクション</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        result.preview.forEach(item => {
+            const rowClass = item.isDuplicate ? 'table-warning' : '';
+            html += `
+                <tr class="${rowClass}">
+                    <td>${item.projectName}</td>
+                    <td>${item.payee}</td>
+                    <td>${item.paymentType}</td>
+                    <td>${item.broadcastCount}回</td>
+                    <td class="text-end">¥${(item.amount || 0).toLocaleString()}</td>
+                    <td>
+                        <span class="badge ${item.isDuplicate ? 'bg-warning' : 'bg-success'}">
+                            ${item.action}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        previewDiv.innerHTML = html;
+    } else {
+        previewDiv.innerHTML = '<div class="alert alert-secondary">反映対象のデータがありません</div>';
+    }
+}
+
+function executeMasterReflection() {
+    const year = parseInt(document.getElementById('reflectionYear').value);
+    const month = parseInt(document.getElementById('reflectionMonth').value);
+
+    if (!year || !month || month < 1 || month > 12) {
+        showError('正しい年月を入力してください');
+        return;
+    }
+
+    if (!confirm(`${year}年${month}月分の費用データを費用マスターから反映しますか？`)) {
+        return;
+    }
+
+    showMessage('費用データを生成中...', 'info');
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showMessage(result.message, 'success');
+
+                // 反映結果を表示
+                displayReflectionResult(result);
+
+                // 費用データを再読み込み
+                refreshExpenses();
+                refreshStats();
+
+                // モーダルを閉じる
+                setTimeout(() => {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('masterReflectionModal'));
+                    modal.hide();
+                }, 2000);
+
+            } else {
+                showError(result ? result.message : '費用データの反映に失敗しました');
+            }
+        })
+        .withFailureHandler(function(error) {
+            console.error('費用データ反映エラー:', error);
+            showError(`費用データの反映に失敗しました: ${error}`);
+        })
+        .generateExpensesFromMaster(year, month);
+}
+
+function displayReflectionResult(result) {
+    const resultHtml = `
+        <div class="alert alert-success">
+            <h6><i class="bi bi-check-circle"></i> 反映完了</h6>
+            <p><strong>${result.targetPeriod}</strong> の費用データ反映が完了しました</p>
+            <ul class="mb-0">
+                <li>新規作成: ${result.generated}件</li>
+                <li>重複スキップ: ${result.skipped}件</li>
+                ${result.errors > 0 ? `<li class="text-warning">エラー: ${result.errors}件</li>` : ''}
+            </ul>
+        </div>
+    `;
+
+    document.getElementById('reflectionSummary').innerHTML = resultHtml;
+
+    if (result.errorDetails && result.errorDetails.length > 0) {
+        const errorHtml = `
+            <div class="alert alert-warning mt-2">
+                <h6><i class="bi bi-exclamation-triangle"></i> エラー詳細</h6>
+                <ul class="mb-0">
+                    ${result.errorDetails.map(error => `<li>${error}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+        document.getElementById('reflectionSummary').innerHTML += errorHtml;
+    }
+}
+
+// === 月次反映の便利関数 ===
+
+function setCurrentMonth() {
+    const now = new Date();
+    document.getElementById('reflectionYear').value = now.getFullYear();
+    document.getElementById('reflectionMonth').value = now.getMonth() + 1;
+    previewMasterReflection();
+}
+
+function setNextMonth() {
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth() + 2; // 翌月
+
+    if (month > 12) {
+        month = 1;
+        year++;
+    }
+
+    document.getElementById('reflectionYear').value = year;
+    document.getElementById('reflectionMonth').value = month;
+    previewMasterReflection();
+}
+
+function setPreviousMonth() {
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth(); // 前月
+
+    if (month <= 0) {
+        month = 12;
+        year--;
+    }
+
+    document.getElementById('reflectionYear').value = year;
+    document.getElementById('reflectionMonth').value = month;
+    previewMasterReflection();
+}
+
+// === マスタータブの月次操作機能追加 ===
+
+function generateFromMasterForCurrentMonth() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+
+    if (!confirm(`${year}年${month}月分の費用データを費用マスターから生成しますか？`)) {
+        return;
+    }
+
+    showMessage('費用データを生成中...', 'info');
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showMessage(`${result.message} (生成: ${result.generated}件, スキップ: ${result.skipped}件)`, 'success');
+                refreshExpenses();
+                refreshStats();
+            } else {
+                showError(result ? result.message : '費用データの生成に失敗しました');
+            }
+        })
+        .withFailureHandler(function(error) {
+            console.error('費用データ生成エラー:', error);
+            showError(`費用データの生成に失敗しました: ${error}`);
+        })
+        .generateExpensesFromMaster(year, month);
+}
+
+function generateFromMasterForNextMonth() {
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth() + 2; // 翌月
+
+    if (month > 12) {
+        month = 1;
+        year++;
+    }
+
+    if (!confirm(`${year}年${month}月分の費用データを費用マスターから生成しますか？`)) {
+        return;
+    }
+
+    showMessage('費用データを生成中...', 'info');
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            if (result && result.success) {
+                showMessage(`${result.message} (生成: ${result.generated}件, スキップ: ${result.skipped}件)`, 'success');
+                refreshExpenses();
+                refreshStats();
+            } else {
+                showError(result ? result.message : '費用データの生成に失敗しました');
+            }
+        })
+        .withFailureHandler(function(error) {
+            console.error('費用データ生成エラー:', error);
+            showError(`費用データの生成に失敗しました: ${error}`);
+        })
+        .generateExpensesFromMaster(year, month);
+}
+
+// === イベントリスナーの設定 ===
+document.addEventListener('DOMContentLoaded', function() {
+    // 月次反映のイベントリスナー
+    const yearInput = document.getElementById('reflectionYear');
+    const monthInput = document.getElementById('reflectionMonth');
+
+    if (yearInput && monthInput) {
+        yearInput.addEventListener('change', function() {
+            if (this.value && monthInput.value) {
+                previewMasterReflection();
+            }
+        });
+
+        monthInput.addEventListener('change', function() {
+            if (this.value && yearInput.value) {
+                previewMasterReflection();
+            }
+        });
+    }
+});
+
+// デバッグ用関数 - JavaScriptが正しく読み込まれているかテスト
+function debugTest() {
+    console.log('JavaScript is loaded successfully!');
+    alert('JavaScript is working!');
+    return true;
+}
+
+// 関数が定義されているかチェック
+function checkFunctionDefinitions() {
+    const functions = [
+        'initializeCompleteSystem',
+        'createSampleData',
+        'checkSystemStatus',
+        'createNewSpreadsheet',
+        'importPythonAppData',
+        'showCSVImportDialog'
+    ];
+
+    const results = {};
+    functions.forEach(funcName => {
+        results[funcName] = typeof window[funcName] === 'function';
+    });
+
+    console.log('Function definitions check:', results);
+    return results;
+}
+
+// 不足していた関数を追加
+function refreshPayments() {
+    return getPaymentData();
+}
+
+function searchPayments() {
+    return getPaymentData();
+}
+
+function resetPaymentFilters() {
+    return getPaymentData();
+}
+
+function refreshExpenses() {
+    return getExpenseData();
+}
+
+function searchExpenses() {
+    return getExpenseData();
+}
+
+function resetExpenseFilters() {
+    return getExpenseData();
+}
+
+function refreshMasters() {
+    return getMasterData();
+}
+
+function searchMasters() {
+    return getMasterData();
+}
+
+function resetMasterFilters() {
+    return getMasterData();
+}
+
+function runAutoMatching() {
+    if (!confirm('支払いデータと費用データの照合を実行しますか？\n時間がかかる場合があります。')) {
+        return;
+    }
+
+    showLoading(true, '照合処理を実行中...');
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            showLoading(false);
+            if (result.success) {
+                showSuccess(`照合が完了しました。${result.matched || 0}件の一致を発見しました。`);
+                loadData();
+            } else {
+                showError('照合処理に失敗しました: ' + result.error);
+            }
+        })
+        .withFailureHandler(function(error) {
+            showLoading(false);
+            showError('照合処理に失敗しました: ' + error.message);
+        })
+        .runAutoMatching();
+}

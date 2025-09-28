@@ -1,0 +1,170 @@
+name: Google Apps Script デプロイ
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: コード検証
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+
+    - name: Node.js セットアップ
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: 依存関係インストール
+      run: npm ci
+
+    - name: TypeScript 型チェック
+      run: npm run type-check
+
+    - name: ESLint 実行
+      run: npm run lint
+
+    - name: Prettier チェック
+      run: npm run format -- --check
+
+    - name: ビルドテスト
+      run: npm run build
+
+  deploy-staging:
+    name: ステージング環境デプロイ
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+
+    - name: Node.js セットアップ
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: 依存関係インストール
+      run: npm ci
+
+    - name: ビルド
+      run: npm run build
+
+    - name: clasp 認証設定
+      run: |
+        echo "${{ secrets.CLASP_CREDENTIALS }}" > ~/.clasprc.json
+        chmod 600 ~/.clasprc.json
+
+    - name: GAS プロジェクト設定 (ステージング)
+      run: |
+        echo '{"scriptId": "${{ secrets.GAS_SCRIPT_ID_STAGING }}", "rootDir": "./dist"}' > .clasp.json
+
+    - name: GAS にプッシュ
+      run: npx clasp push --force
+
+    - name: デプロイ結果通知
+      if: always()
+      run: |
+        echo "ステージング環境へのデプロイが完了しました"
+        echo "スクリプトID: ${{ secrets.GAS_SCRIPT_ID_STAGING }}"
+
+  deploy-production:
+    name: 本番環境デプロイ
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+
+    - name: Node.js セットアップ
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: 依存関係インストール
+      run: npm ci
+
+    - name: ビルド
+      run: npm run build
+
+    - name: clasp 認証設定
+      run: |
+        echo "${{ secrets.CLASP_CREDENTIALS }}" > ~/.clasprc.json
+        chmod 600 ~/.clasprc.json
+
+    - name: GAS プロジェクト設定 (本番)
+      run: |
+        echo '{"scriptId": "${{ secrets.GAS_SCRIPT_ID_PRODUCTION }}", "rootDir": "./dist"}' > .clasp.json
+
+    - name: GAS にプッシュ
+      run: npx clasp push --force
+
+    - name: 本番デプロイ
+      run: npx clasp deploy --description "Production deployment $(date)"
+
+    - name: デプロイ結果通知
+      if: always()
+      run: |
+        echo "本番環境へのデプロイが完了しました"
+        echo "スクリプトID: ${{ secrets.GAS_SCRIPT_ID_PRODUCTION }}"
+
+  security-scan:
+    name: セキュリティスキャン
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: チェックアウト
+      uses: actions/checkout@v4
+
+    - name: Node.js セットアップ
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: 依存関係インストール
+      run: npm ci
+
+    - name: npm audit実行
+      run: npm audit --audit-level=moderate
+
+    - name: 依存関係の脆弱性チェック
+      run: npx audit-ci --moderate
+
+  notify-slack:
+    name: Slack 通知
+    needs: [validate, deploy-production]
+    runs-on: ubuntu-latest
+    if: always() && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 成功通知
+      if: needs.deploy-production.result == 'success'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: "🎉 GAS請求管理システムが正常にデプロイされました"
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+    - name: 失敗通知
+      if: needs.validate.result == 'failure' || needs.deploy-production.result == 'failure'
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: "❌ GAS請求管理システムのデプロイに失敗しました"
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}

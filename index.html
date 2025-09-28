@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📻 ラジオ局支払い・費用管理システム</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            color: white !important;
+            font-size: 1.4rem;
+        }
+        
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .nav-tabs {
+            border: none;
+            background: white;
+            border-radius: 10px 10px 0 0;
+            padding: 0.5rem 0.5rem 0 0.5rem;
+        }
+        
+        .nav-tabs .nav-link {
+            color: #495057;
+            border: none;
+            padding: 12px 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border-radius: 8px 8px 0 0;
+            margin-right: 4px;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            background-color: #e9ecef;
+            color: #495057;
+        }
+        
+        .nav-tabs .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            border-color: transparent;
+        }
+        
+        .tab-content {
+            background: white;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 20px;
+            min-height: 600px;
+        }
+        
+        /* 高度な検索・フィルタリング */
+        .advanced-filters {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border: 1px solid #dee2e6;
+        }
+        
+        .btn {
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        /* データテーブル */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .data-table th {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            font-weight: 600;
+            color: #495057;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #dee2e6;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+        }
+        
+        .data-table th:hover {
+            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+        }
+        
+        .data-table th.sortable:after {
+            content: ' ⇅';
+            opacity: 0.5;
+            position: absolute;
+            right: 8px;
+        }
+        
+        .data-table th.sort-asc:after {
+            content: ' ↑';
+            opacity: 1;
+            color: #667eea;
+        }
+        
+        .data-table th.sort-desc:after {
+            content: ' ↓';
+            opacity: 1;
+            color: #667eea;
+        }
+        
+        .data-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #dee2e6;
+            vertical-align: middle;
+        }
+        
+        .data-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .data-table tr:nth-child(even) {
+            background-color: #fbfbfb;
+        }
+        
+        .data-table tr:nth-child(even):hover {
+            background-color: #f0f0f0;
+        }
+        
+        /* 状態バッジ */
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+            min-width: 60px;
+            display: inline-block;
+        }
+        
+        .status-未処理 { background-color: #f8f9fa; color: #6c757d; border: 1px solid #dee2e6; }
+        .status-処理中 { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .status-処理済 { background-color: #cfe2ff; color: #084298; border: 1px solid #b6d4fe; }
+        .status-照合済 { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        
+        /* 統計カード */
+        .stat-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            padding: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-card:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .stat-card h3 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: #667eea;
+            font-weight: 700;
+        }
+        
+        .stat-card p {
+            color: #6c757d;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        /* ローディング */
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #6c757d;
+        }
+        
+        .loading i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #667eea;
+        }
+        
+        /* ページネーション */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .pagination button {
+            padding: 0.5rem 1rem;
+            border: 1px solid #dee2e6;
+            background: white;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .pagination button:hover {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            transform: translateY(-1px);
+        }
+        
+        .pagination button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+        
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        /* アラート */
+        .alert {
+            border: none;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .alert-success {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            color: #155724;
+        }
+        
+        .alert-warning {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            color: #856404;
+        }
+        
+        .alert-danger {
+            background: linear-gradient(135deg, #f8d7da 0%, #f1aeb5 100%);
+            color: #721c24;
+        }
+        
+        .alert-info {
+            background: linear-gradient(135deg, #cfe2ff 0%, #b6d4fe 100%);
+            color: #084298;
+        }
+        
+        /* レスポンシブデザイン */
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 10px;
+            }
+            
+            .nav-tabs .nav-link {
+                padding: 8px 12px;
+                font-size: 0.9rem;
+            }
+            
+            .data-table {
+                font-size: 0.9rem;
+            }
+            
+            .data-table th, .data-table td {
+                padding: 8px 6px;
+            }
+            
+            .stat-card h3 {
+                font-size: 2rem;
+            }
+            
+            .pagination button {
+                padding: 0.4rem 0.8rem;
+                font-size: 0.9rem;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .navbar-brand {
+                font-size: 1.2rem;
+            }
+            
+            .data-table {
+                font-size: 0.8rem;
+            }
+            
+            .data-table th, .data-table td {
+                padding: 6px 4px;
+            }
+        }
+        
+        /* アニメーション */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-out;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <!-- ナビゲーションバー -->
+    <nav class="navbar">
+        <div class="container-fluid">
+            <span class="navbar-brand">
+                <i class="bi bi-broadcast"></i>
+                📻 ラジオ局支払い・費用管理システム
+            </span>
+            <div class="d-flex">
+                <button class="btn btn-danger btn-sm me-2" onclick="debugTest()" title="JavaScript テスト">
+                    🐛 Debug
+                </button>
+                <button class="btn btn-warning btn-sm me-2" onclick="checkFunctionDefinitions()" title="関数定義チェック">
+                    🔍 Check
+                </button>
+                <button class="btn btn-light btn-sm me-2" onclick="refreshAllData()" title="全データ更新">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+                <button class="btn btn-light btn-sm" onclick="showSystemStatus()" title="システム状態">
+                    <i class="bi bi-info-circle"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <div class="main-container">
+        <!-- タブナビゲーション -->
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="payment-tab" data-bs-toggle="tab" data-bs-target="#payment" type="button" role="tab">
+                    <i class="bi bi-credit-card"></i> 支払い情報
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="expense-tab" data-bs-toggle="tab" data-bs-target="#expense" type="button" role="tab">
+                    <i class="bi bi-receipt"></i> 費用管理
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="master-tab" data-bs-toggle="tab" data-bs-target="#master" type="button" role="tab">
+                    <i class="bi bi-database"></i> 費用マスター
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="matching-tab" data-bs-toggle="tab" data-bs-target="#matching" type="button" role="tab">
+                    <i class="bi bi-arrow-left-right"></i> 照合機能
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tools-tab" data-bs-toggle="tab" data-bs-target="#tools" type="button" role="tab">
+                    <i class="bi bi-tools"></i> ツール
+                </button>
+            </li>
+        </ul>
+
+        <!-- タブコンテンツ -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- 支払い情報タブ -->
+            <div class="tab-pane fade show active" id="payment" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4><i class="bi bi-credit-card"></i> 支払い情報管理</h4>
+                    <div>
+                        <button class="btn btn-primary btn-sm" onclick="refreshPayments()">
+                            <i class="bi bi-arrow-clockwise"></i> 更新
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 検索フィルター -->
+                <div class="advanced-filters">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control" id="paymentSearch" placeholder="件名・支払い先・案件名で検索">
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="paymentStatusFilter">
+                                <option value="">全ての状態</option>
+                                <option value="未処理">未処理</option>
+                                <option value="処理中">処理中</option>
+                                <option value="処理済">処理済</option>
+                                <option value="照合済">照合済</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="month" class="form-control" id="paymentMonthFilter">
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary" onclick="searchPayments()">
+                                <i class="bi bi-search"></i> 検索
+                            </button>
+                            <button class="btn btn-outline-secondary ms-2" onclick="resetPaymentFilters()">
+                                <i class="bi bi-arrow-clockwise"></i> リセット
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 統計カード -->
+                <div class="row g-3 mb-4" id="paymentStats">
+                    <!-- 統計データが動的に表示される -->
+                </div>
+
+                <!-- データテーブル -->
+                <div class="table-responsive">
+                    <table class="data-table" id="paymentsTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="subject" class="sortable">件名</th>
+                                <th data-sort="projectName" class="sortable">案件名</th>
+                                <th data-sort="payee" class="sortable">支払い先</th>
+                                <th data-sort="payeeCode">コード</th>
+                                <th data-sort="amount" class="sortable">金額</th>
+                                <th data-sort="paymentDate" class="sortable">支払日</th>
+                                <th data-sort="status" class="sortable">状態</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paymentsTableBody">
+                            <tr>
+                                <td colspan="7" class="loading">
+                                    <i class="bi bi-arrow-clockwise pulse"></i>
+                                    <p>データを読み込み中...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ページネーション -->
+                <div id="paymentPagination"></div>
+                
+                <!-- データ件数表示 -->
+                <div class="text-center mt-3">
+                    <small class="text-muted" id="paymentCount">データ読み込み中...</small>
+                </div>
+            </div>
+
+            <!-- 費用管理タブ -->
+            <div class="tab-pane fade" id="expense" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4><i class="bi bi-receipt"></i> 費用管理</h4>
+                    <div>
+                        <button class="btn btn-success btn-sm me-2" onclick="openMasterReflectionModal()">
+                            <i class="bi bi-calendar-plus"></i> 月次反映
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="refreshExpenses()">
+                            <i class="bi bi-arrow-clockwise"></i> 更新
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 月次反映クイックアクション -->
+                <div class="alert alert-info mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="bi bi-info-circle"></i>
+                            <strong>月次反映機能:</strong> 費用マスターから指定月の費用データを自動生成します
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary me-2" onclick="generateFromMasterForCurrentMonth()">
+                                今月分を生成
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="generateFromMasterForNextMonth()">
+                                来月分を生成
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 検索フィルター -->
+                <div class="advanced-filters">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control" id="expenseSearch" placeholder="案件名・支払い先で検索">
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="expenseStatusFilter">
+                                <option value="">全ての状態</option>
+                                <option value="未処理">未処理</option>
+                                <option value="処理中">処理中</option>
+                                <option value="処理済">処理済</option>
+                                <option value="照合済">照合済</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="month" class="form-control" id="expenseMonthFilter">
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary" onclick="searchExpenses()">
+                                <i class="bi bi-search"></i> 検索
+                            </button>
+                            <button class="btn btn-outline-secondary ms-2" onclick="resetExpenseFilters()">
+                                <i class="bi bi-arrow-clockwise"></i> リセット
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 統計カード -->
+                <div class="row g-3 mb-4" id="expenseStats">
+                    <!-- 統計データが動的に表示される -->
+                </div>
+
+                <!-- データテーブル -->
+                <div class="table-responsive">
+                    <table class="data-table" id="expensesTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="projectName" class="sortable">案件名</th>
+                                <th data-sort="payee" class="sortable">支払い先</th>
+                                <th data-sort="payeeCode">コード</th>
+                                <th data-sort="amount" class="sortable">金額</th>
+                                <th data-sort="paymentDate" class="sortable">支払日</th>
+                                <th data-sort="status" class="sortable">状態</th>
+                            </tr>
+                        </thead>
+                        <tbody id="expensesTableBody">
+                            <tr>
+                                <td colspan="6" class="loading">
+                                    <i class="bi bi-arrow-clockwise pulse"></i>
+                                    <p>データを読み込み中...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ページネーション -->
+                <div id="expensePagination"></div>
+                
+                <!-- データ件数表示 -->
+                <div class="text-center mt-3">
+                    <small class="text-muted" id="expenseCount">データ読み込み中...</small>
+                </div>
+            </div>
+
+            <!-- 費用マスタータブ -->
+            <div class="tab-pane fade" id="master" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4><i class="bi bi-database"></i> 費用マスター</h4>
+                    <div>
+                        <button class="btn btn-primary btn-sm" onclick="refreshMasters()">
+                            <i class="bi bi-arrow-clockwise"></i> 更新
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 検索フィルター -->
+                <div class="advanced-filters">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control" id="masterSearch" placeholder="案件名・支払い先で検索">
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" id="masterTypeFilter">
+                                <option value="">全ての種別</option>
+                                <option value="月額固定">月額固定</option>
+                                <option value="回数ベース">回数ベース</option>
+                                <option value="一回限り">一回限り</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <input type="month" class="form-control" id="masterDateFilter">
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary" onclick="searchMasters()">
+                                <i class="bi bi-search"></i> 検索
+                            </button>
+                            <button class="btn btn-outline-secondary ms-2" onclick="resetMasterFilters()">
+                                <i class="bi bi-arrow-clockwise"></i> リセット
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 統計カード -->
+                <div class="row g-3 mb-4" id="masterStats">
+                    <!-- 統計データが動的に表示される -->
+                </div>
+
+                <!-- データテーブル -->
+                <div class="table-responsive">
+                    <table class="data-table" id="mastersTable">
+                        <thead>
+                            <tr>
+                                <th data-sort="projectName" class="sortable">案件名</th>
+                                <th data-sort="payee" class="sortable">支払い先</th>
+                                <th data-sort="payeeCode">コード</th>
+                                <th data-sort="amount" class="sortable">金額</th>
+                                <th data-sort="paymentType" class="sortable">種別</th>
+                                <th data-sort="startDate" class="sortable">開始日</th>
+                                <th data-sort="endDate" class="sortable">終了日</th>
+                                <th data-sort="broadcastDays">放送曜日</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mastersTableBody">
+                            <tr>
+                                <td colspan="8" class="loading">
+                                    <i class="bi bi-arrow-clockwise pulse"></i>
+                                    <p>データを読み込み中...</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ページネーション -->
+                <div id="masterPagination"></div>
+                
+                <!-- データ件数表示 -->
+                <div class="text-center mt-3">
+                    <small class="text-muted" id="masterCount">データ読み込み中...</small>
+                </div>
+            </div>
+
+            <!-- 照合機能タブ -->
+            <div class="tab-pane fade" id="matching" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4><i class="bi bi-arrow-left-right"></i> データ照合機能</h4>
+                    <div>
+                        <button class="btn btn-primary" onclick="runAutoMatching()">
+                            <i class="bi bi-play-circle"></i> 自動照合実行
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 照合結果表示 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-list-check"></i> 照合結果</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="matchingResults">
+                            <div class="text-center text-muted p-4">
+                                <i class="bi bi-arrow-left-right" style="font-size: 3rem;"></i>
+                                <p>照合を実行してください</p>
+                                <button class="btn btn-primary" onclick="runAutoMatching()">
+                                    <i class="bi bi-play"></i> 照合開始
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ツールタブ -->
+            <div class="tab-pane fade" id="tools" role="tabpanel">
+                <h4><i class="bi bi-tools"></i> システムツール</h4>
+                
+                <!-- ツールカテゴリ -->
+                <div class="row g-4 mt-2">
+                    <!-- データ管理ツール -->
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-database-gear"></i> データ管理</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary" onclick="initializeCompleteSystem()">
+                                        <i class="bi bi-arrow-clockwise"></i> システム初期化
+                                    </button>
+                                    <button class="btn btn-outline-success" onclick="createSampleData()">
+                                        <i class="bi bi-plus-circle"></i> サンプルデータ作成
+                                    </button>
+                                    <button class="btn btn-outline-warning" onclick="checkSystemStatus()">
+                                        <i class="bi bi-check-circle"></i> システム状態確認
+                                    </button>
+                                    <button class="btn btn-outline-info" onclick="createNewSpreadsheet()">
+                                        <i class="bi bi-file-earmark-plus"></i> 新規スプレッドシート
+                                    </button>
+                                    <button class="btn btn-outline-primary" onclick="importPythonAppData()">
+                                        <i class="bi bi-database-fill-up"></i> 実データインポート
+                                    </button>
+                                    <button class="btn btn-outline-secondary" onclick="showCSVImportDialog()">
+                                        <i class="bi bi-filetype-csv"></i> CSVインポート
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- システム診断ツール -->
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="bi bi-clipboard-data"></i> システム診断</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary" onclick="runSystemDiagnosis()">
+                                        <i class="bi bi-search"></i> システム診断実行
+                                    </button>
+                                    <button class="btn btn-outline-warning" onclick="checkDataIntegrity()">
+                                        <i class="bi bi-shield-check"></i> データ整合性チェック
+                                    </button>
+                                    <button class="btn btn-outline-success" onclick="showPerformanceStats()">
+                                        <i class="bi bi-graph-up"></i> パフォーマンス統計
+                                    </button>
+                                    <button class="btn btn-outline-danger" onclick="runEmergencyRepair()">
+                                        <i class="bi bi-wrench"></i> 緊急修復
+                                    </button>
+                                    <button class="btn btn-outline-info" onclick="verifyDataCounts()">
+                                        <i class="bi bi-list-check"></i> データ件数検証
+                                    </button>
+                                    <button class="btn btn-outline-warning" onclick="checkDataDuplicates()">
+                                        <i class="bi bi-files"></i> 重複チェック
+                                    </button>
+                                    <button class="btn btn-outline-primary" onclick="validateFieldRanges()">
+                                        <i class="bi bi-check2-square"></i> 範囲チェック
+                                    </button>
+                                    <button class="btn btn-outline-success" onclick="runCompleteDataValidation()">
+                                        <i class="bi bi-shield-check"></i> 統合検証
+                                    </button>
+                                    <hr>
+                                    <button class="btn btn-danger" onclick="emergencySystemSetup()">
+                                        <i class="bi bi-arrow-clockwise"></i> 緊急システム初期化
+                                    </button>
+                                    <button class="btn btn-warning" onclick="runSystemDebug()">
+                                        <i class="bi bi-bug"></i> システムデバッグ
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- システム情報 -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-info-circle"></i> システム情報</h6>
+                    </div>
+                    <div class="card-body">
+                        <div id="systemInfo" class="row g-3">
+                            <div class="col-md-4">
+                                <strong>システム名:</strong><br>
+                                ラジオ局支払い・費用管理システム
+                            </div>
+                            <div class="col-md-4">
+                                <strong>バージョン:</strong><br>
+                                2.0.0-GAS
+                            </div>
+                            <div class="col-md-4">
+                                <strong>最終更新:</strong><br>
+                                <span id="lastUpdated">読み込み中...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 月次反映モーダル -->
+    <div class="modal fade" id="masterReflectionModal" tabindex="-1" aria-labelledby="masterReflectionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="masterReflectionModalLabel">
+                        <i class="bi bi-calendar-plus"></i> 費用マスターから月次反映
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 対象月選択 -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label for="reflectionYear" class="form-label">対象年</label>
+                            <input type="number" class="form-control" id="reflectionYear" min="2020" max="2030">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="reflectionMonth" class="form-label">対象月</label>
+                            <select class="form-select" id="reflectionMonth">
+                                <option value="1">1月</option>
+                                <option value="2">2月</option>
+                                <option value="3">3月</option>
+                                <option value="4">4月</option>
+                                <option value="5">5月</option>
+                                <option value="6">6月</option>
+                                <option value="7">7月</option>
+                                <option value="8">8月</option>
+                                <option value="9">9月</option>
+                                <option value="10">10月</option>
+                                <option value="11">11月</option>
+                                <option value="12">12月</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- クイック選択ボタン -->
+                    <div class="row g-2 mb-4">
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-primary w-100" onclick="setCurrentMonth()">
+                                <i class="bi bi-calendar-check"></i> 今月
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-secondary w-100" onclick="setNextMonth()">
+                                <i class="bi bi-calendar-plus"></i> 来月
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-outline-info w-100" onclick="setPreviousMonth()">
+                                <i class="bi bi-calendar-minus"></i> 先月
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- プレビューエリア -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0"><i class="bi bi-eye"></i> 生成プレビュー</h6>
+                            <button class="btn btn-sm btn-outline-primary" onclick="previewMasterReflection()">
+                                <i class="bi bi-search"></i> プレビュー実行
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="reflectionPreview">
+                                <div class="text-center text-muted p-3">
+                                    <i class="bi bi-eye-slash" style="font-size: 2rem;"></i>
+                                    <p class="mb-0">プレビューを実行してください</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 実行オプション -->
+                    <div class="mt-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="skipDuplicates" checked>
+                            <label class="form-check-label" for="skipDuplicates">
+                                重複データをスキップ（既存データを保護）
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="validateDates" checked>
+                            <label class="form-check-label" for="validateDates">
+                                日付範囲を検証（マスターの開始/終了日を確認）
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle"></i> キャンセル
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="executeMasterReflection()">
+                        <i class="bi bi-play-circle"></i> 実行
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+
+    <!-- カスタム JavaScript -->
+    <script>
+        <?!= include('script.html'); ?>
+    </script>
+</body>
+</html>
