@@ -76,22 +76,83 @@ function loadData() {
             functionName = 'getPaymentData';
     }
 
-    // Server function call
+    // Server function call with timeout
+    console.log('Calling server function:', functionName);
+
+    // タイムアウトタイマーを設定
+    const timeoutId = setTimeout(() => {
+        console.warn('サーバー関数のタイムアウト:', functionName);
+        showError('データの読み込みがタイムアウトしました。再度お試しください。');
+        showLoading(false);
+    }, 15000); // 15秒でタイムアウト
+
     google.script.run
         .withSuccessHandler(function(result) {
-            // サーバーは {success: true, data: [...]} または配列を返す可能性がある
-            const rows = (result && result.success) ? result.data : result;
-            allData[currentView] = Array.isArray(rows) ? rows : [];
-            filteredData = allData[currentView];
-            console.log('Data loaded for', currentView, ':', filteredData.length, 'items');
-            updateTable();
-            showLoading(false);
+            clearTimeout(timeoutId); // タイムアウトをクリア
+            console.log('Server function success:', functionName, result);
+
+            try {
+                // サーバーは {success: true, data: [...]} または配列を返す可能性がある
+                let rows = [];
+                let isFallback = false;
+
+                if (result && typeof result === 'object') {
+                    if (result.success) {
+                        rows = Array.isArray(result.data) ? result.data : [];
+                        isFallback = result.fallback || false;
+
+                        // 実行時間の表示
+                        if (result.duration) {
+                            console.log(`データ取得時間: ${result.duration}ms`);
+                        }
+                    } else {
+                        console.warn('Server returned failure:', result);
+                        rows = [];
+                        isFallback = true;
+                    }
+                } else if (Array.isArray(result)) {
+                    rows = result;
+                } else {
+                    console.warn('Unexpected server response:', result);
+                    rows = [];
+                    isFallback = true;
+                }
+
+                allData[currentView] = rows;
+                filteredData = allData[currentView];
+
+                console.log(`Data loaded for ${currentView}: ${filteredData.length} items${isFallback ? ' (フォールバックデータ)' : ''}`);
+
+                if (isFallback) {
+                    showError('実際のデータが取得できませんでした。サンプルデータを表示しています。');
+                }
+
+                updateTable();
+                showLoading(false);
+
+            } catch (processError) {
+                console.error('データ処理エラー:', processError);
+                showError('データの処理中にエラーが発生しました: ' + processError.message);
+                allData[currentView] = [];
+                filteredData = [];
+                showLoading(false);
+            }
         })
         .withFailureHandler(function(error) {
-            console.error('データ読み込みエラー:', error);
-            showError('データの読み込みに失敗しました: ' + error.message);
-            allData[currentView] = [];
-            filteredData = [];
+            clearTimeout(timeoutId); // タイムアウトをクリア
+            console.error('Server function failure:', functionName, error);
+
+            let errorMessage = 'データの読み込みに失敗しました';
+            if (error && error.message) {
+                errorMessage += ': ' + error.message;
+            }
+
+            showError(errorMessage + '\nサンプルデータを表示しています。');
+
+            // フォールバックデータを設定
+            allData[currentView] = getFallbackDataForView(currentView);
+            filteredData = allData[currentView];
+            updateTable();
             showLoading(false);
         })[functionName]();
 }
@@ -192,6 +253,34 @@ function refreshExpenses() {
 function refreshMasters() {
     currentView = 'master';
     loadData();
+}
+
+// クライアント側フォールバックデータ
+function getFallbackDataForView(view) {
+    console.log(`getFallbackDataForView: ${view} のクライアント側サンプルデータ`);
+
+    switch (view) {
+        case 'payment':
+            return [
+                ['PAY001', '広告放送料', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済'],
+                ['PAY002', '制作費', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い']
+            ];
+
+        case 'expense':
+            return [
+                ['EXP001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済'],
+                ['EXP002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い']
+            ];
+
+        case 'master':
+            return [
+                ['MAS001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '放送料', '2024-01-01', '2024-03-31', '月曜', '12', '3ヶ月契約'],
+                ['MAS002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '制作費', '2024-01-01', '2024-12-31', '金曜', '52', '年間契約']
+            ];
+
+        default:
+            return [];
+    }
 }
 
 // 統一的なサーバー関数呼び出し機能

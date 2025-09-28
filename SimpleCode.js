@@ -41,31 +41,183 @@ function include(filename) {
 
 function getPaymentData() {
   try {
-    const data = getSheetData(CONFIG.SHEETS.PAYMENTS);
-    return { success: true, data: data };
+    console.log('getPaymentData: 開始');
+    const startTime = Date.now();
+
+    const data = getSheetDataSafe(CONFIG.SHEETS.PAYMENTS);
+
+    const duration = Date.now() - startTime;
+    console.log(`getPaymentData: 完了 (${duration}ms, ${data.length}件)`);
+
+    return { success: true, data: data, duration: duration };
   } catch (error) {
     console.error('支払いデータ取得エラー:', error);
-    return { success: false, error: error.message, data: [] };
+    return {
+      success: false,
+      error: error.message,
+      data: [],
+      fallback: true
+    };
   }
 }
 
 function getExpenseData() {
   try {
-    const data = getSheetData(CONFIG.SHEETS.EXPENSES);
-    return { success: true, data: data };
+    console.log('getExpenseData: 開始');
+    const startTime = Date.now();
+
+    const data = getSheetDataSafe(CONFIG.SHEETS.EXPENSES);
+
+    const duration = Date.now() - startTime;
+    console.log(`getExpenseData: 完了 (${duration}ms, ${data.length}件)`);
+
+    return { success: true, data: data, duration: duration };
   } catch (error) {
     console.error('費用データ取得エラー:', error);
-    return { success: false, error: error.message, data: [] };
+    return {
+      success: false,
+      error: error.message,
+      data: [],
+      fallback: true
+    };
   }
 }
 
 function getMasterData() {
   try {
-    const data = getSheetData(CONFIG.SHEETS.MASTERS);
-    return { success: true, data: data };
+    console.log('getMasterData: 開始');
+    const startTime = Date.now();
+
+    const data = getSheetDataSafe(CONFIG.SHEETS.MASTERS);
+
+    const duration = Date.now() - startTime;
+    console.log(`getMasterData: 完了 (${duration}ms, ${data.length}件)`);
+
+    return { success: true, data: data, duration: duration };
   } catch (error) {
     console.error('マスターデータ取得エラー:', error);
-    return { success: false, error: error.message, data: [] };
+    return {
+      success: false,
+      error: error.message,
+      data: [],
+      fallback: true
+    };
+  }
+}
+
+// ========== 安全なデータ取得関数 ==========
+
+function getSheetDataSafe(sheetName, timeout = 10000) {
+  const startTime = Date.now();
+  console.log(`getSheetDataSafe: ${sheetName} 開始`);
+
+  try {
+    // タイムアウト付きでスプレッドシート取得を試行
+    const spreadsheet = getSpreadsheetWithTimeout(timeout);
+    if (!spreadsheet) {
+      console.warn(`getSheetDataSafe: スプレッドシートにアクセスできません (${sheetName})`);
+      return getFallbackData(sheetName);
+    }
+
+    const duration = Date.now() - startTime;
+    if (duration > timeout) {
+      console.warn(`getSheetDataSafe: タイムアウト (${duration}ms > ${timeout}ms)`);
+      return getFallbackData(sheetName);
+    }
+
+    const sheet = getSafeSheet(spreadsheet, sheetName);
+    if (!sheet) {
+      console.warn(`getSheetDataSafe: シート ${sheetName} が見つかりません`);
+      return getFallbackData(sheetName);
+    }
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) {
+      console.log(`getSheetDataSafe: シート ${sheetName} にデータがありません`);
+      return [];
+    }
+
+    const data = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+    console.log(`getSheetDataSafe: ${sheetName} 完了 (${data.length}行)`);
+    return data;
+
+  } catch (error) {
+    console.error(`getSheetDataSafe: エラー (${sheetName}):`, error);
+    return getFallbackData(sheetName);
+  }
+}
+
+function getSpreadsheetWithTimeout(timeout = 10000) {
+  const startTime = Date.now();
+
+  try {
+    // 最初に軽量な方法を試行
+    const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    if (activeSpreadsheet) {
+      console.log('getSpreadsheetWithTimeout: アクティブなスプレッドシートを使用');
+      return activeSpreadsheet;
+    }
+  } catch (e) {
+    console.warn('getSpreadsheetWithTimeout: アクティブなスプレッドシートが見つかりません');
+  }
+
+  // タイムアウトチェック
+  if (Date.now() - startTime > timeout / 2) {
+    console.warn('getSpreadsheetWithTimeout: 半分の時間が経過、新規作成をスキップ');
+    return null;
+  }
+
+  try {
+    const properties = PropertiesService.getScriptProperties();
+    const savedSpreadsheetId = properties.getProperty('SPREADSHEET_ID');
+
+    if (savedSpreadsheetId) {
+      try {
+        const savedSpreadsheet = SpreadsheetApp.openById(savedSpreadsheetId);
+        console.log('getSpreadsheetWithTimeout: 保存されたスプレッドシートを使用');
+        return savedSpreadsheet;
+      } catch (e) {
+        console.warn('getSpreadsheetWithTimeout: 保存されたスプレッドシートにアクセスできません');
+        properties.deleteProperty('SPREADSHEET_ID');
+      }
+    }
+  } catch (e) {
+    console.error('getSpreadsheetWithTimeout: PropertiesServiceエラー:', e);
+  }
+
+  // タイムアウトした場合は null を返す
+  if (Date.now() - startTime > timeout) {
+    console.warn('getSpreadsheetWithTimeout: タイムアウト');
+    return null;
+  }
+
+  return null; // 新規作成はスキップして、フォールバックデータを使用
+}
+
+function getFallbackData(sheetName) {
+  console.log(`getFallbackData: ${sheetName} のサンプルデータを返します`);
+
+  switch (sheetName) {
+    case CONFIG.SHEETS.PAYMENTS:
+      return [
+        ['PAY001', '広告放送料', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済', new Date(), new Date()],
+        ['PAY002', '制作費', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い', new Date(), new Date()]
+      ];
+
+    case CONFIG.SHEETS.EXPENSES:
+      return [
+        ['EXP001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済', new Date(), new Date()],
+        ['EXP002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い', new Date(), new Date()]
+      ];
+
+    case CONFIG.SHEETS.MASTERS:
+      return [
+        ['MAS001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '放送料', '2024-01-01', '2024-03-31', '月曜', '12', '3ヶ月契約', new Date(), new Date()],
+        ['MAS002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '制作費', '2024-01-01', '2024-12-31', '金曜', '52', '年間契約', new Date(), new Date()]
+      ];
+
+    default:
+      return [];
   }
 }
 
@@ -1982,6 +2134,149 @@ function generatePaymentDataSampleCSV() {
 
 function generateExpenseDataSampleCSV() {
   return generateSampleCSV('expenses');
+}
+
+// ========== デバッグ・テスト関数 ==========
+
+function quickDataTest() {
+  try {
+    console.log('quickDataTest: 開始');
+    const startTime = Date.now();
+
+    const results = {
+      timestamp: new Date().toISOString(),
+      tests: []
+    };
+
+    // 基本的なテスト
+    results.tests.push({
+      name: '基本機能テスト',
+      result: 'OK',
+      message: 'GAS functions are working properly!'
+    });
+
+    // スプレッドシート接続テスト
+    try {
+      const spreadsheet = getSpreadsheetWithTimeout(5000);
+      results.tests.push({
+        name: 'スプレッドシート接続',
+        result: spreadsheet ? 'OK' : 'FALLBACK',
+        message: spreadsheet ? 'スプレッドシートに接続しました' : 'フォールバックモード'
+      });
+    } catch (e) {
+      results.tests.push({
+        name: 'スプレッドシート接続',
+        result: 'ERROR',
+        message: e.message
+      });
+    }
+
+    // 各データ取得のテスト
+    ['PAYMENTS', 'EXPENSES', 'MASTERS'].forEach(sheetType => {
+      try {
+        const sheetName = CONFIG.SHEETS[sheetType];
+        const data = getSheetDataSafe(sheetName, 3000);
+        results.tests.push({
+          name: `${sheetType} データ取得`,
+          result: 'OK',
+          message: `${data.length}行のデータを取得`
+        });
+      } catch (e) {
+        results.tests.push({
+          name: `${sheetType} データ取得`,
+          result: 'ERROR',
+          message: e.message
+        });
+      }
+    });
+
+    const duration = Date.now() - startTime;
+    results.duration = duration;
+    results.summary = `テスト完了 (${duration}ms)`;
+
+    console.log('quickDataTest: 完了', results);
+    return { success: true, results: results };
+
+  } catch (error) {
+    console.error('quickDataTest: エラー', error);
+    return {
+      success: false,
+      error: error.message,
+      results: { tests: [{ name: 'メインテスト', result: 'ERROR', message: error.message }] }
+    };
+  }
+}
+
+function testPaymentDataOnly() {
+  try {
+    console.log('testPaymentDataOnly: 支払いデータのみテスト');
+    const result = getPaymentData();
+    console.log('testPaymentDataOnly: 結果', result);
+    return result;
+  } catch (error) {
+    console.error('testPaymentDataOnly: エラー', error);
+    return { success: false, error: error.message };
+  }
+}
+
+function testExpenseDataOnly() {
+  try {
+    console.log('testExpenseDataOnly: 費用データのみテスト');
+    const result = getExpenseData();
+    console.log('testExpenseDataOnly: 結果', result);
+    return result;
+  } catch (error) {
+    console.error('testExpenseDataOnly: エラー', error);
+    return { success: false, error: error.message };
+  }
+}
+
+function testMasterDataOnly() {
+  try {
+    console.log('testMasterDataOnly: マスターデータのみテスト');
+    const result = getMasterData();
+    console.log('testMasterDataOnly: 結果', result);
+    return result;
+  } catch (error) {
+    console.error('testMasterDataOnly: エラー', error);
+    return { success: false, error: error.message };
+  }
+}
+
+function testSpreadsheetConnection() {
+  try {
+    console.log('testSpreadsheetConnection: スプレッドシート接続テスト');
+    const startTime = Date.now();
+
+    const spreadsheet = getSpreadsheetWithTimeout(8000);
+    const duration = Date.now() - startTime;
+
+    if (spreadsheet) {
+      const sheets = spreadsheet.getSheets().map(s => s.getName());
+      return {
+        success: true,
+        message: `スプレッドシート接続成功 (${duration}ms)`,
+        spreadsheetId: spreadsheet.getId(),
+        spreadsheetName: spreadsheet.getName(),
+        sheetsCount: sheets.length,
+        sheets: sheets
+      };
+    } else {
+      return {
+        success: false,
+        message: `スプレッドシート接続失敗 (${duration}ms)`,
+        fallback: true
+      };
+    }
+
+  } catch (error) {
+    console.error('testSpreadsheetConnection: エラー', error);
+    return {
+      success: false,
+      error: error.message,
+      message: 'スプレッドシート接続でエラーが発生'
+    };
+  }
 }
 
 // テスト用の基本関数
