@@ -149,6 +149,678 @@ function convertToBase64(csvContent) {
 }
 
 /**
+ * データ整合性のチェック
+ */
+function checkDataIntegrity() {
+  try {
+    console.log('=== データ整合性チェック開始 ===');
+
+    const checks = {
+      payments: { total: 0, valid: 0, invalid: 0, errors: [] },
+      expenses: { total: 0, valid: 0, invalid: 0, errors: [] },
+      master: { total: 0, valid: 0, invalid: 0, errors: [] }
+    };
+
+    // 支払いデータのチェック
+    try {
+      const paymentSheet = getOrCreateSheet(SHEET_NAMES.PAYMENTS);
+      const paymentData = paymentSheet.getRange(2, 1, paymentSheet.getLastRow() - 1, 9).getValues();
+
+      checks.payments.total = paymentData.length;
+
+      paymentData.forEach((row, index) => {
+        try {
+          if (row.some(cell => cell !== null && cell !== undefined && cell !== '')) {
+            // 基本的な検証
+            if (!row[0]) checks.payments.errors.push(`行 ${index + 2}: IDが空`);
+            if (!row[2]) checks.payments.errors.push(`行 ${index + 2}: 案件名が空`);
+            if (!row[3]) checks.payments.errors.push(`行 ${index + 2}: 支払い先が空`);
+
+            if (checks.payments.errors.length === 0) {
+              checks.payments.valid++;
+            } else {
+              checks.payments.invalid++;
+            }
+          }
+        } catch (rowError) {
+          checks.payments.errors.push(`行 ${index + 2}: 検証エラー - ${rowError.toString()}`);
+          checks.payments.invalid++;
+        }
+      });
+    } catch (error) {
+      checks.payments.errors.push(`支払いデータアクセスエラー: ${error.toString()}`);
+    }
+
+    // 費用データのチェック
+    try {
+      const expenseSheet = getOrCreateSheet(SHEET_NAMES.EXPENSES);
+      const expenseData = expenseSheet.getRange(2, 1, expenseSheet.getLastRow() - 1, 8).getValues();
+
+      checks.expenses.total = expenseData.length;
+
+      expenseData.forEach((row, index) => {
+        try {
+          if (row.some(cell => cell !== null && cell !== undefined && cell !== '')) {
+            // 基本的な検証
+            if (!row[0]) checks.expenses.errors.push(`行 ${index + 2}: IDが空`);
+            if (!row[1]) checks.expenses.errors.push(`行 ${index + 2}: 案件名が空`);
+            if (!row[2]) checks.expenses.errors.push(`行 ${index + 2}: 支払い先が空`);
+
+            if (checks.expenses.errors.length === 0) {
+              checks.expenses.valid++;
+            } else {
+              checks.expenses.invalid++;
+            }
+          }
+        } catch (rowError) {
+          checks.expenses.errors.push(`行 ${index + 2}: 検証エラー - ${rowError.toString()}`);
+          checks.expenses.invalid++;
+        }
+      });
+    } catch (error) {
+      checks.expenses.errors.push(`費用データアクセスエラー: ${error.toString()}`);
+    }
+
+    // 費用マスターデータのチェック
+    try {
+      const masterSheet = getOrCreateSheet(SHEET_NAMES.EXPENSE_MASTER);
+      const masterData = masterSheet.getRange(2, 1, masterSheet.getLastRow() - 1, 10).getValues();
+
+      checks.master.total = masterData.length;
+
+      masterData.forEach((row, index) => {
+        try {
+          if (row.some(cell => cell !== null && cell !== undefined && cell !== '')) {
+            // 基本的な検証
+            if (!row[0]) checks.master.errors.push(`行 ${index + 2}: IDが空`);
+            if (!row[1]) checks.master.errors.push(`行 ${index + 2}: 案件名が空`);
+            if (!row[2]) checks.master.errors.push(`行 ${index + 2}: 支払い先が空`);
+
+            if (checks.master.errors.length === 0) {
+              checks.master.valid++;
+            } else {
+              checks.master.invalid++;
+            }
+          }
+        } catch (rowError) {
+          checks.master.errors.push(`行 ${index + 2}: 検証エラー - ${rowError.toString()}`);
+          checks.master.invalid++;
+        }
+      });
+    } catch (error) {
+      checks.master.errors.push(`費用マスターデータアクセスエラー: ${error.toString()}`);
+    }
+
+    const totalErrors = checks.payments.errors.length + checks.expenses.errors.length + checks.master.errors.length;
+
+    console.log('=== データ整合性チェック完了 ===');
+    console.log('チェック結果:', checks);
+
+    return {
+      success: totalErrors === 0,
+      checks: checks,
+      summary: {
+        totalRecords: checks.payments.total + checks.expenses.total + checks.master.total,
+        validRecords: checks.payments.valid + checks.expenses.valid + checks.master.valid,
+        invalidRecords: checks.payments.invalid + checks.expenses.invalid + checks.master.invalid,
+        totalErrors: totalErrors
+      }
+    };
+
+  } catch (error) {
+    console.error('データ整合性チェック全体エラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: 'データ整合性チェックに失敗しました'
+    };
+  }
+}
+
+/**
+ * 完全な診断を実行
+ */
+function runCompleteDiagnostic() {
+  try {
+    console.log('=== 完全診断開始 ===');
+
+    const diagnostic = {
+      timestamp: new Date(),
+      systemInfo: {},
+      connectivity: {},
+      dataIntegrity: {},
+      performance: {},
+      errors: []
+    };
+
+    // システム情報の収集
+    try {
+      diagnostic.systemInfo = {
+        scriptVersion: 'v2.0',
+        spreadsheetId: SPREADSHEET_ID,
+        userEmail: Session.getActiveUser().getEmail(),
+        timezone: Session.getScriptTimeZone(),
+        locale: Session.getActiveUserLocale()
+      };
+    } catch (error) {
+      diagnostic.errors.push(`システム情報取得エラー: ${error.toString()}`);
+    }
+
+    // 接続性テスト
+    try {
+      const ss = getSpreadsheet();
+      diagnostic.connectivity = {
+        spreadsheetAccess: true,
+        spreadsheetName: ss.getName(),
+        sheetsCount: ss.getSheets().length
+      };
+    } catch (error) {
+      diagnostic.connectivity = {
+        spreadsheetAccess: false,
+        error: error.toString()
+      };
+      diagnostic.errors.push(`スプレッドシート接続エラー: ${error.toString()}`);
+    }
+
+    // データ整合性チェック
+    try {
+      const integrityResult = checkDataIntegrity();
+      diagnostic.dataIntegrity = integrityResult;
+    } catch (error) {
+      diagnostic.dataIntegrity = {
+        success: false,
+        error: error.toString()
+      };
+      diagnostic.errors.push(`データ整合性チェックエラー: ${error.toString()}`);
+    }
+
+    // パフォーマンステスト
+    try {
+      const startTime = new Date();
+      const testResult = getPaymentData('');
+      const endTime = new Date();
+
+      diagnostic.performance = {
+        dataLoadTime: endTime - startTime,
+        paymentDataCount: testResult.data ? testResult.data.length : 0,
+        memoryUsage: 'N/A (GAS環境)'
+      };
+    } catch (error) {
+      diagnostic.performance = {
+        error: error.toString()
+      };
+      diagnostic.errors.push(`パフォーマンステストエラー: ${error.toString()}`);
+    }
+
+    // 診断結果の評価
+    const isHealthy = diagnostic.connectivity.spreadsheetAccess &&
+                     diagnostic.dataIntegrity.success &&
+                     diagnostic.errors.length === 0;
+
+    console.log('=== 完全診断完了 ===');
+    console.log('診断結果:', diagnostic);
+
+    return {
+      success: true,
+      healthy: isHealthy,
+      diagnostic: diagnostic,
+      summary: `診断完了 - ${isHealthy ? '正常' : '問題検出'} (エラー: ${diagnostic.errors.length}件)`
+    };
+
+  } catch (error) {
+    console.error('完全診断エラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: '診断の実行に失敗しました'
+    };
+  }
+}
+
+/**
+ * 緊急テストデータの作成
+ */
+function createEmergencyTestData() {
+  try {
+    console.log('=== 緊急テストデータ作成開始 ===');
+
+    let createdCount = 0;
+    const results = [];
+
+    // テスト支払いデータ
+    try {
+      const paymentSheet = getOrCreateSheet(SHEET_NAMES.PAYMENTS);
+      const testPayment = [
+        generateId(),
+        'テスト件名',
+        'テスト案件',
+        'テスト会社',
+        'TEST001',
+        100000,
+        new Date(),
+        '未処理',
+        new Date()
+      ];
+
+      paymentSheet.appendRow(testPayment);
+      createdCount++;
+      results.push('テスト支払いデータを作成');
+    } catch (error) {
+      results.push(`支払いデータ作成エラー: ${error.toString()}`);
+    }
+
+    // テスト費用データ
+    try {
+      const expenseSheet = getOrCreateSheet(SHEET_NAMES.EXPENSES);
+      const testExpense = [
+        generateId(),
+        'テスト案件',
+        'テスト会社',
+        'TEST001',
+        100000,
+        new Date(),
+        '未処理',
+        new Date()
+      ];
+
+      expenseSheet.appendRow(testExpense);
+      createdCount++;
+      results.push('テスト費用データを作成');
+    } catch (error) {
+      results.push(`費用データ作成エラー: ${error.toString()}`);
+    }
+
+    // テスト費用マスターデータ
+    try {
+      const masterSheet = getOrCreateSheet(SHEET_NAMES.EXPENSE_MASTER);
+      const testMaster = [
+        generateId(),
+        'テスト案件',
+        'テスト会社',
+        'TEST001',
+        100000,
+        '月額固定',
+        new Date(),
+        new Date(),
+        '月,火,水',
+        new Date()
+      ];
+
+      masterSheet.appendRow(testMaster);
+      createdCount++;
+      results.push('テスト費用マスターデータを作成');
+    } catch (error) {
+      results.push(`費用マスターデータ作成エラー: ${error.toString()}`);
+    }
+
+    console.log('=== 緊急テストデータ作成完了 ===');
+
+    return {
+      success: true,
+      count: createdCount,
+      results: results,
+      message: `${createdCount}件のテストデータを作成しました`
+    };
+
+  } catch (error) {
+    console.error('緊急テストデータ作成エラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: 'テストデータの作成に失敗しました'
+    };
+  }
+}
+
+/**
+ * 全データの削除
+ */
+function clearAllData() {
+  try {
+    console.log('=== 全データ削除開始 ===');
+
+    let deletedCount = 0;
+    const results = [];
+
+    // 支払いデータの削除
+    try {
+      const paymentSheet = getOrCreateSheet(SHEET_NAMES.PAYMENTS);
+      const lastRow = paymentSheet.getLastRow();
+      if (lastRow > 1) {
+        paymentSheet.deleteRows(2, lastRow - 1);
+        results.push(`支払いデータ ${lastRow - 1}件を削除`);
+        deletedCount += lastRow - 1;
+      }
+    } catch (error) {
+      results.push(`支払いデータ削除エラー: ${error.toString()}`);
+    }
+
+    // 費用データの削除
+    try {
+      const expenseSheet = getOrCreateSheet(SHEET_NAMES.EXPENSES);
+      const lastRow = expenseSheet.getLastRow();
+      if (lastRow > 1) {
+        expenseSheet.deleteRows(2, lastRow - 1);
+        results.push(`費用データ ${lastRow - 1}件を削除`);
+        deletedCount += lastRow - 1;
+      }
+    } catch (error) {
+      results.push(`費用データ削除エラー: ${error.toString()}`);
+    }
+
+    // 費用マスターデータの削除
+    try {
+      const masterSheet = getOrCreateSheet(SHEET_NAMES.EXPENSE_MASTER);
+      const lastRow = masterSheet.getLastRow();
+      if (lastRow > 1) {
+        masterSheet.deleteRows(2, lastRow - 1);
+        results.push(`費用マスターデータ ${lastRow - 1}件を削除`);
+        deletedCount += lastRow - 1;
+      }
+    } catch (error) {
+      results.push(`費用マスターデータ削除エラー: ${error.toString()}`);
+    }
+
+    console.log('=== 全データ削除完了 ===');
+
+    return {
+      success: true,
+      count: deletedCount,
+      results: results,
+      message: `${deletedCount}件のデータを削除しました`
+    };
+
+  } catch (error) {
+    console.error('全データ削除エラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: 'データ削除に失敗しました'
+    };
+  }
+}
+
+/**
+ * スプレッドシート構造のデバッグ
+ */
+function debugSpreadsheetStructure() {
+  try {
+    console.log('=== スプレッドシート構造デバッグ開始 ===');
+
+    const ss = getSpreadsheet();
+    const debug = {
+      spreadsheet: {
+        id: ss.getId(),
+        name: ss.getName(),
+        url: ss.getUrl(),
+        sheetsCount: ss.getSheets().length
+      },
+      sheets: []
+    };
+
+    ss.getSheets().forEach(sheet => {
+      const sheetInfo = {
+        name: sheet.getName(),
+        id: sheet.getSheetId(),
+        lastRow: sheet.getLastRow(),
+        lastColumn: sheet.getLastColumn(),
+        headers: []
+      };
+
+      // ヘッダー行を取得
+      if (sheet.getLastRow() > 0 && sheet.getLastColumn() > 0) {
+        try {
+          const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+          sheetInfo.headers = headers;
+        } catch (headerError) {
+          sheetInfo.headers = ['ヘッダー取得エラー'];
+        }
+      }
+
+      debug.sheets.push(sheetInfo);
+    });
+
+    console.log('スプレッドシート構造:', debug);
+    console.log('=== スプレッドシート構造デバッグ完了 ===');
+
+    return {
+      success: true,
+      debug: debug,
+      message: 'スプレッドシート構造の情報を取得しました'
+    };
+
+  } catch (error) {
+    console.error('スプレッドシート構造デバッグエラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: 'スプレッドシート構造の取得に失敗しました'
+    };
+  }
+}
+
+/**
+ * 支払いデータのCSVインポート（標準）
+ */
+function importPaymentCsvData(csvContent) {
+  try {
+    console.log('=== 支払いデータCSVインポート開始 ===');
+    const lines = csvContent.trim().split(/\r?\n/);
+
+    if (lines.length < 2) {
+      throw new Error('CSVファイルが空または不正です');
+    }
+
+    const sheet = getOrCreateSheet(SHEET_NAMES.PAYMENTS);
+    let importedCount = 0;
+    let errorCount = 0;
+    const errorDetails = [];
+
+    // ヘッダー行をスキップして処理
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const row = parseCSVLine(line);
+
+        if (row.length < 6) {
+          const error = `行 ${i+1}: 列数不足 (${row.length}列)`;
+          errorDetails.push(error);
+          errorCount++;
+          continue;
+        }
+
+        const newId = generateId();
+        const newRow = [
+          newId,
+          cleanString(row[0]) || 'インポート件名',
+          cleanString(row[1]) || 'インポート案件',
+          cleanString(row[2]) || 'インポート会社',
+          cleanString(row[3]) || '',
+          parseFloat(cleanString(row[4]).replace(/[^\d.-]/g, '')) || 0,
+          parseDate(cleanString(row[5])) || new Date(),
+          cleanString(row[6]) || '未処理',
+          new Date()
+        ];
+
+        sheet.appendRow(newRow);
+        importedCount++;
+
+      } catch (rowError) {
+        const error = `行 ${i+1}: ${rowError.toString()}`;
+        errorDetails.push(error);
+        errorCount++;
+      }
+    }
+
+    console.log('=== 支払いデータCSVインポート完了 ===');
+
+    return {
+      success: true,
+      imported: importedCount,
+      errors: errorCount,
+      errorDetails: errorDetails,
+      message: `${importedCount}件の支払いデータをインポートしました${errorCount > 0 ? ` (エラー: ${errorCount}件)` : ''}`
+    };
+
+  } catch (error) {
+    console.error('支払いデータCSVインポートエラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: '支払いデータのインポートに失敗しました'
+    };
+  }
+}
+
+/**
+ * 支払いデータのCSVインポート（マッピング対応）
+ */
+function importPaymentCsvWithMapping(csvContent, mapping) {
+  try {
+    console.log('=== 支払いデータマッピングインポート開始 ===');
+    console.log('マッピング設定:', mapping);
+
+    const lines = csvContent.trim().split(/\r?\n/);
+
+    if (lines.length < 2) {
+      throw new Error('CSVファイルが空または不正です');
+    }
+
+    const sheet = getOrCreateSheet(SHEET_NAMES.PAYMENTS);
+    let importedCount = 0;
+    let errorCount = 0;
+    const errorDetails = [];
+
+    // ヘッダー行をスキップして処理
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const row = parseCSVLine(line);
+
+        const newId = generateId();
+        const newRow = [
+          newId,
+          cleanString(row[mapping.subject] || '') || 'インポート件名',
+          cleanString(row[mapping.projectName] || '') || 'インポート案件',
+          cleanString(row[mapping.payee] || '') || 'インポート会社',
+          cleanString(row[mapping.payeeCode] || '') || '',
+          parseFloat(cleanString(row[mapping.amount] || '0').replace(/[^\d.-]/g, '')) || 0,
+          parseDate(cleanString(row[mapping.paymentDate] || '')) || new Date(),
+          cleanString(row[mapping.status] || '') || '未処理',
+          new Date()
+        ];
+
+        sheet.appendRow(newRow);
+        importedCount++;
+
+      } catch (rowError) {
+        const error = `行 ${i+1}: ${rowError.toString()}`;
+        errorDetails.push(error);
+        errorCount++;
+      }
+    }
+
+    console.log('=== 支払いデータマッピングインポート完了 ===');
+
+    return {
+      success: true,
+      imported: importedCount,
+      errors: errorCount,
+      errorDetails: errorDetails,
+      message: `${importedCount}件の支払いデータをインポートしました${errorCount > 0 ? ` (エラー: ${errorCount}件)` : ''}`
+    };
+
+  } catch (error) {
+    console.error('支払いデータマッピングインポートエラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: '支払いデータのマッピングインポートに失敗しました'
+    };
+  }
+}
+
+/**
+ * CSVインポート汎用関数
+ */
+function importCsvData(csvContent, type) {
+  try {
+    if (type === 'expense') {
+      return importExpensesFromCsv(csvContent);
+    } else if (type === 'master') {
+      return importMasterFromCsv(csvContent);
+    } else {
+      throw new Error(`未対応のインポートタイプ: ${type}`);
+    }
+  } catch (error) {
+    console.error('CSVインポートエラー:', error);
+    return {
+      success: false,
+      error: error.toString(),
+      message: 'CSVインポートに失敗しました'
+    };
+  }
+}
+
+/**
+ * ヘルパー関数
+ */
+function cleanString(str) {
+  if (str === null || str === undefined) return '';
+  return str.toString().trim().replace(/^["']|["']$/g, '');
+}
+
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+
+  try {
+    // YYYY-MM-DD形式を試行
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return new Date(dateStr);
+    }
+
+    // 日本語形式を試行
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date;
+    }
+
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++; // Skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+/**
  * 費用データのCSVインポート
  */
 function importExpensesFromCsv(csvContent) {

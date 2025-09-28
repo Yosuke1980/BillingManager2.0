@@ -1063,10 +1063,10 @@ class MasterTab(QWidget):
             )
 
     def export_to_csv(self):
-        """費用マスターデータをCSVファイルにエクスポート"""
+        """費用マスターデータをCSVファイルにエクスポート（全フィールド対応）"""
         try:
-            # データベースから全データを取得
-            master_rows = self.db_manager.get_master_data()
+            # データベースから全データを取得（全フィールド）
+            master_rows = self.db_manager.get_master_data(full_data=True)
 
             if not master_rows:
                 QMessageBox.information(
@@ -1089,7 +1089,7 @@ class MasterTab(QWidget):
             with open(file_path, "w", newline="", encoding="shift_jis") as file:
                 writer = csv.writer(file)
 
-                # ヘッダー行を書き込み
+                # ヘッダー行を書き込み（全17フィールド）
                 writer.writerow(
                     [
                         "ID",
@@ -1098,18 +1098,27 @@ class MasterTab(QWidget):
                         "支払い先コード",
                         "金額",
                         "種別",
+                        "放送曜日",
                         "開始日",
                         "終了日",
-                        "放送曜日",
+                        "クライアント名",
+                        "担当部門",
+                        "案件状況",
+                        "案件開始日",
+                        "完了予定日",
+                        "予算",
+                        "承認者",
+                        "緊急度",
                     ]
                 )
 
                 # データ行を書き込み
                 for row in master_rows:
-                    # 新しいフィールドがない古いデータの場合は、デフォルト値を使用
+                    # 全17フィールドのデータを保証
                     full_row = list(row)
-                    if len(full_row) < 9:
-                        full_row.extend(["月額固定", "", "", ""] * (9 - len(full_row)))
+                    # 不足しているフィールドがあればデフォルト値で補完
+                    while len(full_row) < 17:
+                        full_row.append("")
                     writer.writerow(full_row)
 
             log_message(f"費用マスターデータを{file_path}にエクスポートしました")
