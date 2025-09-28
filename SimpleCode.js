@@ -284,6 +284,10 @@ function importCSVData(csvText, dataType, clearExisting = false) {
     }
 
     const spreadsheet = getOrCreateSpreadsheet();
+    if (!spreadsheet) {
+      throw new Error('スプレッドシートにアクセスできません。新しいスプレッドシートを作成してください。');
+    }
+
     const sheetName = getSheetNameByDataType(dataType);
 
     if (clearExisting) {
@@ -942,10 +946,49 @@ function previewExpensesFromMaster(year, month) {
 
 function getOrCreateSpreadsheet() {
   try {
-    return SpreadsheetApp.getActiveSpreadsheet();
+    // まずアクティブなスプレッドシートを試行
+    const activeSpreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    if (activeSpreadsheet) {
+      return activeSpreadsheet;
+    }
   } catch (e) {
-    // アクティブなスプレッドシートがない場合は新規作成
-    return SpreadsheetApp.create(CONFIG.SPREADSHEET_NAME);
+    console.warn('アクティブなスプレッドシートが見つかりません:', e.message);
+  }
+
+  try {
+    // PropertiesServiceでスプレッドシートIDを保存・取得
+    const properties = PropertiesService.getScriptProperties();
+    const savedSpreadsheetId = properties.getProperty('SPREADSHEET_ID');
+
+    if (savedSpreadsheetId) {
+      try {
+        const savedSpreadsheet = SpreadsheetApp.openById(savedSpreadsheetId);
+        if (savedSpreadsheet) {
+          console.log('保存されたスプレッドシートを使用:', savedSpreadsheetId);
+          return savedSpreadsheet;
+        }
+      } catch (e) {
+        console.warn('保存されたスプレッドシートにアクセスできません:', e.message);
+        // 無効なIDをクリア
+        properties.deleteProperty('SPREADSHEET_ID');
+      }
+    }
+
+    // 新しいスプレッドシートを作成
+    console.log('新しいスプレッドシートを作成中...');
+    const newSpreadsheet = SpreadsheetApp.create(CONFIG.SPREADSHEET_NAME + '_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss'));
+
+    if (newSpreadsheet) {
+      // 新しいスプレッドシートのIDを保存
+      properties.setProperty('SPREADSHEET_ID', newSpreadsheet.getId());
+      console.log('新しいスプレッドシートを作成しました:', newSpreadsheet.getId());
+      return newSpreadsheet;
+    }
+
+    throw new Error('スプレッドシートの作成に失敗しました');
+  } catch (error) {
+    console.error('getOrCreateSpreadsheet エラー:', error);
+    return null;
   }
 }
 
@@ -1366,10 +1409,25 @@ function processCsvImport(csvData, dataType, clearExisting = false) {
       return { success: false, message: 'CSVデータが空です' };
     }
 
+    // スプレッドシートの確認
+    const spreadsheet = getOrCreateSpreadsheet();
+    if (!spreadsheet) {
+      return {
+        success: false,
+        message: 'スプレッドシートにアクセスできません。システム初期化を実行してください。'
+      };
+    }
+
     // CSV解析
     const parsedData = parseCsvText(csvData);
     if (!parsedData.success) {
       return parsedData;
+    }
+
+    // CSVデータ検証
+    const validation = validateCsvData(parsedData.headers, parsedData.rows, dataType);
+    if (!validation.success) {
+      return validation;
     }
 
     // 既存のimportCSVData関数を使用
@@ -1379,7 +1437,9 @@ function processCsvImport(csvData, dataType, clearExisting = false) {
       success: result.success,
       message: result.message,
       results: result.results || {},
-      importedRows: parsedData.rows ? parsedData.rows.length : 0
+      importedRows: parsedData.rows ? parsedData.rows.length : 0,
+      spreadsheetId: spreadsheet.getId(),
+      spreadsheetUrl: spreadsheet.getUrl()
     };
   } catch (error) {
     console.error('CSVインポート処理エラー:', error);
