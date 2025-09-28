@@ -726,7 +726,7 @@ class DatabaseManager:
         conn.close()
         return new_id
 
-    def get_master_data(self, search_term=None):
+    def get_master_data(self, search_term=None, full_data=False):
         # 関数の最初に追加
         from utils import format_payee_code
 
@@ -734,27 +734,55 @@ class DatabaseManager:
         conn = sqlite3.connect(self.expense_master_db)
         cursor = conn.cursor()
 
-        if search_term:
-            search_param = f"%{search_term}%"
-            cursor.execute(
-                """
-                SELECT id, project_name, payee, payee_code, amount, payment_type, 
-                    broadcast_days, start_date, end_date
-                FROM expense_master
-                WHERE project_name LIKE ? OR payee LIKE ? OR payee_code LIKE ?
-                ORDER BY id
-                """,
-                (search_param, search_param, search_param),
-            )
+        if full_data:
+            # 全フィールドを取得（CSV出力用）
+            if search_term:
+                search_param = f"%{search_term}%"
+                cursor.execute(
+                    """
+                    SELECT id, project_name, payee, payee_code, amount, payment_type,
+                           broadcast_days, start_date, end_date, client_name, department,
+                           project_status, project_start_date, project_end_date, budget,
+                           approver, urgency_level
+                    FROM expense_master
+                    WHERE project_name LIKE ? OR payee LIKE ? OR payee_code LIKE ?
+                    ORDER BY id
+                    """,
+                    (search_param, search_param, search_param),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT id, project_name, payee, payee_code, amount, payment_type,
+                           broadcast_days, start_date, end_date, client_name, department,
+                           project_status, project_start_date, project_end_date, budget,
+                           approver, urgency_level
+                    FROM expense_master
+                    ORDER BY id
+                    """)
         else:
-            cursor.execute(
-                """
-                SELECT id, project_name, payee, payee_code, amount, payment_type, 
-                    broadcast_days, start_date, end_date
-                FROM expense_master
-                ORDER BY id
-                """
-            )
+            # 基本フィールドのみ取得（既存の動作を維持）
+            if search_term:
+                search_param = f"%{search_term}%"
+                cursor.execute(
+                    """
+                    SELECT id, project_name, payee, payee_code, amount, payment_type,
+                        broadcast_days, start_date, end_date
+                    FROM expense_master
+                    WHERE project_name LIKE ? OR payee LIKE ? OR payee_code LIKE ?
+                    ORDER BY id
+                    """,
+                    (search_param, search_param, search_param),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT id, project_name, payee, payee_code, amount, payment_type,
+                        broadcast_days, start_date, end_date
+                    FROM expense_master
+                    ORDER BY id
+                    """
+                )
 
         master_rows = cursor.fetchall()
         # 【追加】支払い先コードの0埋め処理
