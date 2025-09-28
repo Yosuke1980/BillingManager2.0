@@ -982,6 +982,32 @@ function getOrCreateSpreadsheet() {
       // 新しいスプレッドシートのIDを保存
       properties.setProperty('SPREADSHEET_ID', newSpreadsheet.getId());
       console.log('新しいスプレッドシートを作成しました:', newSpreadsheet.getId());
+
+      // 必要なシートを初期化
+      try {
+        console.log('必要なシートを初期化中...');
+
+        // デフォルトシートを削除
+        const defaultSheet = newSpreadsheet.getSheetByName('シート1');
+        if (defaultSheet) {
+          newSpreadsheet.deleteSheet(defaultSheet);
+        }
+
+        // 各シートを作成
+        Object.entries(CONFIG.SHEETS).forEach(([key, sheetName]) => {
+          const headers = CONFIG.HEADERS[key.toUpperCase()];
+          if (headers) {
+            initializeSheet(newSpreadsheet, sheetName, headers);
+            console.log(`シート「${sheetName}」を初期化しました`);
+          }
+        });
+
+        console.log('スプレッドシートの初期化が完了しました');
+      } catch (initError) {
+        console.error('スプレッドシート初期化エラー:', initError);
+        // 初期化に失敗してもスプレッドシートは返す
+      }
+
       return newSpreadsheet;
     }
 
@@ -1050,19 +1076,65 @@ function getSheetData(sheetName) {
 }
 
 function insertSampleData(spreadsheet, sheetName, data) {
-  const sheet = spreadsheet.getSheetByName(sheetName);
-  if (sheet && data.length > 0) {
-    const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, data.length, data[0].length).setValues(data);
+  if (!spreadsheet) {
+    console.error('insertSampleData: スプレッドシートがnullです');
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    console.warn(`insertSampleData: データが空です (${sheetName})`);
+    return;
+  }
+
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    // シートが存在しない場合は作成
+    console.log(`insertSampleData: シート「${sheetName}」が存在しないため作成します`);
+    const headers = getHeadersForSheet(sheetName);
+    if (headers.length > 0) {
+      sheet = initializeSheet(spreadsheet, sheetName, headers);
+    } else {
+      console.error(`insertSampleData: シート「${sheetName}」のヘッダー情報が見つかりません`);
+      return;
+    }
+  }
+
+  if (sheet) {
+    try {
+      const startRow = sheet.getLastRow() + 1;
+      sheet.getRange(startRow, 1, data.length, data[0].length).setValues(data);
+      console.log(`insertSampleData: シート「${sheetName}」に${data.length}行のデータを挿入しました`);
+    } catch (error) {
+      console.error(`insertSampleData: データ挿入エラー (${sheetName}):`, error);
+      throw error;
+    }
   }
 }
 
 function clearSheetData(spreadsheet, sheetName) {
-  const sheet = spreadsheet.getSheetByName(sheetName);
+  if (!spreadsheet) {
+    console.error('clearSheetData: スプレッドシートがnullです');
+    return;
+  }
+
+  let sheet = spreadsheet.getSheetByName(sheetName);
+  if (!sheet) {
+    // シートが存在しない場合は作成
+    console.log(`clearSheetData: シート「${sheetName}」が存在しないため作成します`);
+    const headers = getHeadersForSheet(sheetName);
+    if (headers.length > 0) {
+      sheet = initializeSheet(spreadsheet, sheetName, headers);
+    } else {
+      console.error(`clearSheetData: シート「${sheetName}」のヘッダー情報が見つかりません`);
+      return;
+    }
+  }
+
   if (sheet) {
     const lastRow = sheet.getLastRow();
     if (lastRow > 1) {
       sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clear();
+      console.log(`clearSheetData: シート「${sheetName}」のデータを清了しました`);
     }
   }
 }
@@ -1110,6 +1182,15 @@ function getSheetNameByDataType(dataType) {
     'masters': CONFIG.SHEETS.MASTERS
   };
   return mapping[dataType] || CONFIG.SHEETS.PAYMENTS;
+}
+
+function getHeadersForSheet(sheetName) {
+  const mapping = {
+    [CONFIG.SHEETS.PAYMENTS]: CONFIG.HEADERS.PAYMENTS,
+    [CONFIG.SHEETS.EXPENSES]: CONFIG.HEADERS.EXPENSES,
+    [CONFIG.SHEETS.MASTERS]: CONFIG.HEADERS.MASTERS
+  };
+  return mapping[sheetName] || [];
 }
 
 // ========== 追加のラッパー関数（HTML互換性） ==========
