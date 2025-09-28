@@ -51,7 +51,7 @@ const CONFIG = {
     }
   },
   CSV: {
-    ENCODING: 'shift_jis',
+    ENCODING: 'utf-8',
     DELIMITER: ',',
     HEADER_MAPPING: {
       PAYMENTS: {
@@ -1940,19 +1940,23 @@ function parseCsvText(csvText) {
       return { success: false, message: 'CSVテキストが空です' };
     }
 
-    const lines = csvText.trim().split('\n');
+    // UTF-8向けCSVクリーニング
+    const cleanedCSV = cleanCSVContent(csvText);
+    const lines = cleanedCSV.trim().split('\n');
 
     if (lines.length < 2) {
       return { success: false, message: 'CSVにはヘッダーとデータ行が必要です' };
     }
 
+    console.log('UTF-8 CSVクリーニング完了、行数:', lines.length);
+
     // ヘッダー行を解析
     const rawHeaders = parseCsvLine(lines[0]);
     console.log('生のヘッダー:', rawHeaders);
 
-    // ヘッダークリーニング
+    // UTF-8向けヘッダークリーニング
     const headers = rawHeaders.map(h => cleanHeader(h));
-    console.log('クリーニング後ヘッダー:', headers);
+    console.log('UTF-8クリーニング後ヘッダー:', headers);
 
     // データ行を解析
     const rows = [];
@@ -2250,22 +2254,32 @@ function generateExpenseDataSampleCSV() {
 
 function cleanCSVContent(csvContent) {
   try {
-    // 一般的な文字エンコーディング問題を修正
+    console.log('UTF-8 CSVクリーニング開始');
     let cleaned = csvContent;
 
-    // BOMを除去
+    // UTF-8 BOMを除去（EF BB BF）
     if (cleaned.charCodeAt(0) === 0xFEFF) {
       cleaned = cleaned.slice(1);
+      console.log('UTF-8 BOMを除去しました');
+    }
+
+    // UTF-8でのBOM除去（バイトシーケンス）
+    if (cleaned.startsWith('\uFEFF')) {
+      cleaned = cleaned.slice(1);
+      console.log('UTF-8 BOM文字を除去しました');
     }
 
     // 改行コードを統一
     cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-    console.log('CSV内容クリーニング完了');
+    // UTF-8の不正文字を除去
+    cleaned = cleaned.replace(/\uFFFD/g, ''); // Replacement character
+
+    console.log('UTF-8 CSV内容クリーニング完了');
     return cleaned;
 
   } catch (error) {
-    console.error('CSV内容クリーニングエラー:', error);
+    console.error('UTF-8 CSVクリーニングエラー:', error);
     return csvContent;
   }
 }
@@ -2275,57 +2289,62 @@ function cleanHeader(header) {
 
   let cleaned = header.trim();
 
-  // 文字化けパターンの修正マップ
-  const headerMap = {
-    // 実際に見られた文字化けパターンに基づく
-    '案件名': ['Č', '案件'],
-    '支払い先': ['x������', '支払先', '支払'],
-    '支払い先コード': ['x������R�[�h', 'コード'],
-    '金額': ['���z', '金額'],
-    '支払日': ['支払日'],
-    '状態': ['状態'],
-    '種別': ['種別'],
-    '開始日': ['開始'],
-    '終了日': ['終了'],
-    '放送曜日': ['曜日'],
-    '回数': ['回数'],
-    '備考': ['備考']
+  // UTF-8での不正文字を除去
+  cleaned = cleaned.replace(/\uFFFD/g, ''); // Replacement character
+  cleaned = cleaned.replace(/\u0000/g, ''); // Null character
+
+  // UTF-8でよく見られる問題文字を除去
+  cleaned = cleaned.replace(/[^\u0020-\u007E\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '');
+
+  // 日本語ヘッダーの正規化
+  const japaneseHeaderMap = {
+    '案件名': ['案件', 'project', 'Project', 'プロジェクト'],
+    '支払い先': ['支払先', '支払い先', 'payee', 'Payee', 'vendor', '業者'],
+    '支払い先コード': ['支払先コード', 'コード', 'code', 'Code', 'ID'],
+    '金額': ['金額', 'amount', 'Amount', '料金', '費用'],
+    '支払日': ['支払日', '支払期日', 'date', 'Date', '日付'],
+    '状態': ['状態', 'status', 'Status', 'ステータス'],
+    '種別': ['種別', 'type', 'Type', 'category'],
+    '開始日': ['開始日', '開始', 'start', 'Start'],
+    '終了日': ['終了日', '終了', 'end', 'End'],
+    '放送曜日': ['放送曜日', '曜日', 'day', 'Day'],
+    '回数': ['回数', 'count', 'Count'],
+    '備考': ['備考', 'note', 'Note', 'memo', 'comment']
   };
 
-  // 文字化けを含むヘッダーのマッチング
-  for (const [correctHeader, patterns] of Object.entries(headerMap)) {
-    if (patterns.some(pattern => cleaned.includes(pattern))) {
-      console.log(`ヘッダーマッピング: "${header}" -> "${correctHeader}"`);
-      return correctHeader;
+  // 完全一致チェック
+  for (const [standardHeader, aliases] of Object.entries(japaneseHeaderMap)) {
+    if (aliases.some(alias =>
+      cleaned === alias ||
+      cleaned.toLowerCase() === alias.toLowerCase()
+    )) {
+      console.log(`ヘッダー正規化: "${header}" -> "${standardHeader}"`);
+      return standardHeader;
     }
   }
 
-  // 英語ヘッダーのマッピング
-  const englishMap = {
-    'project': '案件名',
-    'payee': '支払い先',
-    'code': '支払い先コード',
-    'amount': '金額',
-    'date': '支払日',
-    'status': '状態',
-    'type': '種別'
-  };
-
-  for (const [eng, jpn] of Object.entries(englishMap)) {
-    if (cleaned.toLowerCase().includes(eng)) {
-      console.log(`英語マッピング: "${header}" -> "${jpn}"`);
-      return jpn;
+  // 部分一致チェック
+  for (const [standardHeader, aliases] of Object.entries(japaneseHeaderMap)) {
+    if (aliases.some(alias =>
+      cleaned.includes(alias) ||
+      cleaned.toLowerCase().includes(alias.toLowerCase()) ||
+      alias.includes(cleaned) ||
+      alias.toLowerCase().includes(cleaned.toLowerCase())
+    )) {
+      console.log(`ヘッダー部分マッチ: "${header}" -> "${standardHeader}"`);
+      return standardHeader;
     }
   }
 
-  // 文字化け文字を除去して推測
-  const withoutGarbage = cleaned.replace(/[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '');
+  // 空白や特殊文字を除去した最終クリーニング
+  const finalCleaned = cleaned.replace(/[^\w\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '');
 
-  if (withoutGarbage !== cleaned) {
-    console.log(`文字化け除去: "${header}" -> "${withoutGarbage}"`);
-    return withoutGarbage;
+  if (finalCleaned && finalCleaned !== cleaned) {
+    console.log(`最終クリーニング: "${header}" -> "${finalCleaned}"`);
+    return finalCleaned;
   }
 
+  console.log(`ヘッダー保持: "${header}" -> "${cleaned}"`);
   return cleaned;
 }
 
