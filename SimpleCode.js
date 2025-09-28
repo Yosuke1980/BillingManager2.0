@@ -1947,7 +1947,12 @@ function parseCsvText(csvText) {
     }
 
     // ヘッダー行を解析
-    const headers = parseCsvLine(lines[0]);
+    const rawHeaders = parseCsvLine(lines[0]);
+    console.log('生のヘッダー:', rawHeaders);
+
+    // ヘッダークリーニング
+    const headers = rawHeaders.map(h => cleanHeader(h));
+    console.log('クリーニング後ヘッダー:', headers);
 
     // データ行を解析
     const rows = [];
@@ -2090,16 +2095,32 @@ function validateCsvData(headers, rows, dataType) {
       }
     });
 
-    // 必須ヘッダーのチェック（マスターデータの場合、一部は任意）
+    // 必須ヘッダーのチェック（より寛容な判定）
     const requiredHeaders = dataType === 'masters' ?
       ['案件名', '支払い先', '金額'] : // マスターデータでは最低限これだけあれば可
-      expected.slice(0, Math.min(4, expected.length)); // その他は最初の4つが必須
+      expected.slice(0, Math.min(3, expected.length)); // 基本的な項目のみ必須
 
     const criticalMissing = missingHeaders.filter(h => requiredHeaders.includes(h));
-    if (criticalMissing.length > 0) {
+
+    // マッピングできたヘッダー数をチェック
+    const mappedCount = Object.keys(headerMapping).length;
+    const requiredMappedCount = Math.min(3, requiredHeaders.length);
+
+    console.log(`ヘッダーマッピング状況: ${mappedCount}/${expected.length} (必須: ${requiredMappedCount})`);
+
+    if (mappedCount < requiredMappedCount) {
+      // より詳細なエラーメッセージ
+      const mappedHeaders = Object.keys(headerMapping);
+      const availableCleanHeaders = headers.filter(h => h && h.trim() !== '');
+
       return {
         success: false,
-        message: `重要なヘッダーが不足しています: ${criticalMissing.join(', ')}\n\n利用可能なヘッダー: ${headers.join(', ')}\n\n推奨: サンプルCSVファイルをダウンロードして形式を確認してください。`
+        message: `重要なヘッダーが不足しています: ${criticalMissing.join(', ')}\n\n` +
+                 `マッピング成功: ${mappedHeaders.join(', ')}\n` +
+                 `利用可能なヘッダー: ${availableCleanHeaders.join(', ')}\n\n` +
+                 `推奨: \n1. CSVファイルのエンコーディングをUTF-8で保存\n` +
+                 `2. サンプルCSVファイルをダウンロードして形式を確認\n` +
+                 `3. ヘッダー名を日本語で統一`
       };
     }
 
@@ -2223,6 +2244,89 @@ function generatePaymentDataSampleCSV() {
 
 function generateExpenseDataSampleCSV() {
   return generateSampleCSV('expenses');
+}
+
+// ========== CSVエンコーディング・ヘッダー処理 ==========
+
+function cleanCSVContent(csvContent) {
+  try {
+    // 一般的な文字エンコーディング問題を修正
+    let cleaned = csvContent;
+
+    // BOMを除去
+    if (cleaned.charCodeAt(0) === 0xFEFF) {
+      cleaned = cleaned.slice(1);
+    }
+
+    // 改行コードを統一
+    cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    console.log('CSV内容クリーニング完了');
+    return cleaned;
+
+  } catch (error) {
+    console.error('CSV内容クリーニングエラー:', error);
+    return csvContent;
+  }
+}
+
+function cleanHeader(header) {
+  if (!header) return '';
+
+  let cleaned = header.trim();
+
+  // 文字化けパターンの修正マップ
+  const headerMap = {
+    // 実際に見られた文字化けパターンに基づく
+    '案件名': ['Č', '案件'],
+    '支払い先': ['x������', '支払先', '支払'],
+    '支払い先コード': ['x������R�[�h', 'コード'],
+    '金額': ['���z', '金額'],
+    '支払日': ['支払日'],
+    '状態': ['状態'],
+    '種別': ['種別'],
+    '開始日': ['開始'],
+    '終了日': ['終了'],
+    '放送曜日': ['曜日'],
+    '回数': ['回数'],
+    '備考': ['備考']
+  };
+
+  // 文字化けを含むヘッダーのマッチング
+  for (const [correctHeader, patterns] of Object.entries(headerMap)) {
+    if (patterns.some(pattern => cleaned.includes(pattern))) {
+      console.log(`ヘッダーマッピング: "${header}" -> "${correctHeader}"`);
+      return correctHeader;
+    }
+  }
+
+  // 英語ヘッダーのマッピング
+  const englishMap = {
+    'project': '案件名',
+    'payee': '支払い先',
+    'code': '支払い先コード',
+    'amount': '金額',
+    'date': '支払日',
+    'status': '状態',
+    'type': '種別'
+  };
+
+  for (const [eng, jpn] of Object.entries(englishMap)) {
+    if (cleaned.toLowerCase().includes(eng)) {
+      console.log(`英語マッピング: "${header}" -> "${jpn}"`);
+      return jpn;
+    }
+  }
+
+  // 文字化け文字を除去して推測
+  const withoutGarbage = cleaned.replace(/[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '');
+
+  if (withoutGarbage !== cleaned) {
+    console.log(`文字化け除去: "${header}" -> "${withoutGarbage}"`);
+    return withoutGarbage;
+  }
+
+  return cleaned;
 }
 
 // ========== データ検証・ユーティリティ関数 ==========
