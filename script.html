@@ -170,7 +170,7 @@ function updateUI() {
 }
 
 function updateTable() {
-    // ビュー別のtbody要素マッピング
+    // ビュー別のtbody要素マッピング（CONFIG準拠）
     const bodyMap = {
         payment: '#paymentsTableBody',
         expense: '#expensesTableBody',
@@ -210,7 +210,7 @@ function updateTable() {
 
     pageData.forEach(item => {
         const row = tbody.insertRow();
-        cols.forEach(key => {
+        cols.forEach((key, index) => {
             const cell = row.insertCell();
             let value = item[key] || '';
 
@@ -222,8 +222,23 @@ function updateTable() {
                 }
             }
 
+            // ステータス列の色分け
+            if (key === '状態' && value) {
+                applyStatusStyling(cell, value);
+            }
+
+            // 支払い先コードのフォーマット
+            if (key === '支払い先コード' && value) {
+                value = String(value).padStart(4, '0');
+            }
+
             cell.textContent = value;
         });
+
+        // 行全体に照合結果の色分けを適用（将来の機能のため）
+        if (item.matchingStatus) {
+            applyMatchingStatusStyling(row, item.matchingStatus);
+        }
     });
 
     updatePagination();
@@ -281,6 +296,54 @@ function getFallbackDataForView(view) {
         default:
             return [];
     }
+}
+
+// スタイリング関数（matching_config.json準拠）
+function applyStatusStyling(cell, status) {
+    const statusColors = {
+        '未処理': { background: '#f8f9fa', color: '#495057' },
+        '処理中': { background: '#fff3cd', color: '#856404' },
+        '照合済': { background: '#d4edda', color: '#155724' },
+        '完了': { background: '#d1ecf1', color: '#0c5460' }
+    };
+
+    const colors = statusColors[status];
+    if (colors) {
+        cell.style.backgroundColor = colors.background;
+        cell.style.color = colors.color;
+        cell.style.fontWeight = 'bold';
+        cell.style.padding = '4px 8px';
+        cell.style.borderRadius = '4px';
+        cell.style.textAlign = 'center';
+    }
+}
+
+function applyMatchingStatusStyling(row, matchingStatus) {
+    const matchingColors = {
+        '未着・催促要': { background: '#f8d7da', color: '#721c24' },
+        '要確認・金額確認要': { background: '#fff3cd', color: '#856404' },
+        '到着済み・対応不要': { background: '#d4edda', color: '#155724' }
+    };
+
+    const colors = matchingColors[matchingStatus];
+    if (colors) {
+        row.style.backgroundColor = colors.background + '40'; // 40% opacity
+        row.style.borderLeft = `4px solid ${colors.background}`;
+    }
+}
+
+function formatCurrency(amount) {
+    const numAmount = Number(amount);
+    if (isNaN(numAmount)) return '0';
+    return numAmount.toLocaleString('ja-JP', {
+        style: 'currency',
+        currency: 'JPY'
+    });
+}
+
+function formatPayeeCode(code) {
+    if (!code) return '';
+    return String(code).padStart(4, '0');
 }
 
 // 統一的なサーバー関数呼び出し機能

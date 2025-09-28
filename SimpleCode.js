@@ -1,18 +1,93 @@
 // ラジオ局支払い・費用管理システム - Google Apps Script
 // メインサーバーサイド関数
 
-// グローバル設定
+// グローバル設定（matching_config.json準拠）
 const CONFIG = {
   SPREADSHEET_NAME: 'ラジオ局支払い・費用管理システム',
   SHEETS: {
-    PAYMENTS: '支払いデータ',
-    EXPENSES: '費用データ',
-    MASTERS: '費用マスター'
+    PAYMENTS: '支払い情報',
+    EXPENSES: '費用管理',
+    MASTERS: '費用マスター',
+    PAYEE_MASTER: '支払い先マスター',
+    PROJECT_FILTER: '案件管理',
+    MATCHING_LOG: '照合ログ',
+    SETTINGS: 'システム設定'
   },
   HEADERS: {
     PAYMENTS: ['ID', '件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態', '作成日', '更新日'],
-    EXPENSES: ['ID', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態', '作成日', '更新日'],
-    MASTERS: ['ID', '案件名', '支払い先', '支払い先コード', '金額', '種別', '開始日', '終了日', '放送曜日', '回数', '備考']
+    EXPENSES: ['ID', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態', '作成日', '更新日', 'データソース', 'マスターID'],
+    MASTERS: ['ID', '案件名', '支払い先', '支払い先コード', '金額', '種別', '開始日', '終了日', '放送曜日', '回数', '備考', '作成日', '更新日'],
+    PAYEE_MASTER: ['ID', '支払い先名', '支払い先コード', '作成日', '更新日'],
+    MATCHING_LOG: ['ID', '照合日時', '対象データ', '照合結果', '詳細', '実行者']
+  },
+  STATUS_OPTIONS: ['未処理', '処理中', '照合済', '完了'],
+  URGENCY_OPTIONS: ['低', '通常', '高', '緊急'],
+  PAYMENT_TYPE_OPTIONS: ['月額固定', '回数ベース'],
+  WEEKDAYS: ['月', '火', '水', '木', '金', '土', '日'],
+  COLORS: {
+    STATUS: {
+      '未処理': { background: '#f8f9fa', font: '#495057' },
+      '処理中': { background: '#fff3cd', font: '#856404' },
+      '照合済': { background: '#d4edda', font: '#155724' },
+      '完了': { background: '#d1ecf1', font: '#0c5460' }
+    },
+    JUDGMENT: {
+      '未着・催促要': { background: '#f8d7da', font: '#721c24' },
+      '要確認・金額確認要': { background: '#fff3cd', font: '#856404' },
+      '到着済み・対応不要': { background: '#d4edda', font: '#155724' }
+    },
+    URGENCY: {
+      '低': { background: '#e2f3ff', font: '#084298' },
+      '通常': { background: '#ffffff', font: '#000000' },
+      '高': { background: '#fff3cd', font: '#856404' },
+      '緊急': { background: '#f8d7da', font: '#721c24' }
+    },
+    SHEETS: {
+      payments: '#e3f2fd',
+      expenses: '#f3e5f5',
+      expense_master: '#e8f5e8',
+      payee_master: '#fff3e0',
+      project_filter: '#fce4ec'
+    }
+  },
+  CSV: {
+    ENCODING: 'shift_jis',
+    DELIMITER: ',',
+    HEADER_MAPPING: {
+      PAYMENTS: {
+        'おもて情報.件名': 'subject',
+        '明細情報.明細項目': 'project_name',
+        'おもて情報.請求元': 'payee',
+        'おもて情報.支払先コード': 'payee_code',
+        '明細情報.金額': 'amount',
+        'おもて情報.自社支払期限': 'payment_date',
+        '状態': 'status'
+      },
+      EXPENSES: {
+        '案件名': 'project_name',
+        '支払い先': 'payee',
+        '支払い先コード': 'payee_code',
+        '金額': 'amount',
+        '支払日': 'payment_date',
+        'ステータス': 'status'
+      },
+      ALTERNATIVE_HEADERS: {
+        'project_name': ['案件名', 'プロジェクト名', '明細項目', '件名'],
+        'payee': ['支払い先', '請求元', '支払先', '業者名'],
+        'payee_code': ['支払い先コード', '支払先コード', '業者コード', 'コード'],
+        'amount': ['金額', '支払金額', '請求金額', '費用'],
+        'payment_date': ['支払日', '支払期限', '自社支払期限', '決済日']
+      }
+    }
+  },
+  VALIDATION: {
+    PAYEE_CODE_PATTERN: '^[0-9]{4}$',
+    REQUIRED_FIELDS: {
+      PAYMENTS: ['project_name', 'payee', 'amount', 'payment_date'],
+      EXPENSES: ['project_name', 'payee', 'amount', 'payment_date'],
+      MASTERS: ['project_name', 'payee', 'amount', 'payment_type']
+    },
+    AMOUNT_RANGE: { min: 0, max: 100000000 }
   }
 };
 
@@ -1942,9 +2017,9 @@ function parseCsvLine(line) {
 function validateCsvData(headers, rows, dataType) {
   try {
     const expectedHeaders = {
-      'payments': ['件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
-      'expenses': ['案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
-      'masters': ['案件名', '支払い先', '支払い先コード', '金額', '種別', '開始日', '終了日', '放送曜日', '回数', '備考']
+      'payments': CONFIG.HEADERS.PAYMENTS.slice(1, -2), // IDと日付を除く
+      'expenses': CONFIG.HEADERS.EXPENSES.slice(1, -4), // IDと最後4つを除く
+      'masters': CONFIG.HEADERS.MASTERS.slice(1, -2)    // IDと日付を除く
     };
 
     const expected = expectedHeaders[dataType];
@@ -1968,13 +2043,25 @@ function validateCsvData(headers, rows, dataType) {
         );
       }
 
-      // それでもマッチしない場合は類似キーワードを試行
+      // それでもマッチしない場合は設定ファイルの代替ヘッダーを試行
       if (matchedIndex === -1) {
-        const keywords = {
-          '案件名': ['案件', 'project', 'プロジェクト', '番組'],
-          '支払い先': ['支払先', '支払', 'vendor', 'company', '会社'],
-          '支払い先コード': ['コード', 'code', 'id'],
-          '金額': ['金額', '料金', 'amount', 'price', '価格'],
+        const alternativeHeaders = CONFIG.CSV.HEADER_MAPPING.ALTERNATIVE_HEADERS;
+
+        // 設定ファイルの代替ヘッダーマッピングを使用
+        const fieldMapping = {
+          '案件名': 'project_name',
+          '支払い先': 'payee',
+          '支払い先コード': 'payee_code',
+          '金額': 'amount',
+          '支払日': 'payment_date',
+          '支払期限': 'payment_date'
+        };
+
+        const mappingKey = fieldMapping[expectedHeader];
+        const keywords = mappingKey ? alternativeHeaders[mappingKey] : [];
+
+        // 追加の手動キーワード
+        const manualKeywords = {
           '種別': ['種別', 'type', 'category', 'カテゴリ'],
           '開始日': ['開始', 'start', '開始日付'],
           '終了日': ['終了', 'end', '終了日付'],
@@ -1983,9 +2070,11 @@ function validateCsvData(headers, rows, dataType) {
           '備考': ['備考', 'note', 'memo', 'メモ', 'comment']
         };
 
-        if (keywords[expectedHeader]) {
+        const allKeywords = keywords.concat(manualKeywords[expectedHeader] || []);
+
+        if (allKeywords.length > 0) {
           matchedIndex = headers.findIndex(h =>
-            keywords[expectedHeader].some(keyword =>
+            allKeywords.some(keyword =>
               h.toLowerCase().includes(keyword.toLowerCase()) ||
               keyword.toLowerCase().includes(h.toLowerCase())
             )
@@ -2134,6 +2223,320 @@ function generatePaymentDataSampleCSV() {
 
 function generateExpenseDataSampleCSV() {
   return generateSampleCSV('expenses');
+}
+
+// ========== データ検証・ユーティリティ関数 ==========
+
+function validatePayeeCode(code) {
+  if (!code) return { valid: false, message: '支払い先コードが入力されていません' };
+
+  const pattern = new RegExp(CONFIG.VALIDATION.PAYEE_CODE_PATTERN);
+  if (!pattern.test(code)) {
+    return {
+      valid: false,
+      message: '支払い先コードは4桁の数字で入力してください（例: 0001）'
+    };
+  }
+
+  return { valid: true, formatted: code.padStart(4, '0') };
+}
+
+function validateAmount(amount) {
+  const numAmount = Number(amount);
+
+  if (isNaN(numAmount)) {
+    return { valid: false, message: '金額は数値で入力してください' };
+  }
+
+  if (numAmount < CONFIG.VALIDATION.AMOUNT_RANGE.min) {
+    return { valid: false, message: '金額は0以上で入力してください' };
+  }
+
+  if (numAmount > CONFIG.VALIDATION.AMOUNT_RANGE.max) {
+    return { valid: false, message: '金額が上限を超えています' };
+  }
+
+  return { valid: true, formatted: numAmount };
+}
+
+function validateStatus(status, dataType) {
+  if (!status) return { valid: true, default: CONFIG.STATUS_OPTIONS[0] };
+
+  if (!CONFIG.STATUS_OPTIONS.includes(status)) {
+    return {
+      valid: false,
+      message: `ステータスは次の値から選択してください: ${CONFIG.STATUS_OPTIONS.join(', ')}`
+    };
+  }
+
+  return { valid: true, value: status };
+}
+
+function formatPayeeCode(code) {
+  if (!code) return '';
+  return String(code).padStart(4, '0');
+}
+
+function formatAmount(amount) {
+  const numAmount = Number(amount);
+  if (isNaN(numAmount)) return '0';
+  return numAmount.toLocaleString('ja-JP');
+}
+
+function applyStatusColor(status) {
+  const colors = CONFIG.COLORS.STATUS[status];
+  if (!colors) return { background: '#ffffff', font: '#000000' };
+  return colors;
+}
+
+function applyUrgencyColor(urgency) {
+  const colors = CONFIG.COLORS.URGENCY[urgency];
+  if (!colors) return { background: '#ffffff', font: '#000000' };
+  return colors;
+}
+
+function getRequiredFields(dataType) {
+  return CONFIG.VALIDATION.REQUIRED_FIELDS[dataType.toUpperCase()] || [];
+}
+
+function validateRequiredFields(data, dataType) {
+  const requiredFields = getRequiredFields(dataType);
+  const missingFields = [];
+
+  requiredFields.forEach(field => {
+    if (!data[field] || data[field].toString().trim() === '') {
+      missingFields.push(field);
+    }
+  });
+
+  if (missingFields.length > 0) {
+    return {
+      valid: false,
+      message: `必須項目が入力されていません: ${missingFields.join(', ')}`
+    };
+  }
+
+  return { valid: true };
+}
+
+// ========== 照合システム ==========
+
+function matchExpensesWithPayments() {
+  try {
+    console.log('照合システム開始');
+    const startTime = Date.now();
+
+    // 費用データと支払いデータを取得
+    const expenseData = getSheetDataSafe(CONFIG.SHEETS.EXPENSES);
+    const paymentData = getSheetDataSafe(CONFIG.SHEETS.PAYMENTS);
+
+    if (expenseData.length === 0) {
+      return { success: false, message: '費用データが見つかりません' };
+    }
+
+    if (paymentData.length === 0) {
+      return { success: false, message: '支払いデータが見つかりません' };
+    }
+
+    const matchingResults = [];
+    let matchedCount = 0;
+    let unmatchedCount = 0;
+
+    // 各費用データに対して照合実行
+    expenseData.forEach((expense, index) => {
+      try {
+        const expenseId = expense[0];
+        const projectName = expense[1];
+        const payee = expense[2];
+        const payeeCode = expense[3];
+        const amount = Number(expense[4]);
+        const paymentDate = expense[5];
+
+        // 照合ロジック実行
+        const matchResult = performMatching({
+          payeeCode: payeeCode,
+          payee: payee,
+          amount: amount,
+          paymentDate: paymentDate,
+          projectName: projectName
+        }, paymentData);
+
+        matchingResults.push({
+          expenseId: expenseId,
+          expenseData: {
+            projectName,
+            payee,
+            payeeCode,
+            amount,
+            paymentDate
+          },
+          matchResult: matchResult
+        });
+
+        if (matchResult.status === '到着済み・対応不要') {
+          matchedCount++;
+        } else {
+          unmatchedCount++;
+        }
+
+      } catch (error) {
+        console.error(`費用データ ${index} の照合エラー:`, error);
+        matchingResults.push({
+          expenseId: expense[0],
+          matchResult: {
+            status: 'エラー',
+            message: error.message,
+            icon: '❌'
+          }
+        });
+        unmatchedCount++;
+      }
+    });
+
+    // 照合ログに記録
+    logMatchingResult({
+      timestamp: new Date(),
+      totalExpenses: expenseData.length,
+      matchedCount: matchedCount,
+      unmatchedCount: unmatchedCount,
+      results: matchingResults
+    });
+
+    const duration = Date.now() - startTime;
+    console.log(`照合システム完了 (${duration}ms)`);
+
+    return {
+      success: true,
+      message: `照合完了: ${matchedCount}件一致、${unmatchedCount}件要確認`,
+      statistics: {
+        total: expenseData.length,
+        matched: matchedCount,
+        unmatched: unmatchedCount,
+        duration: duration
+      },
+      results: matchingResults
+    };
+
+  } catch (error) {
+    console.error('照合システムエラー:', error);
+    return {
+      success: false,
+      message: `照合システムエラー: ${error.message}`
+    };
+  }
+}
+
+function performMatching(expenseData, paymentData) {
+  // 3段階の照合ロジック（matching_config.json準拠）
+
+  // 1. 支払い先コード完全一致
+  if (expenseData.payeeCode) {
+    const codeMatches = paymentData.filter(payment => {
+      const paymentCode = payment[4]; // 支払い先コード列
+      return paymentCode === expenseData.payeeCode;
+    });
+
+    if (codeMatches.length > 0) {
+      // 2. 金額の完全一致確認
+      const amountMatches = codeMatches.filter(payment => {
+        const paymentAmount = Number(payment[5]); // 金額列
+        return paymentAmount === expenseData.amount;
+      });
+
+      if (amountMatches.length > 0) {
+        // 3. 同一月フィルタ
+        const monthMatches = amountMatches.filter(payment => {
+          const paymentDate = payment[6]; // 支払日列
+          const expenseMonth = expenseData.paymentDate.toString().slice(0, 7);
+          const paymentMonth = paymentDate.toString().slice(0, 7);
+          return expenseMonth === paymentMonth;
+        });
+
+        if (monthMatches.length > 0) {
+          return {
+            status: '到着済み・対応不要',
+            icon: '✅',
+            color: CONFIG.COLORS.JUDGMENT['到着済み・対応不要'],
+            matchedPayments: monthMatches,
+            message: `${monthMatches.length}件の支払いと完全一致`
+          };
+        }
+
+        return {
+          status: '要確認・金額確認要',
+          icon: '⚡',
+          color: CONFIG.COLORS.JUDGMENT['要確認・金額確認要'],
+          matchedPayments: amountMatches,
+          message: '金額は一致するが、月が異なります'
+        };
+      }
+
+      return {
+        status: '要確認・金額確認要',
+        icon: '⚡',
+        color: CONFIG.COLORS.JUDGMENT['要確認・金額確認要'],
+        matchedPayments: codeMatches,
+        message: 'コードは一致するが、金額が異なります'
+      };
+    }
+  }
+
+  // 支払い先名での部分一致検索
+  if (expenseData.payee) {
+    const nameMatches = paymentData.filter(payment => {
+      const paymentPayee = payment[3]; // 支払い先列
+      return paymentPayee.includes(expenseData.payee) ||
+             expenseData.payee.includes(paymentPayee);
+    });
+
+    if (nameMatches.length > 0) {
+      return {
+        status: '要確認・金額確認要',
+        icon: '⚡',
+        color: CONFIG.COLORS.JUDGMENT['要確認・金額確認要'],
+        matchedPayments: nameMatches,
+        message: '支払い先名で部分一致が見つかりました'
+      };
+    }
+  }
+
+  return {
+    status: '未着・催促要',
+    icon: '❌',
+    color: CONFIG.COLORS.JUDGMENT['未着・催促要'],
+    matchedPayments: [],
+    message: '該当する支払いデータが見つかりません'
+  };
+}
+
+function logMatchingResult(result) {
+  try {
+    const spreadsheet = getSpreadsheetWithTimeout();
+    if (!spreadsheet) return;
+
+    let logSheet = getSafeSheet(spreadsheet, CONFIG.SHEETS.MATCHING_LOG);
+    if (!logSheet) {
+      // 照合ログシートを作成
+      logSheet = spreadsheet.insertSheet(CONFIG.SHEETS.MATCHING_LOG);
+      logSheet.getRange(1, 1, 1, CONFIG.HEADERS.MATCHING_LOG.length)
+        .setValues([CONFIG.HEADERS.MATCHING_LOG]);
+    }
+
+    const logRow = [
+      Date.now().toString(), // ID
+      result.timestamp,
+      `費用データ ${result.totalExpenses}件`,
+      `一致: ${result.matchedCount}件、要確認: ${result.unmatchedCount}件`,
+      JSON.stringify(result.results.slice(0, 10)), // 最初の10件のみ保存
+      Session.getActiveUser().getEmail()
+    ];
+
+    logSheet.appendRow(logRow);
+    console.log('照合ログを記録しました');
+
+  } catch (error) {
+    console.error('照合ログ記録エラー:', error);
+  }
 }
 
 // ========== デバッグ・テスト関数 ==========
