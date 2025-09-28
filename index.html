@@ -1127,6 +1127,12 @@
 
             if (result && typeof result === 'object') {
                 if (result.success) {
+                    // CSVダイアログの特別処理
+                    if (result.action === 'showDialog' && result.dialogType === 'csvImport') {
+                        showCSVImportModalOnClient(result.dialogConfig);
+                        return;
+                    }
+
                     alert('成功: ' + (result.message || '処理が完了しました'));
 
                     // スプレッドシートURLがある場合はログ出力
@@ -1168,6 +1174,147 @@
             const results = functions.map(f => f + ': ' + (typeof window[f] === 'function' ? '✓' : '✗'));
             alert('関数定義チェック結果:\n' + results.join('\n'));
             return true;
+        }
+
+        // CSVインポート関連関数
+        function showCSVImportModalOnClient(config) {
+            console.log('Showing CSV import modal:', config);
+
+            // 動的にモーダルを作成
+            const modalHtml = `
+                <div class="modal fade" id="csvImportModal" tabindex="-1" aria-labelledby="csvImportModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="csvImportModalLabel">
+                                    <i class="bi bi-filetype-csv"></i> ${config.title}
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label for="csvDataType" class="form-label">データ種別</label>
+                                        <select class="form-select" id="csvDataType">
+                                            ${config.dataTypes.map(type =>
+                                                `<option value="${type.value}">${type.label}</option>`
+                                            ).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="col-12">
+                                        <label for="csvFile" class="form-label">CSVファイル</label>
+                                        <input type="file" class="form-control" id="csvFile" accept=".csv" />
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="clearExisting" />
+                                            <label class="form-check-label" for="clearExisting">
+                                                既存データをクリア
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                    <i class="bi bi-x-circle"></i> キャンセル
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="executeCSVImport()">
+                                    <i class="bi bi-upload"></i> インポート実行
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 既存のモーダルを削除
+            const existingModal = document.getElementById('csvImportModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // 新しいモーダルを追加
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+            // モーダルを表示
+            const modal = new bootstrap.Modal(document.getElementById('csvImportModal'));
+            modal.show();
+        }
+
+        function executeCSVImport() {
+            console.log('CSV import execution started');
+
+            const fileInput = document.getElementById('csvFile');
+            const dataType = document.getElementById('csvDataType').value;
+            const clearExisting = document.getElementById('clearExisting').checked;
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('CSVファイルを選択してください');
+                return;
+            }
+
+            const file = fileInput.files[0];
+
+            // ファイル形式チェック
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                alert('CSVファイルを選択してください');
+                return;
+            }
+
+            // ファイルサイズチェック（5MB制限）
+            if (file.size > 5 * 1024 * 1024) {
+                alert('ファイルサイズが大きすぎます（5MB以下にしてください）');
+                return;
+            }
+
+            // ローディング表示
+            showLoading(true);
+
+            // FileReader APIでファイルを読み込み
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const csvData = e.target.result;
+
+                console.log('CSV file loaded, calling server function');
+
+                // サーバー側の処理を呼び出し
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        showLoading(false);
+                        console.log('CSV import result:', result);
+
+                        if (result.success) {
+                            alert(`CSVインポート成功: ${result.message}\n取り込み行数: ${result.importedRows || 0}`);
+
+                            // モーダルを閉じる
+                            const modal = bootstrap.Modal.getInstance(document.getElementById('csvImportModal'));
+                            modal.hide();
+
+                            // データを再読み込み
+                            setTimeout(() => {
+                                loadData();
+                            }, 1000);
+                        } else {
+                            alert(`CSVインポートエラー: ${result.message}`);
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        showLoading(false);
+                        console.error('CSV import error:', error);
+                        alert(`CSVインポートでエラーが発生しました: ${error.message || error.toString()}`);
+                    })
+                    .processCsvImport(csvData, dataType, clearExisting);
+            };
+
+            reader.onerror = function(e) {
+                showLoading(false);
+                console.error('File read error:', e);
+                alert('ファイルの読み込みでエラーが発生しました');
+            };
+
+            // ファイルをテキストとして読み込み
+            reader.readAsText(file, 'UTF-8');
         }
 
         // 初期化処理

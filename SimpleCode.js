@@ -1111,39 +1111,21 @@ function resetMasterFilters() {
 
 function showCSVImportDialog() {
   try {
-    // CSVインポートダイアログの表示
-    const html = HtmlService.createHtmlOutput(`
-      <div style="padding: 20px;">
-        <h3>CSVデータインポート</h3>
-        <form id="csvForm">
-          <div>
-            <label>データ種別:</label>
-            <select id="dataType">
-              <option value="payments">支払いデータ</option>
-              <option value="expenses">費用データ</option>
-              <option value="masters">マスターデータ</option>
-            </select>
-          </div>
-          <div style="margin-top: 10px;">
-            <label>CSVファイル:</label>
-            <input type="file" id="csvFile" accept=".csv" />
-          </div>
-          <div style="margin-top: 10px;">
-            <label>
-              <input type="checkbox" id="clearExisting" />
-              既存データをクリア
-            </label>
-          </div>
-          <div style="margin-top: 20px;">
-            <button type="button" onclick="processCsvImport()">インポート実行</button>
-            <button type="button" onclick="google.script.host.close()">キャンセル</button>
-          </div>
-        </form>
-      </div>
-    `).setWidth(400).setHeight(300);
-
-    SpreadsheetApp.getUi().showModalDialog(html, 'CSVインポート');
-    return { success: true, message: 'CSVインポートダイアログを表示しました' };
+    // Webアプリ用CSVインポートダイアログ開始
+    return {
+      success: true,
+      message: 'CSVインポートダイアログを開く準備完了',
+      action: 'showDialog',
+      dialogType: 'csvImport',
+      dialogConfig: {
+        title: 'CSVデータインポート',
+        dataTypes: [
+          { value: 'payments', label: '支払いデータ' },
+          { value: 'expenses', label: '費用データ' },
+          { value: 'masters', label: 'マスターデータ' }
+        ]
+      }
+    };
   } catch (error) {
     console.error('CSVダイアログ表示エラー:', error);
     return { success: false, message: error.message };
@@ -1370,6 +1352,166 @@ function runSystemDebug() {
     };
   } catch (error) {
     console.error('システムデバッグエラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+// ========== CSV処理関数 ==========
+
+function processCsvImport(csvData, dataType, clearExisting = false) {
+  try {
+    console.log(`CSVインポート開始: ${dataType}, クリア: ${clearExisting}`);
+
+    if (!csvData || !csvData.trim()) {
+      return { success: false, message: 'CSVデータが空です' };
+    }
+
+    // CSV解析
+    const parsedData = parseCsvText(csvData);
+    if (!parsedData.success) {
+      return parsedData;
+    }
+
+    // 既存のimportCSVData関数を使用
+    const result = importCSVData(csvData, dataType, clearExisting);
+
+    return {
+      success: result.success,
+      message: result.message,
+      results: result.results || {},
+      importedRows: parsedData.rows ? parsedData.rows.length : 0
+    };
+  } catch (error) {
+    console.error('CSVインポート処理エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function parseCsvText(csvText) {
+  try {
+    if (!csvText || !csvText.trim()) {
+      return { success: false, message: 'CSVテキストが空です' };
+    }
+
+    const lines = csvText.trim().split('\n');
+
+    if (lines.length < 2) {
+      return { success: false, message: 'CSVにはヘッダーとデータ行が必要です' };
+    }
+
+    // ヘッダー行を解析
+    const headers = parseCsvLine(lines[0]);
+
+    // データ行を解析
+    const rows = [];
+    const errors = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const line = lines[i].trim();
+        if (line) {
+          const row = parseCsvLine(line);
+          if (row.length > 0) {
+            rows.push(row);
+          }
+        }
+      } catch (error) {
+        errors.push(`行 ${i + 1}: ${error.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      headers: headers,
+      rows: rows,
+      totalLines: lines.length,
+      dataLines: rows.length,
+      errors: errors
+    };
+  } catch (error) {
+    console.error('CSV解析エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function parseCsvLine(line) {
+  // シンプルなCSV行解析（カンマ区切り、ダブルクォート対応）
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        // エスケープされたダブルクォート
+        current += '"';
+        i++; // 次の文字をスキップ
+      } else {
+        // クォートの開始/終了
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      // フィールド区切り
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  // 最後のフィールドを追加
+  result.push(current.trim());
+
+  return result;
+}
+
+function validateCsvData(headers, rows, dataType) {
+  try {
+    const expectedHeaders = {
+      'payments': ['件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+      'expenses': ['案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+      'masters': ['案件名', '支払い先', '支払い先コード', '金額', '種別', '開始日', '終了日', '放送曜日', '回数', '備考']
+    };
+
+    const expected = expectedHeaders[dataType];
+    if (!expected) {
+      return { success: false, message: '不正なデータ種別です' };
+    }
+
+    // ヘッダー検証（部分一致でも可）
+    const missingHeaders = expected.filter(h => !headers.some(header => header.includes(h)));
+    if (missingHeaders.length > 0) {
+      return {
+        success: false,
+        message: `必要なヘッダーが不足しています: ${missingHeaders.join(', ')}`
+      };
+    }
+
+    // データ行の基本検証
+    const invalidRows = [];
+    rows.forEach((row, index) => {
+      if (row.length < expected.length - 2) { // ある程度の柔軟性を持たせる
+        invalidRows.push(index + 2); // 行番号（ヘッダー含む）
+      }
+    });
+
+    if (invalidRows.length > 0 && invalidRows.length > rows.length * 0.5) {
+      return {
+        success: false,
+        message: `データ行の形式が正しくありません。問題のある行: ${invalidRows.slice(0, 5).join(', ')}${invalidRows.length > 5 ? '...' : ''}`
+      };
+    }
+
+    return {
+      success: true,
+      message: 'CSVデータの検証が完了しました',
+      validRows: rows.length - invalidRows.length,
+      invalidRows: invalidRows.length
+    };
+  } catch (error) {
+    console.error('CSV検証エラー:', error);
     return { success: false, message: error.message };
   }
 }
