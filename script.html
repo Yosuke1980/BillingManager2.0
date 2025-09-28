@@ -1,12 +1,62 @@
 // 段階的復元テスト - ステップ1: 基本変数と簡単な関数
 console.log('Script.html step 1 loaded successfully');
 
+// Google Apps Script API モック（ローカル環境対応）
+if (typeof google === 'undefined') {
+    console.log('Local environment detected - setting up GAS API mock');
+    window.google = {
+        script: {
+            run: {
+                withSuccessHandler: function(successHandler) {
+                    return {
+                        withFailureHandler: function(failureHandler) {
+                            const mockFunctions = {
+                                getPaymentData: function() {
+                                    console.log('Mock: getPaymentData called');
+                                    setTimeout(() => {
+                                        successHandler([
+                                            {subject: 'テスト件名1', projectName: 'テストプロジェクト1', payee: 'テスト支払先1', payeeCode: 'CODE001', amount: '100000', paymentDate: '2024-01-01', status: '完了'},
+                                            {subject: 'テスト件名2', projectName: 'テストプロジェクト2', payee: 'テスト支払先2', payeeCode: 'CODE002', amount: '200000', paymentDate: '2024-01-02', status: '処理中'}
+                                        ]);
+                                    }, 1000);
+                                },
+                                getExpenseData: function() {
+                                    console.log('Mock: getExpenseData called');
+                                    setTimeout(() => {
+                                        successHandler([
+                                            {date: '2024-01-01', category: 'テストカテゴリ1', description: 'テスト説明1', amount: '50000', status: '完了'},
+                                            {date: '2024-01-02', category: 'テストカテゴリ2', description: 'テスト説明2', amount: '75000', status: '処理中'}
+                                        ]);
+                                    }, 1000);
+                                },
+                                getMasterData: function() {
+                                    console.log('Mock: getMasterData called');
+                                    setTimeout(() => {
+                                        successHandler([
+                                            {category: 'テストマスター1', description: 'マスター説明1', amount: '30000', frequency: '月次'},
+                                            {category: 'テストマスター2', description: 'マスター説明2', amount: '40000', frequency: '年次'}
+                                        ]);
+                                    }, 1000);
+                                }
+                            };
+
+                            return mockFunctions;
+                        }
+                    };
+                }
+            }
+        }
+    };
+} else {
+    console.log('GAS environment detected - using real API');
+}
+
 // グローバル変数
-let currentView = 'payments';
+let currentView = 'payment';
 let allData = {
-  payments: [],
-  expenses: [],
-  masters: []
+  payment: [],
+  expense: [],
+  master: []
 };
 let filteredData = [];
 let currentPage = 1;
@@ -46,7 +96,7 @@ function switchView(view) {
     document.querySelectorAll('.nav-link').forEach(tab => {
         tab.classList.remove('active');
     });
-    const targetTab = document.querySelector('[href="#' + view + '"]');
+    const targetTab = document.querySelector('[data-bs-target="#' + view + '"]');
     if (targetTab) {
         targetTab.classList.add('active');
     }
@@ -62,13 +112,13 @@ function loadData() {
 
     let functionName;
     switch(currentView) {
-        case 'payments':
+        case 'payment':
             functionName = 'getPaymentData';
             break;
-        case 'expenses':
+        case 'expense':
             functionName = 'getExpenseData';
             break;
-        case 'masters':
+        case 'master':
             functionName = 'getMasterData';
             break;
         default:
@@ -93,9 +143,9 @@ function loadData() {
 function updateUI() {
     const viewTitle = document.getElementById('viewTitle');
     const viewMap = {
-        'payments': '支払データ管理',
-        'expenses': '費用データ管理',
-        'masters': 'マスタデータ管理'
+        'payment': '支払データ管理',
+        'expense': '費用データ管理',
+        'master': 'マスタデータ管理'
     };
     if (viewTitle) {
         viewTitle.textContent = viewMap[currentView] || 'データ管理';
@@ -103,15 +153,69 @@ function updateUI() {
 }
 
 function updateTable() {
-    const tbody = document.querySelector('#dataTable tbody');
-    if (!tbody) return;
+    switch(currentView) {
+        case 'payment':
+            updatePaymentTable();
+            break;
+        case 'expense':
+            updateExpenseTable();
+            break;
+        case 'master':
+            updateMasterTable();
+            break;
+    }
+}
+
+function updatePaymentTable() {
+    const tbody = document.querySelector('#paymentsTableBody');
+    if (!tbody) {
+        console.error('paymentsTableBody not found');
+        return;
+    }
 
     tbody.innerHTML = '';
 
     if (!filteredData || filteredData.length === 0) {
         const row = tbody.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = 10;
+        cell.colSpan = 7; // 支払いテーブルは7列
+        cell.textContent = 'データがありません';
+        cell.className = 'text-center text-muted py-4';
+        return;
+    }
+
+    // ページネーション計算
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageData = filteredData.slice(startIndex, endIndex);
+
+    // テーブル行作成 - HTMLの列に合わせて修正
+    pageData.forEach(item => {
+        const row = tbody.insertRow();
+        // 支払いテーブルの列: 件名, 案件名, 支払い先, コード, 金額, 支払日, 状態
+        const columns = ['subject', 'projectName', 'payee', 'payeeCode', 'amount', 'paymentDate', 'status'];
+        columns.forEach(key => {
+            const cell = row.insertCell();
+            cell.textContent = item[key] || '';
+        });
+    });
+
+    updatePagination();
+}
+
+function updateExpenseTable() {
+    const tbody = document.querySelector('#expensesTableBody');
+    if (!tbody) {
+        console.error('expensesTableBody not found');
+        return;
+    }
+
+    tbody.innerHTML = '';
+
+    if (!filteredData || filteredData.length === 0) {
+        const row = tbody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 6; // 費用テーブルの列数に応じて調整
         cell.textContent = 'データがありません';
         cell.className = 'text-center text-muted py-4';
         return;
@@ -125,9 +229,46 @@ function updateTable() {
     // テーブル行作成
     pageData.forEach(item => {
         const row = tbody.insertRow();
-        // 基本的な列のみ（template literalsを避ける）
-        const cells = ['日付', '項目', '金額', '支払先', '状態'];
-        cells.forEach(key => {
+        // 費用テーブルの基本列
+        const columns = ['date', 'category', 'description', 'amount', 'status'];
+        columns.forEach(key => {
+            const cell = row.insertCell();
+            cell.textContent = item[key] || '';
+        });
+    });
+
+    updatePagination();
+}
+
+function updateMasterTable() {
+    const tbody = document.querySelector('#mastersTableBody');
+    if (!tbody) {
+        console.error('mastersTableBody not found');
+        return;
+    }
+
+    tbody.innerHTML = '';
+
+    if (!filteredData || filteredData.length === 0) {
+        const row = tbody.insertRow();
+        const cell = row.insertCell();
+        cell.colSpan = 5; // マスターテーブルの列数に応じて調整
+        cell.textContent = 'データがありません';
+        cell.className = 'text-center text-muted py-4';
+        return;
+    }
+
+    // ページネーション計算
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageData = filteredData.slice(startIndex, endIndex);
+
+    // テーブル行作成
+    pageData.forEach(item => {
+        const row = tbody.insertRow();
+        // マスターテーブルの基本列
+        const columns = ['category', 'description', 'amount', 'frequency'];
+        columns.forEach(key => {
             const cell = row.insertCell();
             cell.textContent = item[key] || '';
         });
@@ -148,17 +289,17 @@ function refreshAllData() {
 }
 
 function refreshPayments() {
-    currentView = 'payments';
+    currentView = 'payment';
     loadData();
 }
 
 function refreshExpenses() {
-    currentView = 'expenses';
+    currentView = 'expense';
     loadData();
 }
 
 function refreshMasters() {
-    currentView = 'masters';
+    currentView = 'master';
     loadData();
 }
 
