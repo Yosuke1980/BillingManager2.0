@@ -145,7 +145,11 @@ function createSampleData() {
 
 function checkSystemStatus() {
   try {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const spreadsheet = getOrCreateSpreadsheet();
+    if (!spreadsheet) {
+      return { success: false, message: 'スプレッドシートにアクセスできません' };
+    }
+
     const sheets = {};
 
     // 各シートの状態確認
@@ -334,9 +338,13 @@ function runSystemDiagnosis() {
 
     // スプレッドシートの存在確認
     try {
-      const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-      checks.push({ name: 'スプレッドシート', status: 'PASS', message: '正常' });
-      passedChecks++;
+      const spreadsheet = getOrCreateSpreadsheet();
+      if (spreadsheet) {
+        checks.push({ name: 'スプレッドシート', status: 'PASS', message: '正常' });
+        passedChecks++;
+      } else {
+        checks.push({ name: 'スプレッドシート', status: 'FAIL', message: 'スプレッドシートにアクセスできません' });
+      }
     } catch (e) {
       checks.push({ name: 'スプレッドシート', status: 'FAIL', message: e.message });
     }
@@ -344,7 +352,13 @@ function runSystemDiagnosis() {
     // 各シートの確認
     Object.values(CONFIG.SHEETS).forEach(sheetName => {
       try {
-        const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+        const spreadsheet = getOrCreateSpreadsheet();
+        if (!spreadsheet) {
+          checks.push({ name: `シート: ${sheetName}`, status: 'FAIL', message: 'スプレッドシートにアクセスできません' });
+          return;
+        }
+
+        const sheet = spreadsheet.getSheetByName(sheetName);
         if (sheet) {
           checks.push({ name: `シート: ${sheetName}`, status: 'PASS', message: `${sheet.getLastRow()}行` });
           passedChecks++;
@@ -676,7 +690,11 @@ function runEmergencyRepair() {
 
 function debugBasicFunctions() {
   try {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const spreadsheet = getOrCreateSpreadsheet();
+    if (!spreadsheet) {
+      return { success: false, message: 'スプレッドシートにアクセスできません' };
+    }
+
     const debug = {
       spreadsheetId: spreadsheet.getId(),
       spreadsheetName: spreadsheet.getName(),
@@ -963,9 +981,13 @@ function initializeSheet(spreadsheet, sheetName, headers) {
 
 function getSheetData(sheetName) {
   try {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = spreadsheet.getSheetByName(sheetName);
+    const spreadsheet = getOrCreateSpreadsheet();
+    if (!spreadsheet) {
+      console.warn(`スプレッドシートにアクセスできません`);
+      return [];
+    }
 
+    const sheet = spreadsheet.getSheetByName(sheetName);
     if (!sheet) {
       console.warn(`シート ${sheetName} が見つかりません`);
       return [];
@@ -1004,9 +1026,13 @@ function clearSheetData(spreadsheet, sheetName) {
 
 function updateSheetData(sheetName, data) {
   try {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = spreadsheet.getSheetByName(sheetName);
+    const spreadsheet = getOrCreateSpreadsheet();
+    if (!spreadsheet) {
+      console.error(`スプレッドシートにアクセスできません (${sheetName})`);
+      return;
+    }
 
+    const sheet = spreadsheet.getSheetByName(sheetName);
     if (sheet && data.length > 0) {
       clearSheetData(spreadsheet, sheetName);
       insertSampleData(spreadsheet, sheetName, data);
@@ -1018,9 +1044,13 @@ function updateSheetData(sheetName, data) {
 
 function appendToSheet(sheetName, data) {
   try {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = spreadsheet.getSheetByName(sheetName);
+    const spreadsheet = getOrCreateSpreadsheet();
+    if (!spreadsheet) {
+      console.error(`スプレッドシートにアクセスできません (${sheetName})`);
+      return;
+    }
 
+    const sheet = spreadsheet.getSheetByName(sheetName);
     if (sheet && data.length > 0) {
       const startRow = sheet.getLastRow() + 1;
       sheet.getRange(startRow, 1, data.length, data[0].length).setValues(data);
@@ -1075,6 +1105,273 @@ function resetExpenseFilters() {
 
 function resetMasterFilters() {
   return getMasterData();
+}
+
+// ========== UI関連関数 ==========
+
+function showCSVImportDialog() {
+  try {
+    // CSVインポートダイアログの表示
+    const html = HtmlService.createHtmlOutput(`
+      <div style="padding: 20px;">
+        <h3>CSVデータインポート</h3>
+        <form id="csvForm">
+          <div>
+            <label>データ種別:</label>
+            <select id="dataType">
+              <option value="payments">支払いデータ</option>
+              <option value="expenses">費用データ</option>
+              <option value="masters">マスターデータ</option>
+            </select>
+          </div>
+          <div style="margin-top: 10px;">
+            <label>CSVファイル:</label>
+            <input type="file" id="csvFile" accept=".csv" />
+          </div>
+          <div style="margin-top: 10px;">
+            <label>
+              <input type="checkbox" id="clearExisting" />
+              既存データをクリア
+            </label>
+          </div>
+          <div style="margin-top: 20px;">
+            <button type="button" onclick="processCsvImport()">インポート実行</button>
+            <button type="button" onclick="google.script.host.close()">キャンセル</button>
+          </div>
+        </form>
+      </div>
+    `).setWidth(400).setHeight(300);
+
+    SpreadsheetApp.getUi().showModalDialog(html, 'CSVインポート');
+    return { success: true, message: 'CSVインポートダイアログを表示しました' };
+  } catch (error) {
+    console.error('CSVダイアログ表示エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function showSystemStatus() {
+  try {
+    const spreadsheet = getOrCreateSpreadsheet();
+    if (!spreadsheet) {
+      return { success: false, message: 'スプレッドシートにアクセスできません' };
+    }
+
+    const status = {
+      spreadsheetId: spreadsheet.getId(),
+      spreadsheetName: spreadsheet.getName(),
+      spreadsheetUrl: spreadsheet.getUrl(),
+      sheets: {},
+      timestamp: new Date().toISOString()
+    };
+
+    // 各シートの状態確認
+    Object.values(CONFIG.SHEETS).forEach(sheetName => {
+      const sheet = spreadsheet.getSheetByName(sheetName);
+      status.sheets[sheetName] = {
+        exists: !!sheet,
+        rows: sheet ? sheet.getLastRow() : 0,
+        columns: sheet ? sheet.getLastColumn() : 0
+      };
+    });
+
+    return {
+      success: true,
+      message: 'システム状態を取得しました',
+      status: status
+    };
+  } catch (error) {
+    console.error('システム状態確認エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function openMasterReflectionModal() {
+  try {
+    return {
+      success: true,
+      message: 'モーダルを開く準備ができました',
+      action: 'openModal',
+      modalId: 'masterReflectionModal'
+    };
+  } catch (error) {
+    console.error('モーダル表示エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function generateFromMasterForCurrentMonth() {
+  try {
+    const now = new Date();
+    return generateExpensesFromMaster(now.getFullYear(), now.getMonth() + 1);
+  } catch (error) {
+    console.error('今月分生成エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function generateFromMasterForNextMonth() {
+  try {
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return generateExpensesFromMaster(nextMonth.getFullYear(), nextMonth.getMonth() + 1);
+  } catch (error) {
+    console.error('来月分生成エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function setCurrentMonth() {
+  try {
+    const now = new Date();
+    return {
+      success: true,
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      message: '今月が設定されました'
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+function setNextMonth() {
+  try {
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return {
+      success: true,
+      year: nextMonth.getFullYear(),
+      month: nextMonth.getMonth() + 1,
+      message: '来月が設定されました'
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+function setPreviousMonth() {
+  try {
+    const now = new Date();
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return {
+      success: true,
+      year: prevMonth.getFullYear(),
+      month: prevMonth.getMonth() + 1,
+      message: '先月が設定されました'
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+}
+
+function previewMasterReflection() {
+  try {
+    const now = new Date();
+    return previewExpensesFromMaster(now.getFullYear(), now.getMonth() + 1);
+  } catch (error) {
+    console.error('プレビュー生成エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function executeMasterReflection() {
+  try {
+    const now = new Date();
+    return generateExpensesFromMaster(now.getFullYear(), now.getMonth() + 1);
+  } catch (error) {
+    console.error('月次反映実行エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function emergencySystemSetup() {
+  try {
+    console.log('緊急システム初期化開始');
+
+    // 新しいスプレッドシートを作成
+    const createResult = createNewSpreadsheet();
+    if (!createResult.success) {
+      return createResult;
+    }
+
+    // システム初期化
+    const initResult = initializeCompleteSystem();
+    if (!initResult.success) {
+      return initResult;
+    }
+
+    // サンプルデータ作成
+    const sampleResult = createSampleData();
+
+    return {
+      success: true,
+      message: '緊急システム初期化が完了しました',
+      details: {
+        spreadsheet: createResult,
+        initialization: initResult,
+        sampleData: sampleResult
+      }
+    };
+  } catch (error) {
+    console.error('緊急システム初期化エラー:', error);
+    return { success: false, message: error.message };
+  }
+}
+
+function runSystemDebug() {
+  try {
+    console.log('システムデバッグ開始');
+
+    const debug = {
+      timestamp: new Date().toISOString(),
+      functions: {},
+      spreadsheet: {},
+      data: {}
+    };
+
+    // 関数存在チェック
+    const functionList = [
+      'getPaymentData', 'getExpenseData', 'getMasterData',
+      'initializeCompleteSystem', 'createSampleData', 'checkSystemStatus'
+    ];
+
+    functionList.forEach(funcName => {
+      debug.functions[funcName] = typeof eval(funcName) === 'function';
+    });
+
+    // スプレッドシート情報
+    try {
+      const spreadsheet = getOrCreateSpreadsheet();
+      debug.spreadsheet = {
+        exists: !!spreadsheet,
+        id: spreadsheet ? spreadsheet.getId() : null,
+        name: spreadsheet ? spreadsheet.getName() : null
+      };
+    } catch (e) {
+      debug.spreadsheet = { error: e.message };
+    }
+
+    // データ取得テスト
+    try {
+      const paymentResult = getPaymentData();
+      debug.data.payments = {
+        success: paymentResult.success,
+        count: paymentResult.data ? paymentResult.data.length : 0
+      };
+    } catch (e) {
+      debug.data.payments = { error: e.message };
+    }
+
+    return {
+      success: true,
+      message: 'システムデバッグを完了しました',
+      debug: debug
+    };
+  } catch (error) {
+    console.error('システムデバッグエラー:', error);
+    return { success: false, message: error.message };
+  }
 }
 
 // テスト用の基本関数
