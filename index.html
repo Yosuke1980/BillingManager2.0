@@ -370,7 +370,7 @@
                 <button class="btn btn-light btn-sm me-2" onclick="refreshAllData()" title="全データ更新">
                     <i class="bi bi-arrow-clockwise"></i>
                 </button>
-                <button class="btn btn-light btn-sm" onclick="showSystemStatus()" title="システム状態">
+                <button class="btn btn-light btn-sm" onclick="callServerFunction('showSystemStatus')" title="システム状態">
                     <i class="bi bi-info-circle"></i>
                 </button>
             </div>
@@ -443,10 +443,10 @@
                             <input type="month" class="form-control" id="paymentMonthFilter">
                         </div>
                         <div class="col-md-3">
-                            <button class="btn btn-primary" onclick="searchPayments()">
+                            <button class="btn btn-primary" onclick="callServerFunction('searchPayments')">
                                 <i class="bi bi-search"></i> 検索
                             </button>
-                            <button class="btn btn-outline-secondary ms-2" onclick="resetPaymentFilters()">
+                            <button class="btn btn-outline-secondary ms-2" onclick="callServerFunction('resetPaymentFilters')">
                                 <i class="bi bi-arrow-clockwise"></i> リセット
                             </button>
                         </div>
@@ -497,7 +497,7 @@
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h4><i class="bi bi-receipt"></i> 費用管理</h4>
                     <div>
-                        <button class="btn btn-success btn-sm me-2" onclick="openMasterReflectionModal()">
+                        <button class="btn btn-success btn-sm me-2" onclick="callServerFunction('openMasterReflectionModal')">
                             <i class="bi bi-calendar-plus"></i> 月次反映
                         </button>
                         <button class="btn btn-primary btn-sm" onclick="refreshExpenses()">
@@ -514,10 +514,10 @@
                             <strong>月次反映機能:</strong> 費用マスターから指定月の費用データを自動生成します
                         </div>
                         <div>
-                            <button class="btn btn-sm btn-outline-primary me-2" onclick="generateFromMasterForCurrentMonth()">
+                            <button class="btn btn-sm btn-outline-primary me-2" onclick="callServerFunction('generateFromMasterForCurrentMonth')">
                                 今月分を生成
                             </button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="generateFromMasterForNextMonth()">
+                            <button class="btn btn-sm btn-outline-secondary" onclick="callServerFunction('generateFromMasterForNextMonth')">
                                 来月分を生成
                             </button>
                         </div>
@@ -546,10 +546,10 @@
                             <input type="month" class="form-control" id="expenseMonthFilter">
                         </div>
                         <div class="col-md-3">
-                            <button class="btn btn-primary" onclick="searchExpenses()">
+                            <button class="btn btn-primary" onclick="callServerFunction('searchExpenses')">
                                 <i class="bi bi-search"></i> 検索
                             </button>
-                            <button class="btn btn-outline-secondary ms-2" onclick="resetExpenseFilters()">
+                            <button class="btn btn-outline-secondary ms-2" onclick="callServerFunction('resetExpenseFilters')">
                                 <i class="bi bi-arrow-clockwise"></i> リセット
                             </button>
                         </div>
@@ -626,10 +626,10 @@
                             <input type="month" class="form-control" id="masterDateFilter">
                         </div>
                         <div class="col-md-3">
-                            <button class="btn btn-primary" onclick="searchMasters()">
+                            <button class="btn btn-primary" onclick="callServerFunction('searchMasters')">
                                 <i class="bi bi-search"></i> 検索
                             </button>
-                            <button class="btn btn-outline-secondary ms-2" onclick="resetMasterFilters()">
+                            <button class="btn btn-outline-secondary ms-2" onclick="callServerFunction('resetMasterFilters')">
                                 <i class="bi bi-arrow-clockwise"></i> リセット
                             </button>
                         </div>
@@ -681,7 +681,7 @@
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h4><i class="bi bi-arrow-left-right"></i> データ照合機能</h4>
                     <div>
-                        <button class="btn btn-primary" onclick="runAutoMatching()">
+                        <button class="btn btn-primary" onclick="callServerFunction('runAutoMatching')">
                             <i class="bi bi-play-circle"></i> 自動照合実行
                         </button>
                     </div>
@@ -697,7 +697,7 @@
                             <div class="text-center text-muted p-4">
                                 <i class="bi bi-arrow-left-right" style="font-size: 3rem;"></i>
                                 <p>照合を実行してください</p>
-                                <button class="btn btn-primary" onclick="runAutoMatching()">
+                                <button class="btn btn-primary" onclick="callServerFunction('runAutoMatching')">
                                     <i class="bi bi-play"></i> 照合開始
                                 </button>
                             </div>
@@ -720,22 +720,22 @@
                             </div>
                             <div class="card-body">
                                 <div class="d-grid gap-2">
-                                    <button class="btn btn-outline-primary" onclick="initializeCompleteSystem()">
+                                    <button class="btn btn-outline-primary" onclick="callServerFunction('initializeCompleteSystem')">
                                         <i class="bi bi-arrow-clockwise"></i> システム初期化
                                     </button>
-                                    <button class="btn btn-outline-success" onclick="createSampleData()">
+                                    <button class="btn btn-outline-success" onclick="callServerFunction('createSampleData')">
                                         <i class="bi bi-plus-circle"></i> サンプルデータ作成
                                     </button>
-                                    <button class="btn btn-outline-warning" onclick="checkSystemStatus()">
+                                    <button class="btn btn-outline-warning" onclick="callServerFunction('checkSystemStatus')">
                                         <i class="bi bi-check-circle"></i> システム状態確認
                                     </button>
-                                    <button class="btn btn-outline-info" onclick="createNewSpreadsheet()">
+                                    <button class="btn btn-outline-info" onclick="callServerFunction('createNewSpreadsheet')">
                                         <i class="bi bi-file-earmark-plus"></i> 新規スプレッドシート
                                     </button>
-                                    <button class="btn btn-outline-primary" onclick="importPythonAppData()">
+                                    <button class="btn btn-outline-primary" onclick="callServerFunction('importPythonAppData')">
                                         <i class="bi bi-database-fill-up"></i> 実データインポート
                                     </button>
-                                    <button class="btn btn-outline-secondary" onclick="showCSVImportDialog()">
+                                    <button class="btn btn-outline-secondary" onclick="callServerFunction('showCSVImportDialog')">
                                         <i class="bi bi-filetype-csv"></i> CSVインポート
                                     </button>
                                 </div>
@@ -751,35 +751,35 @@
                             </div>
                             <div class="card-body">
                                 <div class="d-grid gap-2">
-                                    <button class="btn btn-outline-primary" onclick="runSystemDiagnosis()">
+                                    <button class="btn btn-outline-primary" onclick="callServerFunction('runSystemDiagnosis')">
                                         <i class="bi bi-search"></i> システム診断実行
                                     </button>
-                                    <button class="btn btn-outline-warning" onclick="checkDataIntegrity()">
+                                    <button class="btn btn-outline-warning" onclick="callServerFunction('checkDataIntegrity')">
                                         <i class="bi bi-shield-check"></i> データ整合性チェック
                                     </button>
-                                    <button class="btn btn-outline-success" onclick="showPerformanceStats()">
+                                    <button class="btn btn-outline-success" onclick="callServerFunction('showPerformanceStats')">
                                         <i class="bi bi-graph-up"></i> パフォーマンス統計
                                     </button>
-                                    <button class="btn btn-outline-danger" onclick="runEmergencyRepair()">
+                                    <button class="btn btn-outline-danger" onclick="callServerFunction('runEmergencyRepair')">
                                         <i class="bi bi-wrench"></i> 緊急修復
                                     </button>
-                                    <button class="btn btn-outline-info" onclick="verifyDataCounts()">
+                                    <button class="btn btn-outline-info" onclick="callServerFunction('verifyDataCounts')">
                                         <i class="bi bi-list-check"></i> データ件数検証
                                     </button>
-                                    <button class="btn btn-outline-warning" onclick="checkDataDuplicates()">
+                                    <button class="btn btn-outline-warning" onclick="callServerFunction('checkDataDuplicates')">
                                         <i class="bi bi-files"></i> 重複チェック
                                     </button>
-                                    <button class="btn btn-outline-primary" onclick="validateFieldRanges()">
+                                    <button class="btn btn-outline-primary" onclick="callServerFunction('validateFieldRanges')">
                                         <i class="bi bi-check2-square"></i> 範囲チェック
                                     </button>
-                                    <button class="btn btn-outline-success" onclick="runCompleteDataValidation()">
+                                    <button class="btn btn-outline-success" onclick="callServerFunction('runCompleteDataValidation')">
                                         <i class="bi bi-shield-check"></i> 統合検証
                                     </button>
                                     <hr>
-                                    <button class="btn btn-danger" onclick="emergencySystemSetup()">
+                                    <button class="btn btn-danger" onclick="callServerFunction('emergencySystemSetup')">
                                         <i class="bi bi-arrow-clockwise"></i> 緊急システム初期化
                                     </button>
-                                    <button class="btn btn-warning" onclick="runSystemDebug()">
+                                    <button class="btn btn-warning" onclick="callServerFunction('runSystemDebug')">
                                         <i class="bi bi-bug"></i> システムデバッグ
                                     </button>
                                 </div>
@@ -853,17 +853,17 @@
                     <!-- クイック選択ボタン -->
                     <div class="row g-2 mb-4">
                         <div class="col-md-4">
-                            <button class="btn btn-outline-primary w-100" onclick="setCurrentMonth()">
+                            <button class="btn btn-outline-primary w-100" onclick="callServerFunction('setCurrentMonth')">
                                 <i class="bi bi-calendar-check"></i> 今月
                             </button>
                         </div>
                         <div class="col-md-4">
-                            <button class="btn btn-outline-secondary w-100" onclick="setNextMonth()">
+                            <button class="btn btn-outline-secondary w-100" onclick="callServerFunction('setNextMonth')">
                                 <i class="bi bi-calendar-plus"></i> 来月
                             </button>
                         </div>
                         <div class="col-md-4">
-                            <button class="btn btn-outline-info w-100" onclick="setPreviousMonth()">
+                            <button class="btn btn-outline-info w-100" onclick="callServerFunction('setPreviousMonth')">
                                 <i class="bi bi-calendar-minus"></i> 先月
                             </button>
                         </div>
@@ -873,7 +873,7 @@
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h6 class="mb-0"><i class="bi bi-eye"></i> 生成プレビュー</h6>
-                            <button class="btn btn-sm btn-outline-primary" onclick="previewMasterReflection()">
+                            <button class="btn btn-sm btn-outline-primary" onclick="callServerFunction('previewMasterReflection')">
                                 <i class="bi bi-search"></i> プレビュー実行
                             </button>
                         </div>
@@ -907,7 +907,7 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                         <i class="bi bi-x-circle"></i> キャンセル
                     </button>
-                    <button type="button" class="btn btn-primary" onclick="executeMasterReflection()">
+                    <button type="button" class="btn btn-primary" onclick="callServerFunction('executeMasterReflection')">
                         <i class="bi bi-play-circle"></i> 実行
                     </button>
                 </div>

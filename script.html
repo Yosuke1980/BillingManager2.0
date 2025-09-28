@@ -194,56 +194,72 @@ function refreshMasters() {
     loadData();
 }
 
-// システム関数（シンプル版）
-function initializeCompleteSystem() {
-    console.log('Initializing complete system');
-    alert('システム初期化を開始します');
+// 統一的なサーバー関数呼び出し機能
+function callServerFunction(funcName) {
+    console.log('Calling server function:', funcName);
+
+    // ローディング表示
+    showLoading(true);
+
+    google.script.run
+        .withSuccessHandler(function(result) {
+            showLoading(false);
+            handleServerSuccess(result, funcName);
+        })
+        .withFailureHandler(function(error) {
+            showLoading(false);
+            handleServerError(error, funcName);
+        })
+        [funcName]();
 }
 
-function createSampleData() {
-    console.log('Creating sample data');
-    alert('サンプルデータを作成します');
+function handleServerSuccess(result, funcName) {
+    console.log('Server function success:', funcName, result);
+
+    if (result && typeof result === 'object') {
+        if (result.success) {
+            alert('成功: ' + (result.message || '処理が完了しました'));
+
+            // スプレッドシートURLがある場合はログ出力
+            if (result.spreadsheetUrl) {
+                console.log('Spreadsheet URL:', result.spreadsheetUrl);
+            }
+
+            // データ更新が必要な場合は再読み込み
+            if (funcName.includes('Data') || funcName.includes('Sample')) {
+                setTimeout(() => {
+                    loadData();
+                }, 1000);
+            }
+        } else {
+            alert('処理結果: ' + (result.message || '処理は完了しましたが、詳細が不明です'));
+        }
+    } else {
+        // 単純な戻り値の場合
+        alert('処理完了: ' + funcName);
+        console.log('Server response:', result);
+    }
 }
 
-function checkSystemStatus() {
-    console.log('Checking system status');
-    alert('システム状態をチェックします');
+function handleServerError(error, funcName) {
+    console.error('Server function error:', funcName, error);
+    alert('エラーが発生しました: ' + (error.message || error.toString()));
 }
 
-function showSystemStatus() {
-    console.log('Showing system status');
-    alert('システム状態を表示します');
+// クライアント側専用の関数（サーバー呼び出し不要）
+function debugTest() {
+    console.log('debugTest() called - client side test');
+    alert('クライアント側テスト機能正常動作中！\n現在のビュー: ' + currentView);
+    return true;
 }
 
-// 残りのスタブ関数
-function createNewSpreadsheet() { alert('createNewSpreadsheet() stub'); }
-function importPythonAppData() { alert('importPythonAppData() stub'); }
-function showCSVImportDialog() { alert('showCSVImportDialog() stub'); }
-function searchPayments() { alert('searchPayments() stub'); }
-function resetPaymentFilters() { alert('resetPaymentFilters() stub'); }
-function openMasterReflectionModal() { alert('openMasterReflectionModal() stub'); }
-function generateFromMasterForCurrentMonth() { alert('generateFromMasterForCurrentMonth() stub'); }
-function generateFromMasterForNextMonth() { alert('generateFromMasterForNextMonth() stub'); }
-function searchExpenses() { alert('searchExpenses() stub'); }
-function resetExpenseFilters() { alert('resetExpenseFilters() stub'); }
-function searchMasters() { alert('searchMasters() stub'); }
-function resetMasterFilters() { alert('resetMasterFilters() stub'); }
-function runAutoMatching() { alert('runAutoMatching() stub'); }
-function runSystemDiagnosis() { alert('runSystemDiagnosis() stub'); }
-function checkDataIntegrity() { alert('checkDataIntegrity() stub'); }
-function showPerformanceStats() { alert('showPerformanceStats() stub'); }
-function runEmergencyRepair() { alert('runEmergencyRepair() stub'); }
-function verifyDataCounts() { alert('verifyDataCounts() stub'); }
-function checkDataDuplicates() { alert('checkDataDuplicates() stub'); }
-function validateFieldRanges() { alert('validateFieldRanges() stub'); }
-function runCompleteDataValidation() { alert('runCompleteDataValidation() stub'); }
-function emergencySystemSetup() { alert('emergencySystemSetup() stub'); }
-function runSystemDebug() { alert('runSystemDebug() stub'); }
-function setCurrentMonth() { alert('setCurrentMonth() stub'); }
-function setNextMonth() { alert('setNextMonth() stub'); }
-function setPreviousMonth() { alert('setPreviousMonth() stub'); }
-function previewMasterReflection() { alert('previewMasterReflection() stub'); }
-function executeMasterReflection() { alert('executeMasterReflection() stub'); }
+function checkFunctionDefinitions() {
+    console.log('checkFunctionDefinitions() called - checking client functions');
+    const functions = ['debugTest', 'loadData', 'updateTable', 'callServerFunction'];
+    const results = functions.map(f => f + ': ' + (typeof window[f] === 'function' ? '✓' : '✗'));
+    alert('関数定義チェック結果:\n' + results.join('\n'));
+    return true;
+}
 
 // 初期化処理
 document.addEventListener('DOMContentLoaded', function() {
