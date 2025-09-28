@@ -362,14 +362,37 @@ function importCSVData(csvText, dataType, clearExisting = false) {
         const row = parseCsvLine(line);
         if (row.length === 0) continue;
 
-        // IDが無い場合は生成
-        if (!row[0] || row[0] === '') {
-          row[0] = `${dataType.toUpperCase()}${Date.now()}${i}`;
-        }
+        // ヘッダーマッピングを使用してデータを正しい順序に変換
+        const mappedRow = [];
+
+        // IDを最初に設定（自動生成または既存値）
+        const idValue = row[0] && row[0].trim() !== '' ? row[0] : `${dataType.toUpperCase()}${Date.now()}${i}`;
+        mappedRow.push(idValue);
+
+        // 期待されるヘッダーの順序でデータをマッピング
+        expected.slice(1).forEach(expectedHeader => { // IDを除く
+          const sourceIndex = headerMapping[expectedHeader];
+          let value = '';
+
+          if (sourceIndex !== undefined && row[sourceIndex] !== undefined) {
+            value = row[sourceIndex].trim();
+          }
+
+          // データ型の基本的な変換
+          if (expectedHeader === '金額' && value !== '') {
+            // 金額の場合は数値に変換を試行
+            const numValue = value.replace(/[,¥￥]/g, '');
+            if (!isNaN(numValue) && numValue !== '') {
+              value = numValue;
+            }
+          }
+
+          mappedRow.push(value);
+        });
 
         // 作成日・更新日を追加
-        row.push(new Date(), new Date());
-        data.push(row);
+        mappedRow.push(new Date(), new Date());
+        data.push(mappedRow);
 
       } catch (parseError) {
         const errorMsg = `行 ${i + 1}: ${parseError.message}`;
@@ -379,6 +402,7 @@ function importCSVData(csvText, dataType, clearExisting = false) {
     }
 
     console.log(`解析完了: ${data.length}行のデータを抽出`);
+    console.log('ヘッダーマッピング結果:', headerMapping);
 
     // データ挿入
     if (data.length > 0) {
@@ -1776,12 +1800,65 @@ function validateCsvData(headers, rows, dataType) {
       return { success: false, message: '不正なデータ種別です' };
     }
 
-    // ヘッダー検証（部分一致でも可）
-    const missingHeaders = expected.filter(h => !headers.some(header => header.includes(h)));
-    if (missingHeaders.length > 0) {
+    // ヘッダー検証（より柔軟なマッチング）
+    const headerMapping = {};
+    const missingHeaders = [];
+
+    expected.forEach(expectedHeader => {
+      // 完全一致を最優先
+      let matchedIndex = headers.findIndex(h => h === expectedHeader);
+
+      // 完全一致しない場合は部分一致を試行
+      if (matchedIndex === -1) {
+        matchedIndex = headers.findIndex(h =>
+          h.includes(expectedHeader) || expectedHeader.includes(h) ||
+          h.replace(/\s/g, '') === expectedHeader.replace(/\s/g, '')
+        );
+      }
+
+      // それでもマッチしない場合は類似キーワードを試行
+      if (matchedIndex === -1) {
+        const keywords = {
+          '案件名': ['案件', 'project', 'プロジェクト', '番組'],
+          '支払い先': ['支払先', '支払', 'vendor', 'company', '会社'],
+          '支払い先コード': ['コード', 'code', 'id'],
+          '金額': ['金額', '料金', 'amount', 'price', '価格'],
+          '種別': ['種別', 'type', 'category', 'カテゴリ'],
+          '開始日': ['開始', 'start', '開始日付'],
+          '終了日': ['終了', 'end', '終了日付'],
+          '放送曜日': ['曜日', 'day', '放送日'],
+          '回数': ['回数', 'count', '回'],
+          '備考': ['備考', 'note', 'memo', 'メモ', 'comment']
+        };
+
+        if (keywords[expectedHeader]) {
+          matchedIndex = headers.findIndex(h =>
+            keywords[expectedHeader].some(keyword =>
+              h.toLowerCase().includes(keyword.toLowerCase()) ||
+              keyword.toLowerCase().includes(h.toLowerCase())
+            )
+          );
+        }
+      }
+
+      if (matchedIndex !== -1) {
+        headerMapping[expectedHeader] = matchedIndex;
+        console.log(`ヘッダーマッピング: "${expectedHeader}" -> "${headers[matchedIndex]}" (位置: ${matchedIndex})`);
+      } else {
+        missingHeaders.push(expectedHeader);
+      }
+    });
+
+    // 必須ヘッダーのチェック（マスターデータの場合、一部は任意）
+    const requiredHeaders = dataType === 'masters' ?
+      ['案件名', '支払い先', '金額'] : // マスターデータでは最低限これだけあれば可
+      expected.slice(0, Math.min(4, expected.length)); // その他は最初の4つが必須
+
+    const criticalMissing = missingHeaders.filter(h => requiredHeaders.includes(h));
+    if (criticalMissing.length > 0) {
       return {
         success: false,
-        message: `必要なヘッダーが不足しています: ${missingHeaders.join(', ')}`
+        message: `重要なヘッダーが不足しています: ${criticalMissing.join(', ')}\n\n利用可能なヘッダー: ${headers.join(', ')}\n\n推奨: サンプルCSVファイルをダウンロードして形式を確認してください。`
       };
     }
 
@@ -1810,6 +1887,101 @@ function validateCsvData(headers, rows, dataType) {
     console.error('CSV検証エラー:', error);
     return { success: false, message: error.message };
   }
+}
+
+// ========== サンプルCSVファイル生成 ==========
+
+function generateSampleCSV(dataType) {
+  try {
+    console.log(`サンプルCSV生成開始: ${dataType}`);
+
+    const headers = {
+      'payments': ['ID', '件名', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+      'expenses': ['ID', '案件名', '支払い先', '支払い先コード', '金額', '支払日', '状態'],
+      'masters': ['ID', '案件名', '支払い先', '支払い先コード', '金額', '種別', '開始日', '終了日', '放送曜日', '回数', '備考']
+    };
+
+    const sampleData = {
+      'payments': [
+        ['PAY001', '広告放送料', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済'],
+        ['PAY002', '制作費', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い']
+      ],
+      'expenses': [
+        ['EXP001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済'],
+        ['EXP002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い']
+      ],
+      'masters': [
+        ['MAS001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '放送料', '2024-01-01', '2024-03-31', '月曜', '12', '3ヶ月契約'],
+        ['MAS002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '制作費', '2024-01-01', '2024-12-31', '金曜', '52', '年間契約'],
+        ['MAS003', 'ニュース番組C', 'ニュース会社C', 'COMP003', '80000', '放送料', '2024-02-01', '2024-06-30', '火水木', '20', '5ヶ月契約']
+      ]
+    };
+
+    if (!headers[dataType] || !sampleData[dataType]) {
+      return {
+        success: false,
+        message: `サポートされていないデータ種別: ${dataType}`
+      };
+    }
+
+    // CSVデータを作成
+    const csvLines = [];
+    csvLines.push(headers[dataType].join(','));
+
+    sampleData[dataType].forEach(row => {
+      const csvRow = row.map(cell => {
+        // カンマや改行を含む場合はダブルクォートで囲む
+        if (typeof cell === 'string' && (cell.includes(',') || cell.includes('\n') || cell.includes('"'))) {
+          return `"${cell.replace(/"/g, '""')}"`;
+        }
+        return cell;
+      });
+      csvLines.push(csvRow.join(','));
+    });
+
+    const csvContent = csvLines.join('\n');
+
+    // CSVファイルをGoogle Driveに保存
+    const fileName = `${dataType}_sample_${new Date().toISOString().slice(0, 10)}.csv`;
+    const blob = Utilities.newBlob(csvContent, 'text/csv', fileName);
+    const file = DriveApp.createFile(blob);
+
+    // ファイルの共有設定を変更（誰でもリンクで表示可能に）
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    const result = {
+      success: true,
+      message: `${dataType}のサンプルCSVファイルを生成しました`,
+      fileName: fileName,
+      fileId: file.getId(),
+      downloadUrl: file.getDownloadUrl(),
+      viewUrl: `https://drive.google.com/file/d/${file.getId()}/view`,
+      headers: headers[dataType],
+      rowCount: sampleData[dataType].length
+    };
+
+    console.log('サンプルCSV生成完了:', result);
+    return result;
+
+  } catch (error) {
+    console.error('サンプルCSV生成エラー:', error);
+    return {
+      success: false,
+      message: `サンプルCSV生成エラー: ${error.message}`
+    };
+  }
+}
+
+function generateMasterDataSampleCSV() {
+  return generateSampleCSV('masters');
+}
+
+function generatePaymentDataSampleCSV() {
+  return generateSampleCSV('payments');
+}
+
+function generateExpenseDataSampleCSV() {
+  return generateSampleCSV('expenses');
 }
 
 // テスト用の基本関数

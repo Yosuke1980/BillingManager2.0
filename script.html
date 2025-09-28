@@ -218,7 +218,27 @@ function handleServerSuccess(result, funcName) {
 
     if (result && typeof result === 'object') {
         if (result.success) {
-            alert('成功: ' + (result.message || '処理が完了しました'));
+            // サンプルCSV生成の場合は特別な処理
+            if (funcName.includes('SampleCSV')) {
+                let message = result.message;
+                if (result.downloadUrl) {
+                    message += '\n\nダウンロードURL: ' + result.downloadUrl;
+                }
+                if (result.viewUrl) {
+                    message += '\n表示URL: ' + result.viewUrl;
+                }
+                if (result.headers) {
+                    message += '\n\n必要なヘッダー: ' + result.headers.join(', ');
+                }
+                alert(message);
+
+                // ダウンロードリンクがある場合は新しいウィンドウで開く
+                if (result.downloadUrl) {
+                    window.open(result.downloadUrl, '_blank');
+                }
+            } else {
+                alert('成功: ' + (result.message || '処理が完了しました'));
+            }
 
             // スプレッドシートURLがある場合はログ出力
             if (result.spreadsheetUrl) {
@@ -226,7 +246,7 @@ function handleServerSuccess(result, funcName) {
             }
 
             // データ更新が必要な場合は再読み込み
-            if (funcName.includes('Data') || funcName.includes('Sample')) {
+            if (funcName.includes('Data') && !funcName.includes('SampleCSV')) {
                 setTimeout(() => {
                     loadData();
                 }, 1000);
