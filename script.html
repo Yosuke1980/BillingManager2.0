@@ -1,55 +1,6 @@
 // 段階的復元テスト - ステップ1: 基本変数と簡単な関数
 console.log('Script.html step 1 loaded successfully');
 
-// Google Apps Script API モック（ローカル環境対応）
-if (typeof google === 'undefined') {
-    console.log('Local environment detected - setting up GAS API mock');
-    window.google = {
-        script: {
-            run: {
-                withSuccessHandler: function(successHandler) {
-                    return {
-                        withFailureHandler: function(failureHandler) {
-                            const mockFunctions = {
-                                getPaymentData: function() {
-                                    console.log('Mock: getPaymentData called');
-                                    setTimeout(() => {
-                                        successHandler([
-                                            {subject: 'テスト件名1', projectName: 'テストプロジェクト1', payee: 'テスト支払先1', payeeCode: 'CODE001', amount: '100000', paymentDate: '2024-01-01', status: '完了'},
-                                            {subject: 'テスト件名2', projectName: 'テストプロジェクト2', payee: 'テスト支払先2', payeeCode: 'CODE002', amount: '200000', paymentDate: '2024-01-02', status: '処理中'}
-                                        ]);
-                                    }, 1000);
-                                },
-                                getExpenseData: function() {
-                                    console.log('Mock: getExpenseData called');
-                                    setTimeout(() => {
-                                        successHandler([
-                                            {date: '2024-01-01', category: 'テストカテゴリ1', description: 'テスト説明1', amount: '50000', status: '完了'},
-                                            {date: '2024-01-02', category: 'テストカテゴリ2', description: 'テスト説明2', amount: '75000', status: '処理中'}
-                                        ]);
-                                    }, 1000);
-                                },
-                                getMasterData: function() {
-                                    console.log('Mock: getMasterData called');
-                                    setTimeout(() => {
-                                        successHandler([
-                                            {category: 'テストマスター1', description: 'マスター説明1', amount: '30000', frequency: '月次'},
-                                            {category: 'テストマスター2', description: 'マスター説明2', amount: '40000', frequency: '年次'}
-                                        ]);
-                                    }, 1000);
-                                }
-                            };
-
-                            return mockFunctions;
-                        }
-                    };
-                }
-            }
-        }
-    };
-} else {
-    console.log('GAS environment detected - using real API');
-}
 
 // グローバル変数
 let currentView = 'payment';
