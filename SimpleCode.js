@@ -576,7 +576,25 @@ function importCSVData(csvText, dataType, clearExisting = false) {
       }
     }
 
-    // CSVパース（改良版）
+    // ヘッダーマッピングを作成
+    const expectedHeaders = {
+      'payments': CONFIG.HEADERS.PAYMENTS.slice(1, -2), // IDと日付を除く
+      'expenses': CONFIG.HEADERS.EXPENSES.slice(1, -4), // IDと最後4つを除く
+      'masters': CONFIG.HEADERS.MASTERS.slice(1, -2)    // IDと日付を除く
+    };
+    const expected = expectedHeaders[dataType];
+
+    const headerMapping = {};
+    expected.forEach(expectedHeader => {
+      const index = headers.findIndex(h => h === expectedHeader);
+      if (index !== -1) {
+        headerMapping[expectedHeader] = index;
+      }
+    });
+
+    console.log('作成したヘッダーマッピング:', headerMapping);
+
+    // CSVパース（ヘッダーマッピング対応版）
     console.log('CSVデータを解析中...');
     const data = [];
     const errors = [];
@@ -2147,7 +2165,8 @@ function validateCsvData(headers, rows, dataType) {
       success: true,
       message: 'CSVデータの検証が完了しました',
       validRows: rows.length - invalidRows.length,
-      invalidRows: invalidRows.length
+      invalidRows: invalidRows.length,
+      headerMapping: headerMapping // ヘッダーマッピングを返す
     };
   } catch (error) {
     console.error('CSV検証エラー:', error);
