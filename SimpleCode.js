@@ -576,6 +576,15 @@ function importCSVData(csvText, dataType, clearExisting = false) {
       }
     }
 
+    // CSVヘッダーを解析
+    const firstLine = lines[0];
+    const rawHeaders = parseCsvLine(firstLine);
+    console.log('生のCSVヘッダー:', rawHeaders);
+
+    // UTF-8向けヘッダークリーニング
+    const cleanedHeaders = rawHeaders.map(h => cleanHeader(h));
+    console.log('クリーニング後ヘッダー:', cleanedHeaders);
+
     // ヘッダーマッピングを作成
     const expectedHeaders = {
       'payments': CONFIG.HEADERS.PAYMENTS.slice(1, -2), // IDと日付を除く
@@ -586,9 +595,10 @@ function importCSVData(csvText, dataType, clearExisting = false) {
 
     const headerMapping = {};
     expected.forEach(expectedHeader => {
-      const index = headers.findIndex(h => h === expectedHeader);
+      const index = cleanedHeaders.findIndex(h => h === expectedHeader);
       if (index !== -1) {
         headerMapping[expectedHeader] = index;
+        console.log(`ヘッダーマッピング: ${expectedHeader} -> インデックス ${index}`);
       }
     });
 
