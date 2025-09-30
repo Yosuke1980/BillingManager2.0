@@ -27,9 +27,13 @@ function checkFunctionDefinitions() {
 
 // 基本的な表示関数（template literals なし）
 function showLoading(show) {
+    console.log('showLoading called with:', show);
     const spinner = document.getElementById('loadingSpinner');
     if (spinner) {
         spinner.style.display = show ? 'block' : 'none';
+        console.log('Loading spinner', show ? 'shown' : 'hidden');
+    } else {
+        console.warn('loadingSpinner element not found');
     }
 }
 

@@ -377,6 +377,14 @@
         </div>
     </nav>
 
+    <!-- ローディングスピナー -->
+    <div id="loadingSpinner" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999; background: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+        <div class="text-center">
+            <i class="bi bi-arrow-clockwise pulse" style="font-size: 2rem; color: #667eea;"></i>
+            <p class="mt-2 mb-0">データを読み込み中...</p>
+        </div>
+    </div>
+
     <!-- メインコンテンツ -->
     <div class="main-container">
         <!-- タブナビゲーション -->
@@ -936,9 +944,13 @@
 
         // 基本的な表示関数（template literals なし）
         function showLoading(show) {
+            console.log('showLoading called with:', show);
             const spinner = document.getElementById('loadingSpinner');
             if (spinner) {
                 spinner.style.display = show ? 'block' : 'none';
+                console.log('Loading spinner', show ? 'shown' : 'hidden');
+            } else {
+                console.warn('loadingSpinner element not found');
             }
         }
 
