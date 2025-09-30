@@ -190,20 +190,20 @@ function getSheetDataSafe(sheetName, timeout = 10000) {
     // タイムアウト付きでスプレッドシート取得を試行
     const spreadsheet = getSpreadsheetWithTimeout(timeout);
     if (!spreadsheet) {
-      console.warn(`getSheetDataSafe: スプレッドシートにアクセスできません (${sheetName})`);
-      return getFallbackData(sheetName);
+      console.error(`getSheetDataSafe: スプレッドシートにアクセスできません (${sheetName})`);
+      return [];
     }
 
     const duration = Date.now() - startTime;
     if (duration > timeout) {
-      console.warn(`getSheetDataSafe: タイムアウト (${duration}ms > ${timeout}ms)`);
-      return getFallbackData(sheetName);
+      console.error(`getSheetDataSafe: タイムアウト (${duration}ms > ${timeout}ms)`);
+      return [];
     }
 
     const sheet = getSafeSheet(spreadsheet, sheetName);
     if (!sheet) {
-      console.warn(`getSheetDataSafe: シート ${sheetName} が見つかりません`);
-      return getFallbackData(sheetName);
+      console.error(`getSheetDataSafe: シート ${sheetName} が見つかりません`);
+      return [];
     }
 
     const lastRow = sheet.getLastRow();
@@ -218,7 +218,7 @@ function getSheetDataSafe(sheetName, timeout = 10000) {
 
   } catch (error) {
     console.error(`getSheetDataSafe: エラー (${sheetName}):`, error);
-    return getFallbackData(sheetName);
+    return [];
   }
 }
 
@@ -266,35 +266,9 @@ function getSpreadsheetWithTimeout(timeout = 10000) {
     return null;
   }
 
-  return null; // 新規作成はスキップして、フォールバックデータを使用
+  return null; // スプレッドシートの取得に失敗
 }
 
-function getFallbackData(sheetName) {
-  console.log(`getFallbackData: ${sheetName} のサンプルデータを返します`);
-
-  switch (sheetName) {
-    case CONFIG.SHEETS.PAYMENTS:
-      return [
-        ['PAY001', '広告放送料', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済', new Date(), new Date()],
-        ['PAY002', '制作費', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い', new Date(), new Date()]
-      ];
-
-    case CONFIG.SHEETS.EXPENSES:
-      return [
-        ['EXP001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済', new Date(), new Date()],
-        ['EXP002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い', new Date(), new Date()]
-      ];
-
-    case CONFIG.SHEETS.MASTERS:
-      return [
-        ['MAS001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '放送料', '2024-01-01', '2024-03-31', '月曜', '12', '3ヶ月契約', new Date(), new Date()],
-        ['MAS002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '制作費', '2024-01-01', '2024-12-31', '金曜', '52', '年間契約', new Date(), new Date()]
-      ];
-
-    default:
-      return [];
-  }
-}
 
 // ========== システム管理関数 ==========
 

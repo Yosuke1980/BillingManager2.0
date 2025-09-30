@@ -94,12 +94,10 @@ function loadData() {
             try {
                 // サーバーは {success: true, data: [...]} または配列を返す可能性がある
                 let rows = [];
-                let isFallback = false;
 
                 if (result && typeof result === 'object') {
                     if (result.success) {
                         rows = Array.isArray(result.data) ? result.data : [];
-                        isFallback = result.fallback || false;
 
                         // 実行時間の表示
                         if (result.duration) {
@@ -107,25 +105,22 @@ function loadData() {
                         }
                     } else {
                         console.warn('Server returned failure:', result);
+                        if (result.message) {
+                            showError('データ取得エラー: ' + result.message);
+                        }
                         rows = [];
-                        isFallback = true;
                     }
                 } else if (Array.isArray(result)) {
                     rows = result;
                 } else {
                     console.warn('Unexpected server response:', result);
                     rows = [];
-                    isFallback = true;
                 }
 
                 allData[currentView] = rows;
                 filteredData = allData[currentView];
 
-                console.log(`Data loaded for ${currentView}: ${filteredData.length} items${isFallback ? ' (フォールバックデータ)' : ''}`);
-
-                if (isFallback) {
-                    showError('実際のデータが取得できませんでした。サンプルデータを表示しています。');
-                }
+                console.log(`Data loaded for ${currentView}: ${filteredData.length} items`);
 
                 updateTable();
                 showLoading(false);
@@ -147,11 +142,11 @@ function loadData() {
                 errorMessage += ': ' + error.message;
             }
 
-            showError(errorMessage + '\nサンプルデータを表示しています。');
+            showError(errorMessage);
 
-            // フォールバックデータを設定
-            allData[currentView] = getFallbackDataForView(currentView);
-            filteredData = allData[currentView];
+            // データが取得できない場合は空配列を設定
+            allData[currentView] = [];
+            filteredData = [];
             updateTable();
             showLoading(false);
         })[functionName]();
@@ -189,8 +184,8 @@ function updateTable() {
         const row = tbody.insertRow();
         const cell = row.insertCell();
         cell.colSpan = 7; // 基本7列（必要に応じて調整）
-        cell.className = 'loading';
-        cell.innerHTML = '<i class="bi bi-arrow-clockwise pulse"></i><p>データを読み込み中...</p>';
+        cell.className = 'no-data';
+        cell.innerHTML = '<i class="bi bi-exclamation-circle"></i><p>データがありません</p>';
         return;
     }
 
@@ -270,33 +265,6 @@ function refreshMasters() {
     loadData();
 }
 
-// クライアント側フォールバックデータ
-function getFallbackDataForView(view) {
-    console.log(`getFallbackDataForView: ${view} のクライアント側サンプルデータ`);
-
-    switch (view) {
-        case 'payment':
-            return [
-                ['PAY001', '広告放送料', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済'],
-                ['PAY002', '制作費', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い']
-            ];
-
-        case 'expense':
-            return [
-                ['EXP001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '2024-01-15', '支払済'],
-                ['EXP002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '2024-01-20', '未払い']
-            ];
-
-        case 'master':
-            return [
-                ['MAS001', 'ラジオCM番組A', '株式会社サンプル', 'COMP001', '50000', '放送料', '2024-01-01', '2024-03-31', '月曜', '12', '3ヶ月契約'],
-                ['MAS002', 'ラジオCM番組B', '制作会社B', 'COMP002', '120000', '制作費', '2024-01-01', '2024-12-31', '金曜', '52', '年間契約']
-            ];
-
-        default:
-            return [];
-    }
-}
 
 // スタイリング関数（matching_config.json準拠）
 function applyStatusStyling(cell, status) {
