@@ -339,9 +339,9 @@ class ExpenseTab(QWidget):
         self.tree.setSortingEnabled(True)
         self.tree.header().setSectionsMovable(False)
 
-        # 選択時イベント
-        self.tree.itemSelectionChanged.connect(self.on_tree_select_for_edit)
-        
+        # ダブルクリック時イベント
+        self.tree.itemDoubleClicked.connect(self.on_tree_double_click_for_edit)
+
         # 右クリックメニュー
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.show_context_menu)
@@ -1288,16 +1288,13 @@ class ExpenseTab(QWidget):
             # エラーが発生した場合は通常のrefresh_dataにフォールバック
             self.refresh_data()
 
-    def on_tree_select_for_edit(self):
-        """ツリーウィジェットの行選択時に編集フォームを表示"""
-        selected_items = self.tree.selectedItems()
-        if not selected_items:
-            self.edit_frame.hide()
+    def on_tree_double_click_for_edit(self, item, column):
+        """ツリーウィジェットのダブルクリック時に編集フォームを表示"""
+        if not item:
             return
 
-        # 選択行のデータを取得
-        selected_item = selected_items[0]
-        expense_id = selected_item.text(0)
+        # ダブルクリックした行のデータを取得
+        expense_id = item.text(0)
 
         try:
             # データベースから詳細情報を取得
@@ -1360,6 +1357,13 @@ class ExpenseTab(QWidget):
                             widget.setDate(QDate.currentDate())
                     except (ValueError, IndexError):
                         widget.setDate(QDate.currentDate())
+                elif field in ["amount", "budget"]:
+                    # 金額フィールド（整数表示）
+                    try:
+                        int_value = int(float(value)) if value else 0
+                        widget.setText(str(int_value))
+                    except (ValueError, TypeError):
+                        widget.setText("0")
                 else:
                     # 通常のテキストフィールド
                     widget.setText(str(value))

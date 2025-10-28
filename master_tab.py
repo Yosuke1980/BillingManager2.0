@@ -178,8 +178,8 @@ class MasterTab(QWidget):
             # PyQt5の古いバージョン
             self.tree.header().setClickable(True)
 
-        # 選択時イベント
-        self.tree.itemSelectionChanged.connect(self.on_tree_select_for_edit)
+        # ダブルクリック時イベント
+        self.tree.itemDoubleClicked.connect(self.on_tree_double_click_for_edit)
 
         # 編集フォームの作成（スクロール対応）
         self.edit_frame = QGroupBox("✏️ マスターレコード編集")
@@ -617,16 +617,13 @@ class MasterTab(QWidget):
                 f"エラー: 費用マスターデータ読み込みに失敗しました"
             )
 
-    def on_tree_select_for_edit(self):
-        """ツリーウィジェットの行選択時に編集フォームを表示"""
-        selected_items = self.tree.selectedItems()
-        if not selected_items:
-            self.edit_frame.hide()
+    def on_tree_double_click_for_edit(self, item, column):
+        """ツリーウィジェットのダブルクリック時に編集フォームを表示"""
+        if not item:
             return
 
-        # 選択行のデータを取得
-        selected_item = selected_items[0]
-        master_id = selected_item.text(0)
+        # ダブルクリックした行のデータを取得
+        master_id = item.text(0)
 
         try:
             # データベースから詳細情報を取得
@@ -641,7 +638,12 @@ class MasterTab(QWidget):
             self.edit_entries["project_name"].setText(str(row[1]) if row[1] else "")
             self.edit_entries["payee"].setText(str(row[2]) if row[2] else "")
             self.edit_entries["payee_code"].setText(str(row[3]) if row[3] else "")
-            self.edit_entries["amount"].setText(str(row[4]) if row[4] else "0")
+            # 金額を整数表示
+            try:
+                amount_int = int(float(row[4])) if row[4] else 0
+                self.edit_entries["amount"].setText(str(amount_int))
+            except (ValueError, TypeError):
+                self.edit_entries["amount"].setText("0")
             
             # 種別コンボボックス
             payment_type = row[5] if row[5] else "月額固定"
@@ -697,7 +699,12 @@ class MasterTab(QWidget):
                 except (ValueError, IndexError, AttributeError):
                     self.edit_entries[date_field].setDate(QDate.currentDate())
             
-            self.edit_entries["budget"].setText(str(row[14]) if len(row) > 14 and row[14] else "0")
+            # 予算を整数表示
+            try:
+                budget_int = int(float(row[14])) if len(row) > 14 and row[14] else 0
+                self.edit_entries["budget"].setText(str(budget_int))
+            except (ValueError, TypeError):
+                self.edit_entries["budget"].setText("0")
             self.edit_entries["approver"].setText(str(row[15]) if len(row) > 15 and row[15] else "")
             
             # 緊急度コンボボックス
