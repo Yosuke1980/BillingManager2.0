@@ -981,11 +981,11 @@ class DatabaseManager:
             last_day = calendar.monthrange(target_year, target_month)[1]
             target_month_str = f"{target_year:04d}-{target_month:02d}"
 
-            # マスターデータを取得
+            # マスターデータを取得（payment_timingも含む）
             master_cursor.execute(
                 """
-                SELECT id, project_name, payee, payee_code, amount, payment_type, 
-                    broadcast_days, start_date, end_date
+                SELECT id, project_name, payee, payee_code, amount, payment_type,
+                    broadcast_days, start_date, end_date, payment_timing
                 FROM expense_master
                 """
             )
@@ -1004,6 +1004,7 @@ class DatabaseManager:
                 broadcast_days = master_row[6] if len(master_row) > 6 else ""
                 start_date = master_row[7] if len(master_row) > 7 else ""
                 end_date = master_row[8] if len(master_row) > 8 else ""
+                payment_timing = master_row[9] if len(master_row) > 9 and master_row[9] else "翌月末払い"
 
                 # 開始日と終了日のチェック
                 target_date = datetime(target_year, target_month, 1)
@@ -1064,7 +1065,7 @@ class DatabaseManager:
                     expense_cursor.execute(
                         """
                         UPDATE expenses
-                        SET project_name = ?, payee = ?, payee_code = ?, amount = ?, payment_date = ?
+                        SET project_name = ?, payee = ?, payee_code = ?, amount = ?, payment_date = ?, payment_timing = ?
                         WHERE id = ?
                         """,
                         (
@@ -1073,6 +1074,7 @@ class DatabaseManager:
                             payee_code,
                             calculated_amount,
                             payment_date,
+                            payment_timing,
                             existing_expense[0],
                         ),
                     )
@@ -1081,8 +1083,8 @@ class DatabaseManager:
                     # 新規データを作成
                     expense_cursor.execute(
                         """
-                        INSERT INTO expenses (project_name, payee, payee_code, amount, payment_date, status, source_type, master_id)
-                        VALUES (?, ?, ?, ?, ?, '未処理', 'master', ?)
+                        INSERT INTO expenses (project_name, payee, payee_code, amount, payment_date, status, source_type, master_id, payment_timing)
+                        VALUES (?, ?, ?, ?, ?, '未処理', 'master', ?, ?)
                         """,
                         (
                             project_name,
@@ -1091,6 +1093,7 @@ class DatabaseManager:
                             calculated_amount,
                             payment_date,
                             master_id,
+                            payment_timing,
                         ),
                     )
                     generated_count += 1
@@ -1129,12 +1132,12 @@ class DatabaseManager:
             # 今月分がまだ生成されていないマスター項目を検出
             master_cursor.execute(
                 """
-                SELECT m.id, m.project_name, m.payee, m.payee_code, m.amount, m.payment_type, 
-                    m.broadcast_days, m.start_date, m.end_date
+                SELECT m.id, m.project_name, m.payee, m.payee_code, m.amount, m.payment_type,
+                    m.broadcast_days, m.start_date, m.end_date, m.payment_timing
                 FROM expense_master m
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM expenses e 
-                    WHERE e.master_id = m.id 
+                    SELECT 1 FROM expenses e
+                    WHERE e.master_id = m.id
                     AND e.payment_date LIKE ? || '%'
                 )
                 """,
@@ -1160,6 +1163,7 @@ class DatabaseManager:
                 broadcast_days = master_row[6] if len(master_row) > 6 else ""
                 start_date = master_row[7] if len(master_row) > 7 else ""
                 end_date = master_row[8] if len(master_row) > 8 else ""
+                payment_timing = master_row[9] if len(master_row) > 9 and master_row[9] else "翌月末払い"
 
                 # 今月が有効期間内かチェック
                 current_date_obj = datetime(current_year, current_month, 1)
@@ -1208,8 +1212,8 @@ class DatabaseManager:
                 # 新規データを作成
                 expense_cursor.execute(
                     """
-                    INSERT INTO expenses (project_name, payee, payee_code, amount, payment_date, status, source_type, master_id)
-                    VALUES (?, ?, ?, ?, ?, '未処理', 'master', ?)
+                    INSERT INTO expenses (project_name, payee, payee_code, amount, payment_date, status, source_type, master_id, payment_timing)
+                    VALUES (?, ?, ?, ?, ?, '未処理', 'master', ?, ?)
                     """,
                     (
                         project_name,
@@ -1218,6 +1222,7 @@ class DatabaseManager:
                         calculated_amount,
                         payment_date,
                         master_id,
+                        payment_timing,
                     ),
                 )
 
