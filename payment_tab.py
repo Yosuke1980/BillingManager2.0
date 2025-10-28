@@ -63,7 +63,7 @@ class PaymentTab(QWidget):
         legend_layout.setContentsMargins(10, 5, 10, 5)
         main_layout.addWidget(legend_frame)
 
-        legend_layout.addWidget(QLabel("🎨 色分け凡例:"))
+        legend_layout.addWidget(QLabel("色分け凡例:"))
 
         # 各状態の色見本を表示
         legend_items = [
@@ -95,33 +95,21 @@ class PaymentTab(QWidget):
         main_layout.addWidget(search_frame)
 
         # 状態フィルタ
-        search_layout.addWidget(QLabel("📊 状態:"))
+        search_layout.addWidget(QLabel("状態:"))
         self.status_filter = QComboBox()
-        self.status_filter.addItems(["すべて", "未処理", "処理中", "処理済", "照合済", "⚠️ 未照合(要支払い)"])
+        self.status_filter.addItems(["すべて", "未処理", "処理中", "処理済", "照合済", "未照合(要支払い)"])
         self.status_filter.setMinimumWidth(self.widget_min_width)
         self.status_filter.currentTextChanged.connect(self.filter_by_status)
         search_layout.addWidget(self.status_filter)
 
-        search_layout.addWidget(QLabel("🔍 検索:"))
+        search_layout.addWidget(QLabel("検索:"))
         self.search_entry = QLineEdit()
         self.search_entry.setMinimumWidth(self.search_min_width)
         self.search_entry.setPlaceholderText("件名、案件名、支払い先で検索...")
-        self.search_entry.returnPressed.connect(self.search_records)  # Enterキーで検索
+        self.search_entry.returnPressed.connect(self.search_records)
         search_layout.addWidget(self.search_entry)
 
-        search_button = QPushButton("検索")
-        search_button.clicked.connect(self.search_records)
-        search_layout.addWidget(search_button)
-
-        reset_button = QPushButton("リセット")
-        reset_button.clicked.connect(self.reset_search)
-        search_layout.addWidget(reset_button)
-
         search_layout.addStretch()
-
-        reload_button = QPushButton("📥 データ再読込")
-        reload_button.clicked.connect(self.app.reload_data)
-        search_layout.addWidget(reload_button)
 
         # 並べ替えフレーム
         sort_frame = QFrame()
@@ -129,7 +117,7 @@ class PaymentTab(QWidget):
         sort_layout.setContentsMargins(10, 5, 10, 5)
         main_layout.addWidget(sort_frame)
 
-        sort_layout.addWidget(QLabel("📊 並び順:"))
+        sort_layout.addWidget(QLabel("並び順:"))
 
         sort_columns = [
             "件名",
@@ -166,7 +154,7 @@ class PaymentTab(QWidget):
         main_layout.addWidget(tree_frame)
 
         # テーブルタイトル
-        table_title = QLabel("💰 支払い情報一覧")
+        table_title = QLabel("支払い情報一覧")
         table_title.setFont(QFont("", self.title_font_size, QFont.Bold))
         table_title.setStyleSheet("color: #2c3e50; margin-bottom: 5px;")
         tree_layout.addWidget(table_title)
@@ -211,8 +199,12 @@ class PaymentTab(QWidget):
         # 選択時イベント
         self.tree.itemSelectionChanged.connect(self.on_treeview_select)
 
+        # 右クリックメニューの設定
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.show_context_menu)
+
         # 詳細フレーム
-        detail_frame = QGroupBox("📋 詳細情報")
+        detail_frame = QGroupBox("詳細情報")
         detail_layout = QGridLayout(detail_frame)
         main_layout.addWidget(detail_frame)
 
@@ -241,38 +233,6 @@ class PaymentTab(QWidget):
             detail_layout.addWidget(value_label, row, col + 1)
 
             self.detail_labels[field] = value_label
-
-        # 状態変更ボタンフレーム
-        status_button_frame = QFrame()
-        status_button_layout = QHBoxLayout(status_button_frame)
-        status_button_layout.setContentsMargins(10, 5, 10, 5)
-        main_layout.addWidget(status_button_frame)
-
-        # 状態変更ボタングループ
-        status_group = QGroupBox("🔄 状態変更")
-        status_group_layout = QHBoxLayout(status_group)
-        status_button_layout.addWidget(status_group)
-
-        unprocessed_button = QPushButton("⬜ 未処理に戻す")
-        unprocessed_button.clicked.connect(self.mark_as_unprocessed)
-        status_group_layout.addWidget(unprocessed_button)
-
-        processed_button = QPushButton("✅ 処理済みにする")
-        processed_button.clicked.connect(self.mark_as_processed)
-        status_group_layout.addWidget(processed_button)
-
-        # 照合ボタングループ
-        match_group = QGroupBox("💰 照合操作")
-        match_group_layout = QHBoxLayout(match_group)
-        status_button_layout.addWidget(match_group)
-
-        match_button = QPushButton("🔍 自動照合実行")
-        match_button.clicked.connect(self.match_with_expenses)
-        match_group_layout.addWidget(match_button)
-        
-        manual_match_button = QPushButton("✋ 手動照合")
-        manual_match_button.clicked.connect(self.manual_match_with_expenses)
-        match_group_layout.addWidget(manual_match_button)
 
     def get_color_for_status(self, status):
         """状態に応じた背景色を返す"""
@@ -885,6 +845,36 @@ class PaymentTab(QWidget):
         except Exception as e:
             log_message(f"手動照合エラー: {e}")
             QMessageBox.critical(self, "エラー", f"手動照合に失敗しました: {e}")
+
+    def show_context_menu(self, position):
+        """右クリックメニューを表示"""
+        from PyQt5.QtWidgets import QMenu
+
+        selected_items = self.tree.selectedItems()
+        if not selected_items:
+            return
+
+        menu = QMenu(self)
+
+        # 状態変更メニュー
+        status_menu = menu.addMenu("状態変更")
+        unprocessed_action = status_menu.addAction("未処理に戻す")
+        unprocessed_action.triggered.connect(self.mark_as_unprocessed)
+
+        processed_action = status_menu.addAction("処理済みにする")
+        processed_action.triggered.connect(self.mark_as_processed)
+
+        menu.addSeparator()
+
+        # 照合メニュー
+        match_action = menu.addAction("自動照合実行")
+        match_action.triggered.connect(self.match_with_expenses)
+
+        manual_match_action = menu.addAction("手動照合")
+        manual_match_action.triggered.connect(self.manual_match_with_expenses)
+
+        # メニューを表示
+        menu.exec_(self.tree.viewport().mapToGlobal(position))
 
 
 # ファイル終了確認用のコメント - payment_tab.py完了

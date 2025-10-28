@@ -96,13 +96,13 @@ class ProjectFilterTab(QWidget):
         layout.setSpacing(6)
 
         # ヘッダー
-        header = QLabel("🔍 案件絞込み")
+        header = QLabel("案件絞込み")
         header.setStyleSheet("background: darkslategray; color: white; padding: 8px; margin-bottom: 5px; font-weight: bold;")
         header.setAlignment(Qt.AlignCenter)
         layout.addWidget(header)
 
         # 検索ボックス
-        search_group = QGroupBox("🔍 検索")
+        search_group = QGroupBox("検索")
         search_layout = QVBoxLayout(search_group)
 
         self.search_entry = QLineEdit()
@@ -113,9 +113,8 @@ class ProjectFilterTab(QWidget):
         # フィルター適用ボタン
         filter_button_layout = QHBoxLayout()
         
-        apply_button = QPushButton("🔍 フィルター適用")
+        apply_button = QPushButton("フィルター適用")
         apply_button.clicked.connect(self.apply_filters)
-        apply_button.setStyleSheet("background-color: lightblue; font-weight: bold;")
         filter_button_layout.addWidget(apply_button)
         
         search_layout.addLayout(filter_button_layout)
@@ -134,7 +133,7 @@ class ProjectFilterTab(QWidget):
         layout.addWidget(month_group)
 
         # 案件状況フィルター
-        project_status_group = QGroupBox("📊 案件状況")
+        project_status_group = QGroupBox("案件状況")
         project_status_layout = QVBoxLayout(project_status_group)
 
         self.project_status_filter = QComboBox()
@@ -157,9 +156,8 @@ class ProjectFilterTab(QWidget):
         button_layout = QHBoxLayout()
         
         # リセットボタン
-        reset_button = QPushButton("🔄 リセット")
+        reset_button = QPushButton("リセット")
         reset_button.clicked.connect(self.reset_filters)
-        reset_button.setStyleSheet("background-color: lightcoral;")
         button_layout.addWidget(reset_button)
         
         layout.addLayout(button_layout)
@@ -248,7 +246,7 @@ class ProjectFilterTab(QWidget):
         layout.setSpacing(6)
 
         # ヘッダー
-        self.detail_header = QLabel("📝 詳細情報")
+        self.detail_header = QLabel("詳細情報")
         self.detail_header.setStyleSheet("background: #495057; color: white; padding: 8px; margin-bottom: 5px; font-weight: bold;")
         self.detail_header.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.detail_header)
@@ -339,23 +337,13 @@ class ProjectFilterTab(QWidget):
         scroll_layout.addWidget(project_group)
 
         # ボタングループ
-        button_group = QGroupBox("🔧 操作")
+        button_group = QGroupBox("操作")
         button_layout = QHBoxLayout(button_group)
 
-        self.save_button = QPushButton("💾 保存")
+        self.save_button = QPushButton("保存")
         self.save_button.clicked.connect(self.save_payment_details)
         self.save_button.setEnabled(False)
         button_layout.addWidget(self.save_button)
-
-        self.approve_button = QPushButton("✅ 承認")
-        self.approve_button.clicked.connect(self.approve_payment)
-        self.approve_button.setEnabled(False)
-        button_layout.addWidget(self.approve_button)
-
-        self.hold_button = QPushButton("⏸️ 保留")
-        self.hold_button.clicked.connect(self.hold_payment)
-        self.hold_button.setEnabled(False)
-        button_layout.addWidget(self.hold_button)
 
         scroll_layout.addWidget(button_group)
 
@@ -800,12 +788,10 @@ class ProjectFilterTab(QWidget):
 
                 # ヘッダー更新
                 payee = row[2] or "不明な支払先"
-                self.detail_header.setText(f"📝 詳細情報 - {payee}")
+                self.detail_header.setText(f"詳細情報 - {payee}")
 
                 # ボタンを有効化
                 self.save_button.setEnabled(True)
-                self.approve_button.setEnabled(True)
-                self.hold_button.setEnabled(True)
 
                 # 現在の支払いIDを保存
                 self.current_payment_id = payment_id
@@ -823,10 +809,8 @@ class ProjectFilterTab(QWidget):
             elif isinstance(field_widget, QDateEdit):
                 field_widget.setDate(QDate.currentDate())
 
-        self.detail_header.setText("📝 詳細情報")
+        self.detail_header.setText("詳細情報")
         self.save_button.setEnabled(False)
-        self.approve_button.setEnabled(False)
-        self.hold_button.setEnabled(False)
         self.current_payment_id = None
 
     def save_payment_details(self):

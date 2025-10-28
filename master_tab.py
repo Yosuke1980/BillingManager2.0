@@ -67,7 +67,7 @@ class MasterTab(QWidget):
         legend_layout.setContentsMargins(10, 5, 10, 5)
         main_layout.addWidget(legend_frame)
 
-        legend_layout.addWidget(QLabel("🎨 種別色分け:"))
+        legend_layout.addWidget(QLabel("種別色分け:"))
 
         # 各種別の色見本を表示
         legend_items = [
@@ -97,7 +97,7 @@ class MasterTab(QWidget):
         main_layout.addWidget(search_frame)
 
         # 種別フィルタ
-        search_layout.addWidget(QLabel("📊 種別:"))
+        search_layout.addWidget(QLabel("種別:"))
         self.type_filter = QComboBox()
         self.type_filter.addItems(["すべて", "月額固定", "回数ベース"])
         self.type_filter.setMinimumWidth(self.widget_min_width + 20)
@@ -105,65 +105,14 @@ class MasterTab(QWidget):
         search_layout.addWidget(self.type_filter)
 
         # 検索フィールド
-        search_layout.addWidget(QLabel("🔍 検索:"))
+        search_layout.addWidget(QLabel("検索:"))
         self.search_entry = QLineEdit()
         self.search_entry.setMinimumWidth(self.search_min_width)
         self.search_entry.setPlaceholderText("案件名、支払い先で検索...")
         self.search_entry.returnPressed.connect(self.search_records)
         search_layout.addWidget(self.search_entry)
 
-        search_button = QPushButton("検索")
-        search_button.setMinimumSize(self.button_min_width, self.button_min_height)
-        search_button.clicked.connect(self.search_records)
-        search_layout.addWidget(search_button)
-
-        reset_button = QPushButton("リセット")
-        reset_button.setMinimumSize(self.button_min_width, self.button_min_height)
-        reset_button.clicked.connect(self.reset_search)
-        search_layout.addWidget(reset_button)
-
         search_layout.addStretch()
-
-        # 上部のボタンフレーム
-        button_frame = QFrame()
-        button_layout = QHBoxLayout(button_frame)
-        button_layout.setContentsMargins(10, 5, 10, 5)
-        main_layout.addWidget(button_frame)
-
-        # レコード操作グループ
-        record_group = QGroupBox("📝 レコード操作")
-        record_group_layout = QHBoxLayout(record_group)
-        button_layout.addWidget(record_group)
-
-        create_button = QPushButton("➕ 新規作成")
-        create_button.setMinimumSize(self.button_min_width, self.button_min_height)
-        create_button.clicked.connect(self.create_record)
-        record_group_layout.addWidget(create_button)
-
-        delete_button = QPushButton("🗑️ 削除")
-        delete_button.setMinimumSize(self.button_min_width, self.button_min_height)
-        delete_button.clicked.connect(self.delete_record)
-        record_group_layout.addWidget(delete_button)
-
-        duplicate_button = QPushButton("📄 複製")
-        duplicate_button.setMinimumSize(self.button_min_width, self.button_min_height)
-        duplicate_button.clicked.connect(self.duplicate_record)
-        record_group_layout.addWidget(duplicate_button)
-
-        # データ操作グループ
-        data_group = QGroupBox("💾 データ操作")
-        data_group_layout = QHBoxLayout(data_group)
-        button_layout.addWidget(data_group)
-
-        export_button = QPushButton("📤 CSVエクスポート")
-        export_button.setMinimumHeight(self.button_min_height)
-        export_button.clicked.connect(self.export_to_csv)
-        data_group_layout.addWidget(export_button)
-
-        import_button = QPushButton("📥 CSVインポート")
-        import_button.setMinimumHeight(self.button_min_height)
-        import_button.clicked.connect(self.import_from_csv)
-        data_group_layout.addWidget(import_button)
 
         # ツリーウィジェットのフレーム
         tree_frame = QFrame()
@@ -172,7 +121,7 @@ class MasterTab(QWidget):
         main_layout.addWidget(tree_frame)
 
         # テーブルタイトル
-        table_title = QLabel("🏗️ 費用マスター一覧")
+        table_title = QLabel("費用マスター一覧")
         table_title.setFont(QFont("", self.title_font_size, QFont.Bold))
         table_title.setStyleSheet("color: #2c3e50; margin-bottom: 5px;")
         tree_layout.addWidget(table_title)
@@ -368,12 +317,12 @@ class MasterTab(QWidget):
         # 保存/キャンセルボタン
         button_box_layout.addStretch()
 
-        cancel_button = QPushButton("❌ キャンセル")
+        cancel_button = QPushButton("キャンセル")
         cancel_button.setMinimumSize(self.button_min_width, self.button_min_height)
         cancel_button.clicked.connect(self.cancel_direct_edit)
         button_box_layout.addWidget(cancel_button)
 
-        save_button = QPushButton("💾 保存")
+        save_button = QPushButton("保存")
         save_button.setMinimumSize(self.button_min_width, self.button_min_height)
         save_button.clicked.connect(self.save_direct_edit)
         button_box_layout.addWidget(save_button)

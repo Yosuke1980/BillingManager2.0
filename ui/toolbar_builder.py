@@ -27,6 +27,7 @@ class ToolbarBuilder:
         # データ再読み込み
         reload_action = QAction('再読み込み', main_window)
         reload_action.setShortcut('F5')
+        reload_action.setStatusTip('データを再読み込み')
         reload_action.triggered.connect(main_window.reload_data)
         toolbar.addAction(reload_action)
 
@@ -34,31 +35,23 @@ class ToolbarBuilder:
 
         # 新規作成
         new_action = QAction('新規', main_window)
+        new_action.setShortcut('Ctrl+N')
+        new_action.setStatusTip('新しいエントリを作成')
         new_action.triggered.connect(main_window.create_new_entry)
         toolbar.addAction(new_action)
 
+        # 保存
+        save_action = QAction('保存', main_window)
+        save_action.setShortcut('Ctrl+S')
+        save_action.setStatusTip('変更を保存')
+        save_action.triggered.connect(main_window.save_current)
+        toolbar.addAction(save_action)
+
         # 削除
         delete_action = QAction('削除', main_window)
+        delete_action.setShortcut('Delete')
+        delete_action.setStatusTip('選択したエントリを削除')
         delete_action.triggered.connect(main_window.delete_selected)
         toolbar.addAction(delete_action)
-
-        toolbar.addSeparator()
-
-        # 検索
-        search_action = QAction('検索', main_window)
-        search_action.triggered.connect(main_window.show_search)
-        toolbar.addAction(search_action)
-
-        # リセット
-        reset_action = QAction('リセット', main_window)
-        reset_action.triggered.connect(main_window.reset_filters)
-        toolbar.addAction(reset_action)
-
-        toolbar.addSeparator()
-
-        # CSV出力
-        export_action = QAction('CSV出力', main_window)
-        export_action.triggered.connect(main_window.export_csv)
-        toolbar.addAction(export_action)
 
         return toolbar

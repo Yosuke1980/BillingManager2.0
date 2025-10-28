@@ -201,13 +201,40 @@ class RadioBillingApp(QMainWindow):
     # メニュー・ツールバーアクション実装
     # ========================================
 
+    def save_current(self):
+        """現在のタブの内容を保存"""
+        current_tab = self.tab_control.currentWidget()
+        if hasattr(current_tab, 'save_direct_edit'):
+            # Master Tabの保存
+            current_tab.save_direct_edit()
+        elif hasattr(current_tab, 'save_payment_details'):
+            # Project Filter Tabの保存
+            current_tab.save_payment_details()
+        else:
+            QMessageBox.information(self, '保存', '現在のタブでは保存機能は利用できません。')
+
     def export_csv(self):
         """CSV出力処理"""
         current_tab = self.tab_control.currentWidget()
-        if hasattr(current_tab, 'export_csv'):
+
+        # Master Tabの場合
+        if hasattr(current_tab, 'export_to_csv'):
+            current_tab.export_to_csv()
+        # その他のタブで export_csv メソッドを持つ場合
+        elif hasattr(current_tab, 'export_csv'):
             current_tab.export_csv()
         else:
             QMessageBox.information(self, 'CSV出力', '現在のタブではCSV出力は利用できません。')
+
+    def import_csv(self):
+        """CSVインポート処理"""
+        current_tab = self.tab_control.currentWidget()
+
+        # Master Tabの場合
+        if hasattr(current_tab, 'import_from_csv'):
+            current_tab.import_from_csv()
+        else:
+            QMessageBox.information(self, 'CSVインポート', '現在のタブではCSVインポートは利用できません。')
 
     def create_new_entry(self):
         """新規エントリ作成"""

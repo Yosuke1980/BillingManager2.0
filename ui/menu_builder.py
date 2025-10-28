@@ -56,6 +56,12 @@ class MenuBuilder:
 
         file_menu.addSeparator()
 
+        # CSVインポート
+        csv_import_file_action = QAction('CSVインポート(&M)', main_window)
+        csv_import_file_action.setStatusTip('CSVファイルからマスターデータをインポート')
+        csv_import_file_action.triggered.connect(main_window.import_csv)
+        file_menu.addAction(csv_import_file_action)
+
         # CSV出力
         csv_export_action = QAction('CSV出力(&E)', main_window)
         csv_export_action.setShortcut('Ctrl+E')
@@ -84,28 +90,19 @@ class MenuBuilder:
         new_action.triggered.connect(main_window.create_new_entry)
         edit_menu.addAction(new_action)
 
+        # 保存
+        save_action = QAction('保存(&S)', main_window)
+        save_action.setShortcut('Ctrl+S')
+        save_action.setStatusTip('変更を保存')
+        save_action.triggered.connect(main_window.save_current)
+        edit_menu.addAction(save_action)
+
         # 削除
         delete_action = QAction('削除(&D)', main_window)
         delete_action.setShortcut('Delete')
         delete_action.setStatusTip('選択したエントリを削除')
         delete_action.triggered.connect(main_window.delete_selected)
         edit_menu.addAction(delete_action)
-
-        edit_menu.addSeparator()
-
-        # 検索
-        search_action = QAction('検索(&S)', main_window)
-        search_action.setShortcut('Ctrl+F')
-        search_action.setStatusTip('データを検索')
-        search_action.triggered.connect(main_window.show_search)
-        edit_menu.addAction(search_action)
-
-        # リセット
-        reset_action = QAction('リセット(&C)', main_window)
-        reset_action.setShortcut('Ctrl+R')
-        reset_action.setStatusTip('フィルターをリセット')
-        reset_action.triggered.connect(main_window.reset_filters)
-        edit_menu.addAction(reset_action)
 
     @staticmethod
     def _create_view_menu(menubar, main_window):
