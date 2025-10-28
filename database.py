@@ -89,7 +89,8 @@ class DatabaseManager:
                     ("project_end_date", "TEXT DEFAULT ''"),
                     ("budget", "REAL DEFAULT 0"),
                     ("approver", "TEXT DEFAULT ''"),
-                    ("urgency_level", "TEXT DEFAULT '通常'")
+                    ("urgency_level", "TEXT DEFAULT '通常'"),
+                    ("payment_timing", "TEXT DEFAULT '翌月末払い'")
                 ]
 
                 for col_name, col_def in project_columns:
@@ -118,7 +119,8 @@ class DatabaseManager:
                         project_end_date TEXT DEFAULT '',
                         budget REAL DEFAULT 0,
                         approver TEXT DEFAULT '',
-                        urgency_level TEXT DEFAULT '通常'
+                        urgency_level TEXT DEFAULT '通常',
+                        payment_timing TEXT DEFAULT '翌月末払い'
                     )
                 """
                 )
@@ -156,7 +158,8 @@ class DatabaseManager:
                 project_end_date TEXT DEFAULT '',
                 budget REAL DEFAULT 0,
                 approver TEXT DEFAULT '',
-                urgency_level TEXT DEFAULT '通常'
+                urgency_level TEXT DEFAULT '通常',
+                payment_timing TEXT DEFAULT '翌月末払い'
             )
         """
         )
@@ -174,7 +177,8 @@ class DatabaseManager:
                 ("project_end_date", "TEXT DEFAULT ''"),
                 ("budget", "REAL DEFAULT 0"),
                 ("approver", "TEXT DEFAULT ''"),
-                ("urgency_level", "TEXT DEFAULT '通常'")
+                ("urgency_level", "TEXT DEFAULT '通常'"),
+                ("payment_timing", "TEXT DEFAULT '翌月末払い'")
             ]
 
             for col_name, col_def in project_columns:
@@ -582,7 +586,7 @@ class DatabaseManager:
             """
             SELECT id, project_name, payee, payee_code, amount, payment_date, status,
                    client_name, department, project_status, project_start_date,
-                   project_end_date, budget, approver, urgency_level
+                   project_end_date, budget, approver, urgency_level, payment_timing
             FROM expenses WHERE id = ?
             """,
             (expense_id,),
@@ -613,11 +617,11 @@ class DatabaseManager:
                 cursor.execute(
                     """
                     INSERT INTO expenses (
-                        project_name, payee, payee_code, amount, payment_date, status, 
+                        project_name, payee, payee_code, amount, payment_date, status,
                         source_type, master_id, client_name, department, project_status,
-                        project_start_date, project_end_date, budget, approver, urgency_level
+                        project_start_date, project_end_date, budget, approver, urgency_level, payment_timing
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         data["project_name"],
@@ -636,6 +640,7 @@ class DatabaseManager:
                         data.get("budget", 0),
                         data.get("approver", ""),
                         data.get("urgency_level", "通常"),
+                        data.get("payment_timing", "翌月末払い"),
                     ),
                 )
                 expense_id = cursor.lastrowid
@@ -645,7 +650,7 @@ class DatabaseManager:
                     UPDATE expenses
                     SET project_name = ?, payee = ?, payee_code = ?, amount = ?, payment_date = ?, status = ?,
                         client_name = ?, department = ?, project_status = ?, project_start_date = ?,
-                        project_end_date = ?, budget = ?, approver = ?, urgency_level = ?
+                        project_end_date = ?, budget = ?, approver = ?, urgency_level = ?, payment_timing = ?
                     WHERE id = ?
                     """,
                     (
@@ -663,6 +668,7 @@ class DatabaseManager:
                         data.get("budget", 0),
                         data.get("approver", ""),
                         data.get("urgency_level", "通常"),
+                        data.get("payment_timing", "翌月末払い"),
                         data["id"],
                     ),
                 )

@@ -391,6 +391,7 @@ class ExpenseTab(QWidget):
             ("金額:", "amount", 2, 0, False),
             ("支払日:", "payment_date", 2, 2, False),
             ("状態:", "status", 3, 0, False),
+            ("支払い時期:", "payment_timing", 3, 2, False),
         ]
 
         for label_text, field_key, row, col, read_only in basic_fields:
@@ -412,6 +413,9 @@ class ExpenseTab(QWidget):
             elif field_key == "status":
                 widget = QComboBox()
                 widget.addItems(["未処理", "処理中", "照合済", "完了"])
+            elif field_key == "payment_timing":
+                widget = QComboBox()
+                widget.addItems(["翌月末払い", "当月末払い"])
             elif field_key == "payment_date":
                 widget = QDateEdit()
                 widget.setCalendarPopup(True)
@@ -1305,20 +1309,21 @@ class ExpenseTab(QWidget):
             # 編集フォームに値を設定（案件情報含む）
             field_mapping = {
                 0: "id",
-                1: "project_name", 
+                1: "project_name",
                 2: "payee",
                 3: "payee_code",
                 4: "amount",
                 5: "payment_date",
                 6: "status",
                 7: "client_name",
-                8: "department", 
+                8: "department",
                 9: "project_status",
                 10: "project_start_date",
                 11: "project_end_date",
                 12: "budget",
                 13: "approver",
-                14: "urgency_level"
+                14: "urgency_level",
+                15: "payment_timing"
             }
 
             for i, field in field_mapping.items():
@@ -1331,7 +1336,7 @@ class ExpenseTab(QWidget):
                 if field == "id":
                     # IDフィールド
                     widget.setText(str(value))
-                elif field in ["status", "project_status", "urgency_level"]:
+                elif field in ["status", "project_status", "urgency_level", "payment_timing"]:
                     # コンボボックス
                     if hasattr(widget, 'findText'):
                         index = widget.findText(str(value))
@@ -1378,6 +1383,7 @@ class ExpenseTab(QWidget):
             payee_code = self.edit_entries["payee_code"].text()
             amount_str = self.edit_entries["amount"].text()
             status = self.edit_entries["status"].currentText()
+            payment_timing = self.edit_entries["payment_timing"].currentText()
 
             # 支払い先コードの0埋め処理
             if payee_code:
@@ -1435,6 +1441,7 @@ class ExpenseTab(QWidget):
                 "amount": amount,
                 "payment_date": payment_date,
                 "status": status,
+                "payment_timing": payment_timing,
                 "client_name": client_name,
                 "department": department,
                 "project_status": project_status,
@@ -1489,6 +1496,11 @@ class ExpenseTab(QWidget):
                     widget.setText("新規")
                 elif field == "status":
                     index = widget.findText("未処理")
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                elif field == "payment_timing":
+                    # デフォルトは「翌月末払い」
+                    index = widget.findText("翌月末払い")
                     if index >= 0:
                         widget.setCurrentIndex(index)
                 elif field == "payment_date":
