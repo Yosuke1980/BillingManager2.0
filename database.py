@@ -808,10 +808,10 @@ class DatabaseManager:
 
         cursor.execute(
             """
-            SELECT id, project_name, payee, payee_code, amount, payment_type, 
+            SELECT id, project_name, payee, payee_code, amount, payment_type,
                    broadcast_days, start_date, end_date, client_name, department,
                    project_status, project_start_date, project_end_date, budget,
-                   approver, urgency_level
+                   approver, urgency_level, payment_timing
             FROM expense_master WHERE id = ?
             """,
             (master_id,),
@@ -842,12 +842,12 @@ class DatabaseManager:
                 cursor.execute(
                     """
                     INSERT INTO expense_master (
-                        project_name, payee, payee_code, amount, payment_type, 
+                        project_name, payee, payee_code, amount, payment_type,
                         start_date, end_date, broadcast_days, status,
                         client_name, department, project_status, project_start_date,
-                        project_end_date, budget, approver, urgency_level
+                        project_end_date, budget, approver, urgency_level, payment_timing
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '未処理', ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '未処理', ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         data["project_name"],
@@ -866,6 +866,7 @@ class DatabaseManager:
                         data.get("budget", 0),
                         data.get("approver", ""),
                         data.get("urgency_level", "通常"),
+                        data.get("payment_timing", "翌月末払い"),
                     ),
                 )
                 master_id = cursor.lastrowid
@@ -873,10 +874,10 @@ class DatabaseManager:
                 cursor.execute(
                     """
                     UPDATE expense_master
-                    SET project_name = ?, payee = ?, payee_code = ?, amount = ?, 
+                    SET project_name = ?, payee = ?, payee_code = ?, amount = ?,
                         payment_type = ?, start_date = ?, end_date = ?, broadcast_days = ?,
                         client_name = ?, department = ?, project_status = ?, project_start_date = ?,
-                        project_end_date = ?, budget = ?, approver = ?, urgency_level = ?
+                        project_end_date = ?, budget = ?, approver = ?, urgency_level = ?, payment_timing = ?
                     WHERE id = ?
                     """,
                     (
@@ -896,6 +897,7 @@ class DatabaseManager:
                         data.get("budget", 0),
                         data.get("approver", ""),
                         data.get("urgency_level", "通常"),
+                        data.get("payment_timing", "翌月末払い"),
                         data["id"],
                     ),
                 )

@@ -218,8 +218,9 @@ class MasterTab(QWidget):
             ("支払い先コード:", "payee_code", 1, 2, False),
             ("金額:", "amount", 2, 0, False),
             ("種別:", "payment_type", 2, 2, False),
-            ("開始日:", "start_date", 3, 0, False),
-            ("終了日:", "end_date", 3, 2, False),
+            ("支払い時期:", "payment_timing", 3, 0, False),
+            ("開始日:", "start_date", 3, 2, False),
+            ("終了日:", "end_date", 4, 0, False),
         ]
 
         for label_text, field_name, row, col, readonly in basic_fields:
@@ -239,6 +240,10 @@ class MasterTab(QWidget):
                 entry = QComboBox()
                 entry.addItems(["月額固定", "回数ベース"])
                 entry.currentIndexChanged.connect(self.on_payment_type_change)
+            elif field_name == "payment_timing":
+                # 支払い時期はドロップダウン
+                entry = QComboBox()
+                entry.addItems(["翌月末払い", "当月末払い"])
             elif field_name in ["start_date", "end_date"]:
                 # 日付選択
                 entry = QDateEdit()
@@ -643,7 +648,13 @@ class MasterTab(QWidget):
             index = self.edit_entries["payment_type"].findText(payment_type)
             if index >= 0:
                 self.edit_entries["payment_type"].setCurrentIndex(index)
-            
+
+            # 支払い時期コンボボックス
+            payment_timing = row[17] if len(row) > 17 and row[17] else "翌月末払い"
+            index = self.edit_entries["payment_timing"].findText(payment_timing)
+            if index >= 0:
+                self.edit_entries["payment_timing"].setCurrentIndex(index)
+
             # 開始日、終了日
             for date_field, date_index in [("start_date", 7), ("end_date", 8)]:
                 date_value = row[date_index] if len(row) > date_index and row[date_index] else ""
@@ -737,6 +748,7 @@ class MasterTab(QWidget):
             payee_code = self.edit_entries["payee_code"].text()
             amount_str = self.edit_entries["amount"].text()
             payment_type = self.edit_entries["payment_type"].currentText()
+            payment_timing = self.edit_entries["payment_timing"].currentText()
 
             # 【修正】支払い先コードの0埋め処理（1回のみ）
             if payee_code:
@@ -817,6 +829,7 @@ class MasterTab(QWidget):
                 "payee_code": payee_code,
                 "amount": amount,
                 "payment_type": payment_type,
+                "payment_timing": payment_timing,
                 "start_date": start_date_str,
                 "end_date": end_date_str,
                 "broadcast_days": broadcast_days,
@@ -877,6 +890,10 @@ class MasterTab(QWidget):
                     widget.setText("新規")
                 elif field == "payment_type":
                     index = widget.findText("月額固定")
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                elif field == "payment_timing":
+                    index = widget.findText("翌月末払い")
                     if index >= 0:
                         widget.setCurrentIndex(index)
                 elif field == "project_status":
