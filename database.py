@@ -1445,13 +1445,6 @@ class DatabaseManager:
                     amount_match = expense_amount == payment_amount
                     month_match = expected_payment_month == payment_year_month
 
-                    # デバッグログ
-                    if code_match and amount_match:
-                        log_message(f"照合チェック - 費用ID:{expense_id}, 支払ID:{payment_id}")
-                        log_message(f"  コード: {expense_payee_code} == {payment_payee_code} -> {code_match}")
-                        log_message(f"  金額: {expense_amount} == {payment_amount} -> {amount_match}")
-                        log_message(f"  月: {expected_payment_month} ({expense_payment_timing}) == {payment_year_month} -> {month_match}")
-
                     # 3条件全て一致したら照合成功
                     if code_match and amount_match and month_match:
                         best_match = payment_id
