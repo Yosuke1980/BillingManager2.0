@@ -1380,28 +1380,14 @@ class DatabaseManager:
                     pass
                 return None
 
-            # 期待支払い月を計算する関数
+            # 期待支払い月を取得する関数
             def calculate_expected_payment_month(expense_date, payment_timing):
-                """費用の支払日と支払い時期から期待支払い月を計算"""
-                year_month = extract_year_month(expense_date)
-                if not year_month:
-                    return None
+                """費用の支払日から期待支払い月を取得
 
-                try:
-                    year, month = map(int, year_month.split("-"))
-
-                    if payment_timing == "当月末払い":
-                        # 同じ月に支払い
-                        return f"{year:04d}-{month:02d}"
-                    else:  # 翌月末払い（デフォルト）
-                        # 翌月に支払い
-                        month += 1
-                        if month > 12:
-                            month = 1
-                            year += 1
-                        return f"{year:04d}-{month:02d}"
-                except:
-                    return None
+                注意: マスター反映ロジック修正後、payment_dateは既に支払い月の末日として
+                格納されているため、payment_timingによる追加計算は不要
+                """
+                return extract_year_month(expense_date)
 
             # 成功した更新ID一覧（重複更新を避けるため）
             updated_payment_ids = set()
