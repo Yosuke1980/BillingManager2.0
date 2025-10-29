@@ -968,8 +968,27 @@ class DatabaseManager:
 
     # database.py の修正が必要な部分
 
+    def _calculate_previous_month(self, year, month):
+        """前月の年月を計算するヘルパー関数
+
+        Args:
+            year: 年
+            month: 月
+
+        Returns:
+            tuple: (前月の年, 前月の月)
+        """
+        if month == 1:
+            return (year - 1, 12)
+        else:
+            return (year, month - 1)
+
     def generate_expenses_from_master(self, target_year, target_month):
-        """マスターデータから指定月の費用データを生成（修正版）"""
+        """マスターデータから指定月の費用データを生成（支払い月ベース）
+
+        target_year/target_month = 支払い月として処理
+        payment_timingに応じて発生月を計算し、回数ベースの計算を行う
+        """
         master_conn = sqlite3.connect(self.expense_master_db)
         master_cursor = master_conn.cursor()
 
@@ -1006,14 +1025,24 @@ class DatabaseManager:
                 end_date = master_row[8] if len(master_row) > 8 else ""
                 payment_timing = master_row[9] if len(master_row) > 9 and master_row[9] else "翌月末払い"
 
-                # 開始日と終了日のチェック
-                target_date = datetime(target_year, target_month, 1)
+                # payment_timingに基づいて発生月を計算
+                # target_year/target_month = 支払い月
+                if payment_timing == "翌月末払い":
+                    # 翌月末払い = 支払い月の前月が発生月
+                    occurrence_year, occurrence_month = self._calculate_previous_month(target_year, target_month)
+                else:  # "当月末払い"
+                    # 当月末払い = 支払い月が発生月
+                    occurrence_year = target_year
+                    occurrence_month = target_month
+
+                # 開始日と終了日のチェック（発生月で確認）
+                occurrence_date = datetime(occurrence_year, occurrence_month, 1)
 
                 # 開始日のチェック
                 if start_date:
                     try:
                         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-                        if target_date < start_dt:
+                        if occurrence_date < start_dt:
                             continue  # まだ開始されていない
                     except ValueError:
                         pass
@@ -1022,16 +1051,16 @@ class DatabaseManager:
                 if end_date:
                     try:
                         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-                        if target_date > end_dt:
+                        if occurrence_date > end_dt:
                             continue  # 既に終了している
                     except ValueError:
                         pass
 
                 # 支払日と金額を決定
                 if payment_type == "回数ベース" and broadcast_days:
-                    # 共通の回数ベース計算関数を使用（前月実績ベース）
+                    # 回数ベース計算は発生月の前月実績で計算
                     result = calculate_count_based_amount(
-                        amount, broadcast_days, target_year, target_month, use_previous_month=True
+                        amount, broadcast_days, occurrence_year, occurrence_month, use_previous_month=True
                     )
                     
                     if result['error']:
@@ -1101,7 +1130,7 @@ class DatabaseManager:
             expense_conn.commit()
 
             log_message(
-                f"{target_year}年{target_month}月の費用データを生成: 新規{generated_count}件、更新{updated_count}件"
+                f"{target_year}年{target_month}月支払い分の費用データを生成: 新規{generated_count}件、更新{updated_count}件"
             )
             return generated_count, updated_count
 
