@@ -1289,7 +1289,7 @@ class ExpenseTab(QWidget):
             self.refresh_data()
 
     def on_tree_double_click_for_edit(self, item, column):
-        """ツリーウィジェットのダブルクリック時に編集フォームを表示"""
+        """ツリーウィジェットのダブルクリック時に編集ダイアログを表示"""
         if not item:
             return
 
@@ -1297,82 +1297,15 @@ class ExpenseTab(QWidget):
         expense_id = item.text(0)
 
         try:
-            # データベースから詳細情報を取得
-            row = self.db_manager.get_expense_by_id(expense_id)
-
-            if not row:
-                return
-
-            # 編集フォームに値を設定（案件情報含む）
-            field_mapping = {
-                0: "id",
-                1: "project_name",
-                2: "payee",
-                3: "payee_code",
-                4: "amount",
-                5: "payment_date",
-                6: "status",
-                7: "client_name",
-                8: "department",
-                9: "project_status",
-                10: "project_start_date",
-                11: "project_end_date",
-                12: "budget",
-                13: "approver",
-                14: "urgency_level",
-                15: "payment_timing"
-            }
-
-            for i, field in field_mapping.items():
-                if i >= len(row) or field not in self.edit_entries:
-                    continue
-                    
-                widget = self.edit_entries[field]
-                value = row[i] if row[i] is not None else ""
-                
-                if field == "id":
-                    # IDフィールド
-                    widget.setText(str(value))
-                elif field in ["status", "project_status", "urgency_level", "payment_timing"]:
-                    # コンボボックス
-                    if hasattr(widget, 'findText'):
-                        index = widget.findText(str(value))
-                        if index >= 0:
-                            widget.setCurrentIndex(index)
-                elif field == "department":
-                    # 編集可能コンボボックス
-                    if hasattr(widget, 'setCurrentText'):
-                        widget.setCurrentText(str(value))
-                elif field in ["payment_date", "project_start_date", "project_end_date"]:
-                    # 日付フィールド
-                    try:
-                        if str(value) and str(value) != "":
-                            parts = str(value).split("-")
-                            if len(parts) >= 3:
-                                qdate = QDate(int(parts[0]), int(parts[1]), int(parts[2]))
-                                widget.setDate(qdate)
-                            else:
-                                widget.setDate(QDate.currentDate())
-                        else:
-                            widget.setDate(QDate.currentDate())
-                    except (ValueError, IndexError):
-                        widget.setDate(QDate.currentDate())
-                elif field in ["amount", "budget"]:
-                    # 金額フィールド（整数表示）
-                    try:
-                        int_value = int(float(value)) if value else 0
-                        widget.setText(str(int_value))
-                    except (ValueError, TypeError):
-                        widget.setText("0")
-                else:
-                    # 通常のテキストフィールド
-                    widget.setText(str(value))
-
-            # 編集フォームを表示
-            self.edit_frame.show()
+            # 編集ダイアログを開く
+            from expense_edit_dialog import ExpenseEditDialog
+            dialog = ExpenseEditDialog(self, self.db_manager, expense_id)
+            if dialog.exec_() == ExpenseEditDialog.Accepted:
+                # 保存後、データを再読み込み
+                self.refresh_data_with_filters()
 
         except Exception as e:
-            log_message(f"費用データ編集フォーム表示中にエラーが発生: {e}")
+            log_message(f"費用データ編集ダイアログ表示中にエラーが発生: {e}")
 
     def save_direct_edit(self):
         """費用テーブルの直接編集を保存（新規作成対応・コード0埋め対応）"""
@@ -1488,43 +1421,16 @@ class ExpenseTab(QWidget):
     def create_record(self):
         """新しい費用レコードを作成するためのダイアログを表示"""
         try:
-            # 選択解除
-            self.tree.clearSelection()
-
-            # 編集フォームの表示
-            self.edit_frame.show()
-
-            # フォームのクリア
-            for field, widget in self.edit_entries.items():
-                if field == "id":
-                    widget.setText("新規")
-                elif field == "status":
-                    index = widget.findText("未処理")
-                    if index >= 0:
-                        widget.setCurrentIndex(index)
-                elif field == "payment_timing":
-                    # デフォルトは「翌月末払い」
-                    index = widget.findText("翌月末払い")
-                    if index >= 0:
-                        widget.setCurrentIndex(index)
-                elif field == "payment_date":
-                    widget.setDate(QDate.currentDate())
-                elif isinstance(widget, QComboBox):
-                    # ComboBoxの場合は空のテキストを設定または最初の項目を選択
-                    if widget.isEditable():
-                        widget.setCurrentText("")
-                    else:
-                        widget.setCurrentIndex(0)
-                elif isinstance(widget, QDateEdit):
-                    # DateEditの場合は現在の日付を設定
-                    widget.setDate(QDate.currentDate())
-                else:
-                    # LineEditなどテキスト入力ウィジェットの場合
-                    widget.setText("")
+            # 新規作成ダイアログを開く
+            from expense_edit_dialog import ExpenseEditDialog
+            dialog = ExpenseEditDialog(self, self.db_manager, None)
+            if dialog.exec_() == ExpenseEditDialog.Accepted:
+                # 保存後、データを再読み込み
+                self.refresh_data_with_filters()
 
         except Exception as e:
-            log_message(f"新規費用レコード作成フォーム表示中にエラー: {e}")
-            QMessageBox.critical(self, "エラー", f"フォーム表示に失敗しました: {e}")
+            log_message(f"新規費用レコード作成ダイアログ表示中にエラー: {e}")
+            QMessageBox.critical(self, "エラー", f"ダイアログ表示に失敗しました: {e}")
 
     def delete_record(self):
         """選択された費用レコードを削除（複数選択対応）"""

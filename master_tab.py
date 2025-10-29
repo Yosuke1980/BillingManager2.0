@@ -618,7 +618,7 @@ class MasterTab(QWidget):
             )
 
     def on_tree_double_click_for_edit(self, item, column):
-        """ツリーウィジェットのダブルクリック時に編集フォームを表示"""
+        """ツリーウィジェットのダブルクリック時に編集ダイアログを表示"""
         if not item:
             return
 
@@ -626,116 +626,15 @@ class MasterTab(QWidget):
         master_id = item.text(0)
 
         try:
-            # データベースから詳細情報を取得
-            row = self.db_manager.get_master_by_id(master_id)
-
-            if not row:
-                return
-
-            # 編集フォームに値を設定
-            # 基本情報フィールド (rowのインデックスと順序に注意)
-            self.edit_entries["id"].setText(str(row[0]))
-            self.edit_entries["project_name"].setText(str(row[1]) if row[1] else "")
-            self.edit_entries["payee"].setText(str(row[2]) if row[2] else "")
-            self.edit_entries["payee_code"].setText(str(row[3]) if row[3] else "")
-            # 金額を整数表示
-            try:
-                amount_int = int(float(row[4])) if row[4] else 0
-                self.edit_entries["amount"].setText(str(amount_int))
-            except (ValueError, TypeError):
-                self.edit_entries["amount"].setText("0")
-            
-            # 種別コンボボックス
-            payment_type = row[5] if row[5] else "月額固定"
-            index = self.edit_entries["payment_type"].findText(payment_type)
-            if index >= 0:
-                self.edit_entries["payment_type"].setCurrentIndex(index)
-
-            # 支払い時期コンボボックス
-            payment_timing = row[17] if len(row) > 17 and row[17] else "翌月末払い"
-            index = self.edit_entries["payment_timing"].findText(payment_timing)
-            if index >= 0:
-                self.edit_entries["payment_timing"].setCurrentIndex(index)
-
-            # 開始日、終了日
-            for date_field, date_index in [("start_date", 7), ("end_date", 8)]:
-                date_value = row[date_index] if len(row) > date_index and row[date_index] else ""
-                try:
-                    if date_value:
-                        parts = date_value.split("-")
-                        if len(parts) >= 3:
-                            qdate = QDate(int(parts[0]), int(parts[1]), int(parts[2]))
-                            self.edit_entries[date_field].setDate(qdate)
-                        else:
-                            self.edit_entries[date_field].setDate(QDate.currentDate())
-                    else:
-                        self.edit_entries[date_field].setDate(QDate.currentDate())
-                except (ValueError, IndexError, AttributeError):
-                    self.edit_entries[date_field].setDate(QDate.currentDate())
-            
-            # 案件情報フィールド (インデックス 9-16)
-            self.edit_entries["client_name"].setText(str(row[9]) if len(row) > 9 and row[9] else "")
-            self.edit_entries["department"].setText(str(row[10]) if len(row) > 10 and row[10] else "")
-            
-            # 案件状況コンボボックス
-            project_status = row[11] if len(row) > 11 and row[11] else "進行中"
-            index = self.edit_entries["project_status"].findText(project_status)
-            if index >= 0:
-                self.edit_entries["project_status"].setCurrentIndex(index)
-            
-            # 案件開始日、完了予定日
-            for date_field, date_index in [("project_start_date", 12), ("project_end_date", 13)]:
-                date_value = row[date_index] if len(row) > date_index and row[date_index] else ""
-                try:
-                    if date_value:
-                        parts = date_value.split("-")
-                        if len(parts) >= 3:
-                            qdate = QDate(int(parts[0]), int(parts[1]), int(parts[2]))
-                            self.edit_entries[date_field].setDate(qdate)
-                        else:
-                            self.edit_entries[date_field].setDate(QDate.currentDate())
-                    else:
-                        self.edit_entries[date_field].setDate(QDate.currentDate())
-                except (ValueError, IndexError, AttributeError):
-                    self.edit_entries[date_field].setDate(QDate.currentDate())
-            
-            # 予算を整数表示
-            try:
-                budget_int = int(float(row[14])) if len(row) > 14 and row[14] else 0
-                self.edit_entries["budget"].setText(str(budget_int))
-            except (ValueError, TypeError):
-                self.edit_entries["budget"].setText("0")
-            self.edit_entries["approver"].setText(str(row[15]) if len(row) > 15 and row[15] else "")
-            
-            # 緊急度コンボボックス
-            urgency_level = row[16] if len(row) > 16 and row[16] else "通常"
-            index = self.edit_entries["urgency_level"].findText(urgency_level)
-            if index >= 0:
-                self.edit_entries["urgency_level"].setCurrentIndex(index)
-
-            # 放送曜日チェックボックスの設定 (インデックス6)
-            broadcast_days_str = row[6] if len(row) > 6 and row[6] else ""
-            selected_days = [
-                day.strip() for day in broadcast_days_str.split(",") if day.strip()
-            ]
-
-            # すべてチェックを外す
-            for day, checkbox in self.weekday_vars.items():
-                checkbox.setChecked(False)
-
-            # 選択された曜日をチェック
-            for day in selected_days:
-                if day in self.weekday_vars:
-                    self.weekday_vars[day].setChecked(True)
-
-            # 非表示フィールドにも設定
-            self.edit_entries["broadcast_days"].setText(broadcast_days_str)
-
-            # 編集フォームを表示
-            self.edit_frame.show()
+            # 編集ダイアログを開く
+            from master_edit_dialog import MasterEditDialog
+            dialog = MasterEditDialog(self, self.db_manager, master_id)
+            if dialog.exec_() == MasterEditDialog.Accepted:
+                # 保存後、データを再読み込み
+                self.refresh_data()
 
         except Exception as e:
-            log_message(f"費用マスターデータ編集フォーム表示中にエラーが発生: {e}")
+            log_message(f"マスターデータ編集ダイアログ表示中にエラーが発生: {e}")
 
     def on_payment_type_change(self, index):
         """種別変更時のチェック（直接編集フォーム用）"""
@@ -883,48 +782,15 @@ class MasterTab(QWidget):
         self.edit_frame.hide()
 
     def create_record(self):
-        """新しい費用マスターレコードを直接編集フォームで作成"""
+        """新しい費用マスターレコードを作成するためのダイアログを表示"""
         try:
-            # 選択解除
-            self.tree.clearSelection()
-
-            # 編集フォームの表示
-            self.edit_frame.show()
-
-            # フォームのクリアとデフォルト値設定
-            for field, widget in self.edit_entries.items():
-                if field == "id":
-                    widget.setText("新規")
-                elif field == "payment_type":
-                    index = widget.findText("月額固定")
-                    if index >= 0:
-                        widget.setCurrentIndex(index)
-                elif field == "payment_timing":
-                    index = widget.findText("翌月末払い")
-                    if index >= 0:
-                        widget.setCurrentIndex(index)
-                elif field == "project_status":
-                    index = widget.findText("進行中")
-                    if index >= 0:
-                        widget.setCurrentIndex(index)
-                elif field == "urgency_level":
-                    index = widget.findText("通常")
-                    if index >= 0:
-                        widget.setCurrentIndex(index)
-                elif field in ["start_date", "end_date", "project_start_date", "project_end_date"]:
-                    widget.setDate(QDate.currentDate())
-                elif field in ["amount", "budget"]:
-                    widget.setText("0")
-                else:
-                    widget.setText("")
-
-            # 放送曜日のチェックをクリア
-            for day, checkbox in self.weekday_vars.items():
-                checkbox.setChecked(False)
-
+            from master_edit_dialog import MasterEditDialog
+            dialog = MasterEditDialog(self, self.db_manager, None)
+            if dialog.exec_() == MasterEditDialog.Accepted:
+                self.refresh_data()
         except Exception as e:
-            log_message(f"新規費用マスターレコード作成フォーム表示中にエラー: {e}")
-            QMessageBox.critical(self, "エラー", f"フォーム表示に失敗しました: {e}")
+            log_message(f"新規マスターレコード作成ダイアログ表示中にエラー: {e}")
+            QMessageBox.critical(self, "エラー", f"ダイアログ表示に失敗しました: {e}")
 
     def delete_record(self):
         """選択された費用マスターレコード（複数可能）を削除"""
