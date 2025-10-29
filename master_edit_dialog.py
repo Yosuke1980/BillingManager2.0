@@ -41,8 +41,8 @@ class MasterEditDialog(QDialog):
     def setup_ui(self):
         """UIのセットアップ"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
 
         # タブウィジェット
         tab_widget = QTabWidget()
@@ -62,13 +62,13 @@ class MasterEditDialog(QDialog):
 
         cancel_button = QPushButton("キャンセル (Esc)")
         cancel_button.clicked.connect(self.reject)
-        cancel_button.setMinimumWidth(150)
+        cancel_button.setMinimumWidth(120)
         button_layout.addWidget(cancel_button)
 
         save_button = QPushButton("保存 (Ctrl+S)")
         save_button.clicked.connect(self.save)
         save_button.setDefault(True)
-        save_button.setMinimumWidth(150)
+        save_button.setMinimumWidth(120)
         button_layout.addWidget(save_button)
 
         layout.addLayout(button_layout)
@@ -80,8 +80,8 @@ class MasterEditDialog(QDialog):
         """基本タブの作成"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
 
         # スクロールエリア
         scroll = QScrollArea()
@@ -93,13 +93,13 @@ class MasterEditDialog(QDialog):
         # コンテンツウィジェット
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setSpacing(16)
+        content_layout.setSpacing(10)
         scroll.setWidget(content)
 
         # 基本情報グループ
         basic_group = QGroupBox("基本情報")
         basic_layout = QGridLayout(basic_group)
-        basic_layout.setSpacing(12)
+        basic_layout.setSpacing(8)
         basic_layout.setColumnStretch(1, 1)
         content_layout.addWidget(basic_group)
 
@@ -162,7 +162,7 @@ class MasterEditDialog(QDialog):
         # 放送曜日グループ
         broadcast_group = QGroupBox("放送曜日（回数ベースの場合）")
         broadcast_layout = QHBoxLayout(broadcast_group)
-        broadcast_layout.setSpacing(8)
+        broadcast_layout.setSpacing(6)
         content_layout.addWidget(broadcast_group)
 
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
@@ -186,8 +186,8 @@ class MasterEditDialog(QDialog):
         """詳細タブの作成"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
 
         # スクロールエリア
         scroll = QScrollArea()
@@ -199,7 +199,7 @@ class MasterEditDialog(QDialog):
         # コンテンツウィジェット
         content = QWidget()
         content_layout = QGridLayout(content)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(8)
         content_layout.setColumnStretch(1, 1)  # 左列の入力欄
         content_layout.setColumnStretch(3, 1)  # 右列の入力欄
         scroll.setWidget(content)

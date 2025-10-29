@@ -41,8 +41,8 @@ class ExpenseEditDialog(QDialog):
     def setup_ui(self):
         """UIのセットアップ"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
 
         # タブウィジェット
         tab_widget = QTabWidget()
@@ -62,13 +62,13 @@ class ExpenseEditDialog(QDialog):
 
         cancel_button = QPushButton("キャンセル (Esc)")
         cancel_button.clicked.connect(self.reject)
-        cancel_button.setMinimumWidth(150)
+        cancel_button.setMinimumWidth(120)
         button_layout.addWidget(cancel_button)
 
         save_button = QPushButton("保存 (Ctrl+S)")
         save_button.clicked.connect(self.save)
         save_button.setDefault(True)
-        save_button.setMinimumWidth(150)
+        save_button.setMinimumWidth(120)
         button_layout.addWidget(save_button)
 
         layout.addLayout(button_layout)
@@ -80,8 +80,8 @@ class ExpenseEditDialog(QDialog):
         """基本タブの作成"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
 
         # スクロールエリア
         scroll = QScrollArea()
@@ -93,7 +93,7 @@ class ExpenseEditDialog(QDialog):
         # コンテンツウィジェット
         content = QWidget()
         content_layout = QGridLayout(content)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(8)
         content_layout.setColumnStretch(1, 1)  # 入力欄を伸縮
         scroll.setWidget(content)
 
@@ -168,8 +168,8 @@ class ExpenseEditDialog(QDialog):
         """詳細タブの作成"""
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
 
         # スクロールエリア
         scroll = QScrollArea()
@@ -181,7 +181,7 @@ class ExpenseEditDialog(QDialog):
         # コンテンツウィジェット
         content = QWidget()
         content_layout = QGridLayout(content)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(8)
         content_layout.setColumnStretch(1, 1)  # 左列の入力欄
         content_layout.setColumnStretch(3, 1)  # 右列の入力欄
         scroll.setWidget(content)

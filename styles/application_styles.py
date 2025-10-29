@@ -24,7 +24,7 @@ class ApplicationStyleManager:
         """システムのDPI設定に基づいて最適なフォントサイズを計算
 
         Returns:
-            int: 計算されたフォントサイズ (10-18の範囲)
+            int: 計算されたフォントサイズ (12-18の範囲)
         """
         try:
             app = QApplication.instance()
@@ -38,6 +38,11 @@ class ApplicationStyleManager:
             dpi = screen.logicalDotsPerInch()
             scale_factor = dpi / 96.0
 
+            # macOS向けの補正（DPIが低い環境でも適切なサイズを確保）
+            if platform.system() == "Darwin":
+                if scale_factor < 1.0:
+                    scale_factor = 1.0  # 最低でも1.0にする
+
             # Windows向けの追加補正
             if platform.system() == "Windows":
                 scale_factor *= 1.05
@@ -45,11 +50,11 @@ class ApplicationStyleManager:
                 if device_pixel_ratio > 1.0:
                     scale_factor *= device_pixel_ratio * 0.8
 
-            base_size = 12
+            base_size = 13  # macOS/Windows標準に合わせて13pxに変更
             calculated_size = int(base_size * scale_factor)
 
             # 可読性を確保するための最小・最大値
-            min_size = 10
+            min_size = 12  # 最小値を12pxに引き上げ
             max_size = 18
             font_size = max(min_size, min(max_size, calculated_size))
 
@@ -70,14 +75,14 @@ class ApplicationStyleManager:
         title_font_size = self.title_font_size
         small_font_size = self.small_font_size
 
-        # サイズ計算
-        button_padding_v = max(6, int(font_size * 0.4))
-        button_padding_h = max(12, int(font_size * 0.8))
-        button_min_height = max(32, int(font_size * 2.4))
+        # サイズ計算（余白を縮小）
+        button_padding_v = max(4, int(font_size * 0.3))
+        button_padding_h = max(10, int(font_size * 0.7))
+        button_min_height = max(28, int(font_size * 2.2))
         button_min_width = max(80, int(font_size * 6))
 
         input_padding = max(4, int(font_size * 0.3))
-        input_min_height = max(28, int(font_size * 2.0))
+        input_min_height = max(26, int(font_size * 1.9))
         input_min_width = max(120, int(font_size * 8))
 
         splitter_width = max(6, int(font_size * 0.4))
@@ -115,15 +120,15 @@ class ApplicationStyleManager:
                 color: #495057;
                 border: 2px solid #dee2e6;
                 border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
+                margin-top: 6px;
+                padding-top: 8px;
             }}
             QGroupBox::title {{
                 font-size: {font_size}px;
                 font-weight: bold;
                 subcontrol-origin: margin;
                 left: 10px;
-                padding: 0 8px 0 8px;
+                padding: 0 6px 0 6px;
                 background-color: white;
             }}
 
@@ -218,8 +223,8 @@ class ApplicationStyleManager:
                 selection-color: white;
             }}
             QTreeWidget::item {{
-                padding: 4px;
-                min-height: {int(font_size * 1.8)}px;
+                padding: 3px;
+                min-height: {int(font_size * 1.5)}px;
             }}
             QTreeWidget::item:selected {{
                 background-color: #007bff;
@@ -236,7 +241,7 @@ class ApplicationStyleManager:
                 border-bottom: 2px solid #dee2e6;
             }}
             QTreeWidget::header::section {{
-                padding: 8px;
+                padding: 6px;
                 border-right: 1px solid #dee2e6;
                 background-color: #f8f9fa;
             }}
@@ -248,7 +253,7 @@ class ApplicationStyleManager:
             }}
             QTabBar::tab {{
                 font-size: {font_size}px;
-                padding: 8px 16px;
+                padding: 6px 12px;
                 margin-right: 2px;
                 background-color: #f8f9fa;
                 border: 1px solid #dee2e6;
@@ -290,7 +295,7 @@ class ApplicationStyleManager:
             QCheckBox {{
                 font-size: {font_size}px;
                 color: #495057;
-                spacing: 8px;
+                spacing: 6px;
             }}
             QCheckBox::indicator {{
                 width: {int(font_size * 1.2)}px;
