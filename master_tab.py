@@ -108,7 +108,7 @@ class MasterTab(QWidget):
         search_layout.addWidget(QLabel("検索:"))
         self.search_entry = QLineEdit()
         self.search_entry.setMinimumWidth(self.search_min_width)
-        self.search_entry.setPlaceholderText("案件名、支払い先で検索...")
+        self.search_entry.setPlaceholderText("費用項目、支払い先で検索...")
         self.search_entry.returnPressed.connect(self.search_records)
         search_layout.addWidget(self.search_entry)
 
@@ -138,7 +138,7 @@ class MasterTab(QWidget):
         self.tree.setHeaderLabels(
             [
                 "ID",
-                "案件名",
+                "費用項目",
                 "支払い先",
                 "コード",
                 "金額",
@@ -155,7 +155,7 @@ class MasterTab(QWidget):
         self.tree.setColumnHidden(6, True)  # 開始日非表示
         self.tree.setColumnHidden(7, True)  # 終了日非表示
 
-        self.tree.header().setSectionResizeMode(1, QHeaderView.Stretch)  # 案件名
+        self.tree.header().setSectionResizeMode(1, QHeaderView.Stretch)  # 費用項目
         self.tree.header().setSectionResizeMode(
             2, QHeaderView.ResizeToContents
         )  # 支払い先
@@ -220,7 +220,7 @@ class MasterTab(QWidget):
         # 基本情報フィールド
         basic_fields = [
             ("ID:", "id", 0, 0, True),  # 読み取り専用
-            ("案件名:", "project_name", 0, 2, False),
+            ("費用項目:", "project_name", 0, 2, False),
             ("支払い先:", "payee", 1, 0, False),
             ("支払い先コード:", "payee_code", 1, 2, False),
             ("金額:", "amount", 2, 0, False),
@@ -419,7 +419,7 @@ class MasterTab(QWidget):
 
                 # 値を設定
                 item.setText(0, str(row[0]))  # ID
-                item.setText(1, row[1])  # 案件名
+                item.setText(1, row[1])  # 費用項目
                 item.setText(2, row[2])  # 支払い先
                 item.setText(3, row[3] if row[3] else "")  # 支払い先コード
                 item.setText(4, format_amount(row[4]))  # 金額（整形）
@@ -566,7 +566,7 @@ class MasterTab(QWidget):
 
                 # 値を設定
                 item.setText(0, str(row[0]))  # ID
-                item.setText(1, row[1])  # 案件名
+                item.setText(1, row[1])  # 費用項目
                 item.setText(2, row[2])  # 支払い先
                 item.setText(3, row[3] if row[3] else "")  # 支払い先コード
                 item.setText(4, format_amount(row[4]))  # 金額（整形）
@@ -939,7 +939,7 @@ class MasterTab(QWidget):
                 writer.writerow(
                     [
                         "ID",
-                        "案件名",
+                        "費用項目",
                         "支払い先",
                         "支払い先コード",
                         "金額",

@@ -105,7 +105,7 @@ class PaymentTab(QWidget):
         search_layout.addWidget(QLabel("検索:"))
         self.search_entry = QLineEdit()
         self.search_entry.setMinimumWidth(self.search_min_width)
-        self.search_entry.setPlaceholderText("件名、案件名、支払い先で検索...")
+        self.search_entry.setPlaceholderText("件名、費用項目、支払い先で検索...")
         self.search_entry.returnPressed.connect(self.search_records)
         search_layout.addWidget(self.search_entry)
 
@@ -121,7 +121,7 @@ class PaymentTab(QWidget):
 
         sort_columns = [
             "件名",
-            "案件名",
+            "費用項目",
             "支払い先",
             "コード",
             "金額",
@@ -162,7 +162,7 @@ class PaymentTab(QWidget):
         # ツリーウィジェットの作成（スタイルシートでフォントサイズ設定されるため重複削除）
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(
-            ["件名", "案件名", "支払い先", "コード", "金額", "支払日", "状態"]
+            ["件名", "費用項目", "支払い先", "コード", "金額", "支払日", "状態"]
         )
         tree_layout.addWidget(self.tree)
 
@@ -170,7 +170,7 @@ class PaymentTab(QWidget):
         self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)  # 件名
         self.tree.header().setSectionResizeMode(
             1, QHeaderView.ResizeToContents
-        )  # 案件名
+        )  # 費用項目
         self.tree.header().setSectionResizeMode(
             2, QHeaderView.ResizeToContents
         )  # 支払い先
@@ -211,7 +211,7 @@ class PaymentTab(QWidget):
         self.detail_labels = {}
         detail_fields = [
             "件名",
-            "案件名",
+            "費用項目",
             "支払い先",
             "コード",
             "金額",
@@ -413,7 +413,7 @@ class PaymentTab(QWidget):
 
                 # 値を設定
                 item.setText(0, row[1])  # 件名
-                item.setText(1, row[2])  # 案件名
+                item.setText(1, row[2])  # 費用項目
                 item.setText(2, row[3])  # 支払い先
                 item.setText(3, row[4] if row[4] else "")  # 支払い先コード
                 item.setText(4, format_amount(row[5]))  # 金額（整形）
@@ -484,7 +484,7 @@ class PaymentTab(QWidget):
         # 詳細情報を更新
         field_names = [
             "件名",
-            "案件名",
+            "費用項目",
             "支払い先",
             "コード",
             "金額",
@@ -666,7 +666,7 @@ class PaymentTab(QWidget):
 
                 # 値を設定
                 item.setText(0, row[1])  # 件名
-                item.setText(1, row[2])  # 案件名
+                item.setText(1, row[2])  # 費用項目
                 item.setText(2, row[3])  # 支払い先
                 item.setText(3, row[4] if row[4] else "")  # 支払い先コード
                 item.setText(4, format_amount(row[5]))  # 金額（整形）

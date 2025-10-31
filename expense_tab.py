@@ -170,7 +170,7 @@ class ExpenseTab(QWidget):
         search_layout.addWidget(QLabel("🔍 検索:"))
         self.search_entry = QLineEdit()
         self.search_entry.setMinimumWidth(self.search_min_width)
-        self.search_entry.setPlaceholderText("案件名、支払い先で検索...")
+        self.search_entry.setPlaceholderText("費用項目、支払い先で検索...")
         self.search_entry.returnPressed.connect(self.search_records)  # Enterキーで検索
         search_layout.addWidget(self.search_entry)
 
@@ -310,7 +310,7 @@ class ExpenseTab(QWidget):
         # ツリーウィジェットの作成（スタイルシートでフォントサイズ設定されるため重複削除）
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(
-            ["ID", "案件名", "支払い先", "コード", "金額", "支払日", "状態"]
+            ["ID", "費用項目", "支払い先", "コード", "金額", "支払日", "状態"]
         )
         # 複数選択を有効化
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -318,7 +318,7 @@ class ExpenseTab(QWidget):
 
         # 列の設定
         self.tree.setColumnHidden(0, True)  # IDを非表示
-        self.tree.header().setSectionResizeMode(1, QHeaderView.Stretch)  # 案件名
+        self.tree.header().setSectionResizeMode(1, QHeaderView.Stretch)  # 費用項目
         self.tree.header().setSectionResizeMode(
             2, QHeaderView.ResizeToContents
         )  # 支払い先
@@ -385,7 +385,7 @@ class ExpenseTab(QWidget):
 
         basic_fields = [
             ("ID:", "id", 0, 0, True),
-            ("案件名:", "project_name", 0, 2, False),
+            ("費用項目:", "project_name", 0, 2, False),
             ("支払い先:", "payee", 1, 0, False),
             ("支払い先コード:", "payee_code", 1, 2, False),
             ("金額:", "amount", 2, 0, False),
@@ -864,7 +864,7 @@ class ExpenseTab(QWidget):
 
                 # 値を設定
                 item.setText(0, str(row[0]))  # ID
-                item.setText(1, row[1])  # 案件名
+                item.setText(1, row[1])  # 費用項目
                 item.setText(2, row[2])  # 支払い先
                 item.setText(3, row[3] if row[3] else "")  # 支払い先コード
                 item.setText(4, format_amount(row[4]))  # 金額（整形）
@@ -1058,7 +1058,7 @@ class ExpenseTab(QWidget):
 
                 # 値を設定
                 item.setText(0, str(row[0]))  # ID
-                item.setText(1, row[1])  # 案件名
+                item.setText(1, row[1])  # 費用項目
                 item.setText(2, row[2])  # 支払い先
                 item.setText(3, row[3] if row[3] else "")  # 支払い先コード
                 item.setText(4, format_amount(row[4]))  # 金額（整形）
@@ -1180,7 +1180,7 @@ class ExpenseTab(QWidget):
 
                 # 値を設定
                 item.setText(0, str(row[0]))  # ID
-                item.setText(1, row[1])  # 案件名
+                item.setText(1, row[1])  # 費用項目
                 item.setText(2, row[2])  # 支払い先
                 item.setText(3, row[3] if row[3] else "")  # 支払い先コード
                 item.setText(4, format_amount(row[4]))  # 金額（整形）
@@ -1353,7 +1353,7 @@ class ExpenseTab(QWidget):
 
             # 入力チェック
             if not project_name or not payee or not amount_str or not payment_date:
-                QMessageBox.critical(self, "エラー", "必須項目（案件名、支払先、金額、支払日）を入力してください")
+                QMessageBox.critical(self, "エラー", "必須項目（費用項目、支払先、金額、支払日）を入力してください")
                 return
 
             # 金額と予算の変換
@@ -1611,7 +1611,7 @@ class ExpenseTab(QWidget):
                 writer.writerow(
                     [
                         "ID",
-                        "案件名",
+                        "費用項目",
                         "支払い先",
                         "支払い先コード",
                         "金額",
@@ -1938,7 +1938,7 @@ class ExpenseTab(QWidget):
         left_layout.addWidget(left_title)
         
         tree = QTreeWidget()
-        tree.setHeaderLabels(["金額", "支払日", "状態", "件名", "案件名"])
+        tree.setHeaderLabels(["金額", "支払日", "状態", "件名", "費用項目"])
         tree.setAlternatingRowColors(True)
         left_layout.addWidget(tree)
         
@@ -2002,7 +2002,7 @@ class ExpenseTab(QWidget):
             item.setText(1, str(row[5]) if row[5] else "")  # 支払日
             item.setText(2, str(row[6]) if row[6] else "")  # 状態
             item.setText(3, str(row[0]) if row[0] else "")  # 件名
-            item.setText(4, str(row[1]) if row[1] else "")  # 案件名
+            item.setText(4, str(row[1]) if row[1] else "")  # 費用項目
             
             # 金額による色分け
             try:
@@ -2158,7 +2158,7 @@ class ExpenseTab(QWidget):
         payee_code = item.text(3)  # 支払い先コード
         payment_date = item.text(5)  # 支払日
         amount = item.text(4)  # 金額
-        project_name = item.text(1)  # 案件名
+        project_name = item.text(1)  # 費用項目
         
         if not payee and not payee_code:
             QMessageBox.information(self, "情報", "支払い先情報が不足しています")
@@ -2260,7 +2260,7 @@ class ExpenseTab(QWidget):
             payment_layout.addWidget(payment_header)
 
             payment_tree = QTreeWidget()
-            payment_tree.setHeaderLabels(["金額", "支払日", "案件名", "状態"])
+            payment_tree.setHeaderLabels(["金額", "支払日", "費用項目", "状態"])
             payment_tree.setAlternatingRowColors(True)
             payment_tree.setRootIsDecorated(False)
             payment_layout.addWidget(payment_tree)
@@ -2276,7 +2276,7 @@ class ExpenseTab(QWidget):
             expense_layout.addWidget(expense_header)
 
             expense_tree = QTreeWidget()
-            expense_tree.setHeaderLabels(["金額", "支払日", "案件名", "状態"])
+            expense_tree.setHeaderLabels(["金額", "支払日", "費用項目", "状態"])
             expense_tree.setAlternatingRowColors(True)
             expense_tree.setRootIsDecorated(False)
             expense_layout.addWidget(expense_tree)
@@ -2309,7 +2309,7 @@ class ExpenseTab(QWidget):
                 row_amount_str = format_amount(row[4]) if row[4] else ""
                 payment_item.setText(0, row_amount_str)  # 金額
                 payment_item.setText(1, str(row[5]) if row[5] else "")  # 支払日
-                payment_item.setText(2, str(row[1]) if row[1] else "")  # 案件名
+                payment_item.setText(2, str(row[1]) if row[1] else "")  # 費用項目
                 payment_item.setText(3, str(row[6]) if row[6] else "")  # 状態
 
                 # 金額による色分け
@@ -2337,7 +2337,7 @@ class ExpenseTab(QWidget):
                 row_amount_str = format_amount(row[4]) if row[4] else ""
                 expense_item.setText(0, row_amount_str)  # 金額
                 expense_item.setText(1, str(row[5]) if row[5] else "")  # 支払日
-                expense_item.setText(2, str(row[1]) if row[1] else "")  # 案件名
+                expense_item.setText(2, str(row[1]) if row[1] else "")  # 費用項目
                 expense_item.setText(3, str(row[6]) if row[6] else "")  # 状態
 
                 # データベースのIDを隠しデータとして保存
@@ -2527,7 +2527,7 @@ class ExpenseTab(QWidget):
             # 一覧表示
             tree = QTreeWidget()
             tree.setHeaderLabels([
-                "判定", "案件名", "支払い先", "金額", "支払日", 
+                "判定", "費用項目", "支払い先", "金額", "支払日", 
                 "一致件数", "近似件数", "対応状況"
             ])
             tree.setAlternatingRowColors(True)
@@ -2634,7 +2634,7 @@ class ExpenseTab(QWidget):
                     item.setText(7, "対応不要")
                 
                 # 基本情報
-                item.setText(1, expense_row[1])  # 案件名
+                item.setText(1, expense_row[1])  # 費用項目
                 item.setText(2, payee)  # 支払い先
                 item.setText(3, format_amount(amount))  # 金額
                 item.setText(4, payment_date)  # 支払日
@@ -2668,7 +2668,7 @@ class ExpenseTab(QWidget):
                 if expense_row:
                     # 詳細ダイアログを表示
                     temp_item = QTreeWidgetItem()
-                    temp_item.setText(1, expense_row[1])  # 案件名
+                    temp_item.setText(1, expense_row[1])  # 費用項目
                     temp_item.setText(2, expense_row[2])  # 支払い先
                     temp_item.setText(3, expense_row[3])  # 支払い先コード
                     temp_item.setText(4, format_amount(expense_row[4]))  # 金額
@@ -2755,7 +2755,7 @@ class ExpenseTab(QWidget):
             
             # 結果表示ツリー
             tree = QTreeWidget()
-            tree.setHeaderLabels(["件名", "案件名", "支払い先", "金額", "支払日", "状態", "比較結果", "同月件数"])
+            tree.setHeaderLabels(["件名", "費用項目", "支払い先", "金額", "支払日", "状態", "比較結果", "同月件数"])
             tree.setAlternatingRowColors(True)
             layout.addWidget(tree)
             
