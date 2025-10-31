@@ -8,8 +8,24 @@ from typing import Optional
 
 
 @dataclass
+class Partner:
+    """統合取引先マスター（Phase 6）"""
+    id: Optional[int] = None
+    name: str = ""
+    code: str = ""
+    contact_person: str = ""
+    email: str = ""
+    phone: str = ""
+    address: str = ""
+    partner_type: str = "両方"  # 発注先/支払先/両方
+    notes: str = ""
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+@dataclass
 class Supplier:
-    """発注先マスター"""
+    """発注先マスター（将来的にPartnerに統合予定）"""
     id: Optional[int] = None
     name: str = ""
     contact_person: str = ""
@@ -111,3 +127,10 @@ PROJECT_TYPE_REGULAR = "レギュラー"
 PROJECT_TYPE_SINGLE = "単発"
 
 PROJECT_TYPES = [PROJECT_TYPE_REGULAR, PROJECT_TYPE_SINGLE]
+
+# 取引先区分（Phase 6）
+PARTNER_TYPE_SUPPLIER = "発注先"
+PARTNER_TYPE_PAYEE = "支払先"
+PARTNER_TYPE_BOTH = "両方"
+
+PARTNER_TYPES = [PARTNER_TYPE_SUPPLIER, PARTNER_TYPE_PAYEE, PARTNER_TYPE_BOTH]

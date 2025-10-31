@@ -206,7 +206,25 @@ class DatabaseManager:
         cursor = conn.cursor()
 
         try:
-            # 1. 発注先マスターテーブル
+            # 0. 統合取引先マスターテーブル (Phase 6)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS partners (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    code TEXT UNIQUE,
+                    contact_person TEXT,
+                    email TEXT,
+                    phone TEXT,
+                    address TEXT,
+                    partner_type TEXT DEFAULT '両方',
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            log_message("partners テーブルを作成しました（統合取引先マスタ）")
+
+            # 1. 発注先マスターテーブル (将来的にpartnersに統合予定)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS suppliers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -310,11 +328,88 @@ class DatabaseManager:
             conn.commit()
             log_message("発注管理用テーブルを初期化しました")
 
+            # データマイグレーション: 既存マスタからpartnersへ移行
+            self._migrate_to_partners(cursor)
+            conn.commit()
+
         except sqlite3.Error as e:
             log_message(f"発注管理テーブル作成エラー: {e}")
             conn.rollback()
         finally:
             conn.close()
+
+    def _migrate_to_partners(self, cursor):
+        """既存の支払先マスタと発注先マスタをpartnersに統合"""
+        try:
+            # partnersテーブルに既にデータがある場合はスキップ
+            cursor.execute("SELECT COUNT(*) FROM partners")
+            if cursor.fetchone()[0] > 0:
+                log_message("partners テーブルに既にデータが存在するため、マイグレーションをスキップします")
+                return
+
+            log_message("取引先マスタの統合を開始します")
+
+            # 1. 支払先マスタからの移行
+            payee_conn = sqlite3.connect(self.payee_master_db)
+            payee_cursor = payee_conn.cursor()
+
+            try:
+                payee_cursor.execute("SELECT payee_name, payee_code FROM payee_master")
+                payees = payee_cursor.fetchall()
+
+                migrated_payees = 0
+                for payee_name, payee_code in payees:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO partners (name, code, partner_type, created_at)
+                        VALUES (?, ?, '支払先', CURRENT_TIMESTAMP)
+                    """, (payee_name, payee_code))
+                    if cursor.rowcount > 0:
+                        migrated_payees += 1
+
+                log_message(f"支払先マスタから {migrated_payees} 件を移行しました")
+            except sqlite3.Error as e:
+                log_message(f"支払先マスタからの移行エラー: {e}")
+            finally:
+                payee_conn.close()
+
+            # 2. 発注先マスタからの移行（既に同じ名前がある場合は統合）
+            cursor.execute("SELECT id, name, contact_person, email, phone, address, notes FROM suppliers")
+            suppliers = cursor.fetchall()
+
+            migrated_suppliers = 0
+            merged_count = 0
+            for supplier_id, name, contact_person, email, phone, address, notes in suppliers:
+                # 同じ名前のパートナーが既に存在するかチェック
+                cursor.execute("SELECT id, partner_type FROM partners WHERE name = ?", (name,))
+                existing = cursor.fetchone()
+
+                if existing:
+                    # 既存レコードを「両方」に更新し、発注先情報を追加
+                    cursor.execute("""
+                        UPDATE partners
+                        SET partner_type = '両方',
+                            contact_person = COALESCE(?, contact_person),
+                            email = COALESCE(?, email),
+                            phone = COALESCE(?, phone),
+                            address = COALESCE(?, address),
+                            notes = COALESCE(notes || ' | ' || ?, notes, ?)
+                        WHERE id = ?
+                    """, (contact_person, email, phone, address, notes, notes, existing[0]))
+                    merged_count += 1
+                else:
+                    # 新規追加
+                    cursor.execute("""
+                        INSERT INTO partners (name, contact_person, email, phone, address,
+                                             partner_type, notes, created_at)
+                        VALUES (?, ?, ?, ?, ?, '発注先', ?, CURRENT_TIMESTAMP)
+                    """, (name, contact_person, email, phone, address, notes))
+                    migrated_suppliers += 1
+
+            log_message(f"発注先マスタから {migrated_suppliers} 件を新規追加、{merged_count} 件を統合しました")
+            log_message("取引先マスタの統合が完了しました")
+
+        except sqlite3.Error as e:
+            log_message(f"取引先マスタ統合エラー: {e}")
 
     def init_payee_master_db(self):
         """支払い先マスターデータベースの初期化"""
