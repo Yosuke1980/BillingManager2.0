@@ -230,11 +230,25 @@ class DatabaseManager:
                     type TEXT NOT NULL,
                     budget REAL DEFAULT 0,
                     parent_id INTEGER,
+                    start_date DATE,
+                    end_date DATE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (parent_id) REFERENCES projects(id)
                 )
             """)
+
+            # start_date, end_dateカラムが存在しない場合は追加
+            cursor.execute("PRAGMA table_info(projects)")
+            columns = [column[1] for column in cursor.fetchall()]
+
+            if "start_date" not in columns:
+                cursor.execute("ALTER TABLE projects ADD COLUMN start_date DATE")
+                log_message("projects テーブルに start_date カラムを追加しました")
+
+            if "end_date" not in columns:
+                cursor.execute("ALTER TABLE projects ADD COLUMN end_date DATE")
+                log_message("projects テーブルに end_date カラムを追加しました")
 
             # 3. 費用項目テーブル
             cursor.execute("""

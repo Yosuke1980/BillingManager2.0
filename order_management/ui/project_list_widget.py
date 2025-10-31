@@ -48,16 +48,19 @@ class ProjectListWidget(QWidget):
         # ボタン
         self.add_button = QPushButton("新規案件")
         self.edit_button = QPushButton("編集")
+        self.duplicate_button = QPushButton("複製")
         self.delete_button = QPushButton("削除")
         self.add_expense_button = QPushButton("費用項目追加")
 
         self.add_button.clicked.connect(self.add_project)
         self.edit_button.clicked.connect(self.edit_project)
+        self.duplicate_button.clicked.connect(self.duplicate_project)
         self.delete_button.clicked.connect(self.delete_project)
         self.add_expense_button.clicked.connect(self.add_expense)
 
         filter_layout.addWidget(self.add_button)
         filter_layout.addWidget(self.edit_button)
+        filter_layout.addWidget(self.duplicate_button)
         filter_layout.addWidget(self.delete_button)
         filter_layout.addWidget(self.add_expense_button)
 
@@ -88,15 +91,35 @@ class ProjectListWidget(QWidget):
 
         for row, project in enumerate(projects):
             project_id = project[0]
+            project_type_str = project[3] or ""
 
             # サマリー情報を取得
             summary = self.db.get_project_summary(project_id)
 
+            # 日付表示を案件タイプに応じて変更
+            if project_type_str == "レギュラー":
+                # レギュラー案件の場合、詳細情報を取得して開始日〜終了日を表示
+                detail = self.db.get_project_by_id(project_id)
+                if detail:
+                    start_date = detail[6] or ""
+                    end_date = detail[7] or ""
+                    if start_date and end_date:
+                        date_display = f"{start_date} ～ {end_date}"
+                    elif start_date:
+                        date_display = start_date
+                    else:
+                        date_display = ""
+                else:
+                    date_display = ""
+            else:
+                # 単発案件の場合、実施日を表示
+                date_display = project[2] or ""
+
             # テーブルに設定
             self.table.setItem(row, 0, QTableWidgetItem(str(project[0])))  # ID
-            self.table.setItem(row, 1, QTableWidgetItem(project[2] or ""))  # 日付
+            self.table.setItem(row, 1, QTableWidgetItem(date_display))  # 日付
             self.table.setItem(row, 2, QTableWidgetItem(project[1] or ""))  # 案件名
-            self.table.setItem(row, 3, QTableWidgetItem(project[3] or ""))  # タイプ
+            self.table.setItem(row, 3, QTableWidgetItem(project_type_str))  # タイプ
 
             # 予算・実績・残予算
             budget_item = QTableWidgetItem(f"{summary['budget']:,.0f}")
@@ -188,6 +211,30 @@ class ProjectListWidget(QWidget):
                 QMessageBox.information(self, "成功", "案件を削除しました")
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"削除に失敗しました: {e}")
+
+    def duplicate_project(self):
+        """案件を複製"""
+        current_row = self.table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "警告", "複製する案件を選択してください")
+            return
+
+        project_id = int(self.table.item(current_row, 0).text())
+        project_name = self.table.item(current_row, 2).text()
+
+        reply = QMessageBox.question(
+            self, "確認",
+            f"{project_name} を複製してもよろしいですか?\n関連する費用項目もすべて複製されます。",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                new_project_id = self.db.duplicate_project(project_id)
+                self.load_projects()
+                QMessageBox.information(self, "成功", f"案件を複製しました（新ID: {new_project_id}）")
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"複製に失敗しました: {e}")
 
     def add_expense(self):
         """費用項目追加"""

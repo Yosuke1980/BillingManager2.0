@@ -26,10 +26,12 @@ class Project:
     """案件マスター"""
     id: Optional[int] = None
     name: str = ""
-    date: str = ""  # YYYY-MM-DD形式
+    date: str = ""  # YYYY-MM-DD形式（単発案件の実施日）
     type: str = "単発"  # レギュラー/単発
     budget: float = 0.0
     parent_id: Optional[int] = None
+    start_date: str = ""  # レギュラー案件の開始日
+    end_date: str = ""  # レギュラー案件の終了日
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

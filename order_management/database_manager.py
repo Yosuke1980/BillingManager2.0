@@ -158,7 +158,8 @@ class OrderManagementDB:
 
         try:
             cursor.execute("""
-                SELECT id, name, date, type, budget, parent_id, created_at, updated_at
+                SELECT id, name, date, type, budget, parent_id, start_date, end_date,
+                       created_at, updated_at
                 FROM projects WHERE id = ?
             """, (project_id,))
             return cursor.fetchone()
@@ -173,21 +174,23 @@ class OrderManagementDB:
         try:
             if is_new:
                 cursor.execute("""
-                    INSERT INTO projects (name, date, type, budget, parent_id)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO projects (name, date, type, budget, parent_id, start_date, end_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     project_data.get('name', ''),
                     project_data.get('date', ''),
                     project_data.get('type', '単発'),
                     project_data.get('budget', 0.0),
                     project_data.get('parent_id'),
+                    project_data.get('start_date', ''),
+                    project_data.get('end_date', ''),
                 ))
                 project_id = cursor.lastrowid
             else:
                 cursor.execute("""
                     UPDATE projects
                     SET name = ?, date = ?, type = ?, budget = ?, parent_id = ?,
-                        updated_at = CURRENT_TIMESTAMP
+                        start_date = ?, end_date = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 """, (
                     project_data.get('name', ''),
@@ -195,6 +198,8 @@ class OrderManagementDB:
                     project_data.get('type', '単発'),
                     project_data.get('budget', 0.0),
                     project_data.get('parent_id'),
+                    project_data.get('start_date', ''),
+                    project_data.get('end_date', ''),
                     project_data['id'],
                 ))
                 project_id = project_data['id']
@@ -218,6 +223,82 @@ class OrderManagementDB:
             cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
             conn.commit()
             return cursor.rowcount
+        finally:
+            conn.close()
+
+    def duplicate_project(self, project_id: int) -> int:
+        """案件を複製（費用項目も含めて）
+
+        Args:
+            project_id: 複製元の案件ID
+
+        Returns:
+            int: 新しい案件のID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 元の案件データを取得
+            cursor.execute("""
+                SELECT name, date, type, budget, parent_id, start_date, end_date
+                FROM projects WHERE id = ?
+            """, (project_id,))
+
+            project = cursor.fetchone()
+            if not project:
+                raise ValueError(f"案件ID {project_id} が見つかりません")
+
+            # 新しい案件を作成（名前に「（コピー）」を追加）
+            cursor.execute("""
+                INSERT INTO projects (name, date, type, budget, parent_id, start_date, end_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                project[0] + "（コピー）",  # 名前
+                project[1],  # date
+                project[2],  # type
+                project[3],  # budget
+                project[4],  # parent_id
+                project[5],  # start_date
+                project[6],  # end_date
+            ))
+
+            new_project_id = cursor.lastrowid
+
+            # 関連する費用項目をコピー
+            cursor.execute("""
+                SELECT item_name, amount, supplier_id, contact_person, status,
+                       implementation_date, payment_scheduled_date, notes
+                FROM expenses_order WHERE project_id = ?
+            """, (project_id,))
+
+            expenses = cursor.fetchall()
+            for expense in expenses:
+                cursor.execute("""
+                    INSERT INTO expenses_order (
+                        project_id, item_name, amount, supplier_id, contact_person,
+                        status, implementation_date, payment_scheduled_date, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    new_project_id,
+                    expense[0],  # item_name
+                    expense[1],  # amount
+                    expense[2],  # supplier_id
+                    expense[3],  # contact_person
+                    expense[4],  # status
+                    expense[5],  # implementation_date
+                    expense[6],  # payment_scheduled_date
+                    expense[7],  # notes
+                ))
+
+            conn.commit()
+            log_message(f"案件複製完了: 元ID={project_id}, 新ID={new_project_id}, 費用項目={len(expenses)}件")
+            return new_project_id
+
+        except Exception as e:
+            conn.rollback()
+            log_message(f"案件複製エラー: {e}")
+            raise
         finally:
             conn.close()
 
