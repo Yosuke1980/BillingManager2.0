@@ -50,6 +50,7 @@ class AppConfig:
         'master': '費用マスター',
         'project_filter': '案件絞込み・管理',
         'monitoring': '📁 ファイル監視',
+        'order_management': '📦 発注管理',
     }
 
     # UI設定

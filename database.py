@@ -195,6 +195,113 @@ class DatabaseManager:
         # 支払い先マスターデータベースを初期化
         self.init_payee_master_db()
 
+        # 発注管理用テーブルを初期化
+        self._create_order_management_tables()
+
+    def _create_order_management_tables(self):
+        """発注管理用の新規テーブルを作成"""
+        # 発注管理専用DBファイルを使用
+        order_db = "order_management.db"
+        conn = sqlite3.connect(order_db)
+        cursor = conn.cursor()
+
+        try:
+            # 1. 発注先マスターテーブル
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS suppliers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    contact_person TEXT,
+                    email TEXT,
+                    phone TEXT,
+                    address TEXT,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 2. 案件マスターテーブル
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS projects (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    date DATE NOT NULL,
+                    type TEXT NOT NULL,
+                    budget REAL DEFAULT 0,
+                    parent_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (parent_id) REFERENCES projects(id)
+                )
+            """)
+
+            # 3. 費用項目テーブル
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS expenses_order (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project_id INTEGER NOT NULL,
+                    item_name TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    supplier_id INTEGER,
+                    contact_person TEXT,
+                    status TEXT DEFAULT '発注予定',
+                    order_number TEXT UNIQUE,
+                    order_date DATE,
+                    implementation_date DATE,
+                    invoice_received_date DATE,
+                    payment_scheduled_date DATE,
+                    payment_date DATE,
+                    gmail_draft_id TEXT,
+                    gmail_message_id TEXT,
+                    email_sent_at TIMESTAMP,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (project_id) REFERENCES projects(id),
+                    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+                )
+            """)
+
+            # 4. 発注履歴テーブル
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS order_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    expense_id INTEGER NOT NULL,
+                    order_number TEXT NOT NULL,
+                    email_subject TEXT,
+                    email_body TEXT,
+                    sent_to TEXT,
+                    gmail_draft_id TEXT,
+                    gmail_message_id TEXT,
+                    sent_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (expense_id) REFERENCES expenses_order(id)
+                )
+            """)
+
+            # 5. ステータス履歴テーブル
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS status_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    expense_id INTEGER NOT NULL,
+                    old_status TEXT,
+                    new_status TEXT,
+                    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT,
+                    FOREIGN KEY (expense_id) REFERENCES expenses_order(id)
+                )
+            """)
+
+            conn.commit()
+            log_message("発注管理用テーブルを初期化しました")
+
+        except sqlite3.Error as e:
+            log_message(f"発注管理テーブル作成エラー: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+
     def init_payee_master_db(self):
         """支払い先マスターデータベースの初期化"""
         conn = sqlite3.connect(self.payee_master_db)

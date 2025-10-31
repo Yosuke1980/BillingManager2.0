@@ -27,6 +27,7 @@ from expense_tab import ExpenseTab
 from master_tab import MasterTab
 from project_filter_tab import ProjectFilterTab
 from monitoring_tab import MonitoringTab
+from order_management_tab import OrderManagementTab
 from utils import get_latest_csv_file, log_message
 
 
@@ -146,6 +147,10 @@ class RadioBillingApp(QMainWindow):
         # 監視機能タブ
         self.monitoring_tab = MonitoringTab()
         tab_control.addTab(self.monitoring_tab, self.config.TAB_NAMES['monitoring'])
+
+        # 発注管理タブ
+        self.order_management_tab = OrderManagementTab(tab_control, self)
+        tab_control.addTab(self.order_management_tab, self.config.TAB_NAMES['order_management'])
 
     def _load_initial_data(self):
         """初期データの読み込み"""
