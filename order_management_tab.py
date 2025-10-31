@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 from PyQt5.QtCore import Qt
 from order_management.ui.projects_main_widget import ProjectsMainWidget
 from order_management.ui.supplier_master_widget import SupplierMasterWidget
+from order_management.ui.partner_master_widget import PartnerMasterWidget
 from order_management.ui.settings_widget import SettingsWidget
 
 
@@ -27,14 +28,18 @@ class OrderManagementTab(QWidget):
         # 案件一覧タブ
         self.projects_widget = ProjectsMainWidget()
 
-        # 発注先マスタータブ
+        # 統合取引先マスタータブ（Phase 6）
+        self.partner_widget = PartnerMasterWidget()
+
+        # 発注先マスタータブ（旧版・参考用）
         self.supplier_widget = SupplierMasterWidget()
 
         # 設定タブ
         self.settings_widget = SettingsWidget()
 
         self.sub_tabs.addTab(self.projects_widget, "案件一覧")
-        self.sub_tabs.addTab(self.supplier_widget, "発注先マスター")
+        self.sub_tabs.addTab(self.partner_widget, "取引先マスター")
+        self.sub_tabs.addTab(self.supplier_widget, "発注先マスター（旧）")
         self.sub_tabs.addTab(self.settings_widget, "設定")
 
         # タブ切り替え時にデータを更新
