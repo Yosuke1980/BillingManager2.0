@@ -25,7 +25,6 @@ from database import DatabaseManager
 from payment_tab import PaymentTab
 from expense_tab import ExpenseTab
 from master_tab import MasterTab
-from monitoring_tab import MonitoringTab
 from order_management_tab import OrderManagementTab
 from utils import get_latest_csv_file, log_message
 
@@ -138,10 +137,6 @@ class RadioBillingApp(QMainWindow):
         # 費用マスタータブ
         self.master_tab = MasterTab(tab_control, self)
         tab_control.addTab(self.master_tab, self.config.TAB_NAMES['master'])
-
-        # 監視機能タブ
-        self.monitoring_tab = MonitoringTab()
-        tab_control.addTab(self.monitoring_tab, self.config.TAB_NAMES['monitoring'])
 
         # 発注管理タブ
         self.order_management_tab = OrderManagementTab(tab_control, self)

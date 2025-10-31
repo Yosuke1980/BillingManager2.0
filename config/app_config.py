@@ -48,7 +48,6 @@ class AppConfig:
         'payment': '支払い情報 (閲覧専用)',
         'expense': '費用管理',
         'master': '費用マスター',
-        'monitoring': 'ファイル監視',
         'order_management': '発注管理',
     }
 
