@@ -152,6 +152,69 @@
 
 ---
 
+### 2.9 取引先マスタの統合 🔄 **今後実装予定**
+
+#### 2.9.1 背景と現状の問題
+**現状:**
+- **支払先マスタ** (`payee_master.db`): 既存の支払い管理機能で使用
+- **発注先マスタ** (`suppliers` in `order_management.db`): 発注管理機能で使用
+
+**問題点:**
+1. **データ重複**: 同じ取引先を両マスタに登録する必要がある
+2. **メンテナンス性低下**: 取引先情報の更新時に2箇所を修正する必要がある
+3. **整合性リスク**: 片方だけ更新されて情報が不一致になる可能性
+4. **ユーザビリティ**: どちらのマスタを使うべきか混乱する
+
+#### 2.9.2 統合マスタの設計
+
+**新マスタ名:** 取引先マスタ (`partners`)
+
+**管理項目:**
+- 取引先ID (自動採番)
+- 取引先名 (会社名/個人名)
+- 取引先コード (既存の支払先コードを継承)
+- 担当者名
+- メールアドレス
+- 電話番号
+- 住所
+- 取引先区分 (発注先/支払先/両方) ← 新規フィールド
+- 備考
+- 作成日時・更新日時
+
+**統合によるメリット:**
+1. **データ一元管理**: 取引先情報を1箇所で管理
+2. **情報の整合性**: 更新時の不一致を防止
+3. **業務効率化**: マスタメンテナンスの工数削減
+4. **拡張性**: 将来的な取引先情報の拡張が容易
+5. **ユーザビリティ**: マスタ選択の混乱を解消
+
+#### 2.9.3 マイグレーション方針
+
+**Phase 1: データ統合**
+1. 新テーブル `partners` を作成
+2. 既存の `payee_master` データを移行
+3. 既存の `suppliers` データを移行
+4. 重複データの統合処理
+
+**Phase 2: 参照先変更**
+1. 支払い管理機能を `partners` 参照に変更
+2. 発注管理機能を `partners` 参照に変更
+3. 既存のコードとの互換性維持
+
+**Phase 3: 旧マスタの廃止**
+1. 旧テーブルをバックアップ
+2. 旧テーブルの参照がないことを確認
+3. 旧テーブルの削除（オプション）
+
+#### 2.9.4 後方互換性
+
+**移行期間中の対応:**
+- 旧マスタへの参照も当面は維持
+- データは新マスタに同期
+- 段階的な切り替えを実施
+
+---
+
 ### 2.4 費用項目管理
 
 #### 2.4.1 費用項目情報
@@ -329,7 +392,35 @@
 
 ### 3.1 新規テーブル
 
-#### 3.1.1 suppliers (発注先マスタ)
+#### 3.1.1 partners (統合取引先マスタ) 🔄 **今後実装予定**
+```sql
+CREATE TABLE partners (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,                             -- 取引先名
+    code TEXT UNIQUE,                               -- 取引先コード（支払先コード継承）
+    contact_person TEXT,                            -- 担当者名
+    email TEXT,                                     -- メールアドレス
+    phone TEXT,                                     -- 電話番号
+    address TEXT,                                   -- 住所
+    partner_type TEXT DEFAULT '両方',               -- 取引先区分（発注先/支払先/両方）
+    notes TEXT,                                     -- 備考
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**フィールド詳細:**
+- `partner_type`: 取引先の用途を明示
+  - `発注先`: 発注管理でのみ使用
+  - `支払先`: 支払い管理でのみ使用
+  - `両方`: 両方の機能で使用（デフォルト）
+
+**マイグレーション:**
+1. 既存の `payee_master` から `partners` へデータ移行（`partner_type='支払先'`）
+2. 既存の `suppliers` から `partners` へデータ移行（`partner_type='発注先'`）
+3. 名前が一致する取引先を統合（`partner_type='両方'`）
+
+#### 3.1.2 suppliers (発注先マスタ) ✅ **実装済み（統合予定）**
 ```sql
 CREATE TABLE suppliers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -344,7 +435,9 @@ CREATE TABLE suppliers (
 );
 ```
 
-#### 3.1.2 projects (案件マスタ) ✅ **実装済み（拡張済み）**
+**注記:** 将来的に `partners` テーブルに統合予定
+
+#### 3.1.3 projects (案件マスタ) ✅ **実装済み（拡張済み）**
 ```sql
 CREATE TABLE projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -366,7 +459,7 @@ CREATE TABLE projects (
 - `ALTER TABLE` を使用した安全なスキーマ更新
 - アプリケーション起動時に自動実行
 
-#### 3.1.3 expenses (費用項目)
+#### 3.1.4 expenses_order (費用項目)
 ```sql
 CREATE TABLE expenses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -393,7 +486,7 @@ CREATE TABLE expenses (
 );
 ```
 
-#### 3.1.4 order_history (発注履歴)
+#### 3.1.5 order_history (発注履歴)
 ```sql
 CREATE TABLE order_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -410,7 +503,7 @@ CREATE TABLE order_history (
 );
 ```
 
-#### 3.1.5 status_history (ステータス履歴)
+#### 3.1.6 status_history (ステータス履歴)
 ```sql
 CREATE TABLE status_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -597,6 +690,22 @@ TAB_NAMES = {
   - 確認ダイアログ
   - 自動命名（コピー接尾辞）
 
+### Phase 6: 取引先マスタ統合 🔄 **今後実装予定**
+- 新テーブル `partners` の作成
+- データマイグレーション
+  - `payee_master` からのデータ移行
+  - `suppliers` からのデータ移行
+  - 重複取引先の統合処理
+- 既存機能の参照先変更
+  - 支払い管理機能の修正
+  - 発注管理機能の修正
+- UI統合
+  - 統合取引先マスタ画面の作成
+  - 取引先区分による表示切り替え
+- 後方互換性の確保
+  - 旧マスタデータの同期
+  - 段階的な移行サポート
+
 ---
 
 ## 7. 実装済み機能の詳細
@@ -677,26 +786,27 @@ BillingManager2.0/
 ├── database.py                     # DB管理（テーブル追加メソッド追加）
 ├── config.py                       # 設定（Gmail設定追加）
 │
-├── order_management_tab.py         # NEW: 発注管理タブのメインクラス
-├── order_management/               # NEW: 発注管理モジュール
+├── order_management_tab.py         # ✅ 発注管理タブのメインクラス
+├── order_management/               # ✅ 発注管理モジュール
 │   ├── __init__.py
-│   ├── models.py                   # データモデル
-│   ├── database_manager.py         # 発注管理用DB操作
-│   ├── gmail_manager.py            # Gmail IMAP連携
-│   ├── email_template.py           # メールテンプレート
-│   ├── order_number_generator.py   # 発注番号生成
-│   ├── alert_manager.py            # アラート機能
+│   ├── models.py                   # ✅ データモデル
+│   ├── database_manager.py         # ✅ 発注管理用DB操作
+│   ├── gmail_manager.py            # ✅ Gmail IMAP連携
+│   ├── email_template.py           # ✅ メールテンプレート
+│   ├── order_number_generator.py   # ✅ 発注番号生成
+│   ├── alert_manager.py            # ✅ アラート機能
 │   │
-│   ├── ui/                         # UI関連
+│   ├── ui/                         # ✅ UI関連
 │   │   ├── __init__.py
-│   │   ├── project_list_widget.py
-│   │   ├── project_tree_widget.py
-│   │   ├── supplier_master_widget.py
-│   │   ├── expense_edit_dialog.py
-│   │   ├── project_edit_dialog.py
-│   │   ├── supplier_edit_dialog.py
-│   │   ├── gmail_settings_dialog.py
-│   │   └── alert_widget.py
+│   │   ├── project_list_widget.py  # ✅ 案件一覧（複製機能含む）
+│   │   ├── project_tree_widget.py  # ✅ ツリービュー
+│   │   ├── supplier_master_widget.py # ✅ 発注先マスタ
+│   │   ├── expense_edit_dialog.py  # ✅ 費用項目編集
+│   │   ├── project_edit_dialog.py  # ✅ 案件編集（条件付き日付）
+│   │   ├── supplier_edit_dialog.py # ✅ 発注先編集
+│   │   ├── gmail_settings_dialog.py # ✅ Gmail設定
+│   │   ├── alert_widget.py         # ✅ アラート表示
+│   │   └── settings_widget.py      # ✅ 設定ウィジェット
 │   │
 │   └── utils/                      # ユーティリティ
 │       ├── __init__.py
@@ -704,8 +814,16 @@ BillingManager2.0/
 │       ├── format_utils.py
 │       └── validation.py
 │
+├── partner_master.db               # 🔄 統合取引先マスタDB（Phase 6で実装予定）
+├── partner_manager.py              # 🔄 統合マスタ管理（Phase 6で実装予定）
+│
+├── test_project_dates.py           # ✅ 日付機能・複製機能テスト
 └── requirements_order_management.md # この要件定義書
 ```
+
+**凡例:**
+- ✅: 実装済み
+- 🔄: 今後実装予定（Phase 6）
 
 ---
 
