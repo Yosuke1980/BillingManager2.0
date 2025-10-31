@@ -2,8 +2,9 @@
 
 発注管理機能のメインタブです。
 """
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 from PyQt5.QtCore import Qt
+from order_management.ui.projects_main_widget import ProjectsMainWidget
 from order_management.ui.supplier_master_widget import SupplierMasterWidget
 from order_management.ui.settings_widget import SettingsWidget
 
@@ -23,18 +24,8 @@ class OrderManagementTab(QWidget):
         # サブタブ
         self.sub_tabs = QTabWidget()
 
-        # 案件一覧タブ（Phase 3で実装予定）
-        projects_widget = QWidget()
-        projects_layout = QVBoxLayout(projects_widget)
-        info_label = QLabel(
-            "案件一覧機能はPhase 3で実装予定です。\n\n"
-            "現在利用可能な機能:\n"
-            "• 発注先マスター: 発注先の登録・編集・削除\n"
-            "• 設定: Gmail連携の設定"
-        )
-        info_label.setStyleSheet("color: #666; padding: 20px; font-size: 12px;")
-        projects_layout.addWidget(info_label)
-        projects_layout.addStretch()
+        # 案件一覧タブ
+        self.projects_widget = ProjectsMainWidget()
 
         # 発注先マスタータブ
         self.supplier_widget = SupplierMasterWidget()
@@ -42,8 +33,16 @@ class OrderManagementTab(QWidget):
         # 設定タブ
         self.settings_widget = SettingsWidget()
 
-        self.sub_tabs.addTab(projects_widget, "案件一覧")
+        self.sub_tabs.addTab(self.projects_widget, "案件一覧")
         self.sub_tabs.addTab(self.supplier_widget, "発注先マスター")
         self.sub_tabs.addTab(self.settings_widget, "設定")
 
+        # タブ切り替え時にデータを更新
+        self.sub_tabs.currentChanged.connect(self.on_tab_changed)
+
         layout.addWidget(self.sub_tabs)
+
+    def on_tab_changed(self, index):
+        """タブ切り替え時の処理"""
+        if index == 0:  # 案件一覧タブ
+            self.projects_widget.refresh_all()
