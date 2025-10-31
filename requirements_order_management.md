@@ -36,677 +36,75 @@
 
 ---
 
-## 2. 機能要件
+## 追加の要件: 取引先マスタの統合
 
-### 2.1 発注管理の基本構造
+### 概要
+- **目的**: 発注先マスタと支払い先マスタを統合し、「取引先マスタ」として一元管理。
+- **効果**: データの重複排除、業務効率化、データ整合性の向上。
 
-#### 2.1.1 階層構造
-```
-番組/イベント (レベル1: Project)
-└─ コーナー (レベル2: Sub-Project) ※任意
-   └─ 費用項目 (レベル3: Expense)
-```
+### 機能要件
 
-**例:**
-```
-番組A
-├─ A出演料
-├─ 制作費
-└─ コーナーB
-    ├─ コーナーB制作費
-    └─ コーナーB、p出演料
+#### 取引先マスタ管理
+- **管理項目**:
+  - 取引先ID (自動採番)
+  - 取引先名 (会社名/個人名、ユニーク)
+  - 取引先コード (ユニーク、発注先コードや支払い先コードとして使用)
+  - 取引種別: 発注先/支払い先/両方
+  - 担当者名
+  - メールアドレス
+  - 電話番号
+  - 住所
+  - 備考
+  - 登録日
+  - 更新日
 
-夏休みイベント (単発)
-├─ 伊藤出演料: 10,000円
-├─ 加藤出演料: 20,000円
-└─ 制作費: 100,000円
-```
+- **機能**:
+  - 取引先の登録・編集・削除。
+  - 発注先/支払い先/両方のフィルタリング表示。
+  - 重複チェック機能 (取引先名・コードのユニーク性を保証)。
+  - 費用項目作成時に取引先を選択。
+  - 検索機能 (取引先名、取引先コード、担当者名で検索可能)。
 
-#### 2.1.2 案件タイプ
-- **レギュラー**: 継続的な番組
-- **単発**: イベント、ゲスト出演、取材費、公開収録など
+#### 費用項目管理
+- 費用項目に紐付く「取引先」を「取引先ID」で管理。
+- 費用項目の作成・編集時、取引先を選択可能。
 
-#### 2.1.3 役務の管理
-- 同じ発注先が複数の案件に登場する場合、案件ごとに別管理
-- 発注先マスタから選択して費用項目を作成
+#### 案件管理
+- 案件情報に紐付く発注先を「取引先ID」で管理。
+- 案件編集時、取引先を検索・選択可能。
 
----
+### データベース設計
 
-### 2.2 発注先マスタ管理
-
-#### 2.2.1 管理項目
-- 発注先ID (自動採番)
-- 発注先名 (会社名/個人名)
-- 担当者名
-- メールアドレス
-- 電話番号
-- 住所
-- 備考
-
-#### 2.2.2 機能
-- 発注先の登録・編集・削除
-- 一覧表示・検索
-- 費用項目作成時に選択可能
-
----
-
-### 2.3 案件管理
-
-#### 2.3.1 案件情報
-- 案件ID (自動採番)
-- 案件名
-- 実施日 (単発案件の場合)
-- 開始日・終了日 (レギュラー案件の場合) ✅ **実装済み**
-- 案件タイプ (レギュラー/単発)
-- 予算額
-- 親案件ID (階層構造用)
-- 作成日時・更新日時
-
-#### 2.3.2 予算管理
-- 案件ごとに予算を設定
-- 費用項目の合計が実績
-- 予算 vs 実績の比較表示
-- 残予算の自動計算
-- 予算超過時の警告表示
-
-#### 2.3.3 レギュラー案件の日付管理 ✅ **実装済み**
-**目的:** レギュラー案件は継続的な番組のため、期間（開始日〜終了日）で管理する必要がある。
-
-**仕様:**
-- レギュラー案件には `start_date`（開始日）と `end_date`（終了日）を設定
-- 単発案件には `date`（実施日）のみを設定
-- 案件編集ダイアログでは、タイプに応じて表示フィールドを動的に切り替え
-  - レギュラー選択時: 「開始日」「終了日」フィールドを表示
-  - 単発選択時: 「実施日」フィールドのみ表示
-- 案件一覧での日付表示形式
-  - レギュラー案件: `2025-04-01 ～ 2025-09-30`
-  - 単発案件: `2025-08-09`
-
-**技術実装:**
-- データベースに `start_date` と `end_date` カラムを追加
-- 既存データベースへの自動マイグレーション対応
-- PyQt5 の動的レイアウト変更で条件付きUI実現
-
-#### 2.3.4 案件複製機能 ✅ **実装済み**
-**目的:** 類似案件を効率的に作成するため、既存案件を複製可能にする。
-
-**仕様:**
-- 案件一覧に「複製」ボタンを配置
-- 複製時の確認ダイアログを表示
-- 複製される内容:
-  - 案件名（末尾に「（コピー）」を自動追加）
-  - 案件タイプ（レギュラー/単発）
-  - 予算額
-  - 日付（実施日/開始日/終了日）
-  - 関連するすべての費用項目
-- 複製されない内容:
-  - 案件ID（新規採番）
-  - 作成日時・更新日時（新規作成時刻）
-  - 費用項目のステータス（すべて「発注予定」にリセット）
-  - 発注番号（クリア）
-
-**ユースケース例:**
-1. 月次レギュラー案件の次月分作成
-2. 同じ出演者構成のイベント案件作成
-3. 定期イベントのテンプレート化
-
----
-
-### 2.4 費用項目管理
-
-#### 2.4.1 費用項目情報
-- 費用項目ID (自動採番)
-- 案件ID (親案件への紐付け)
-- 項目名 (例: 伊藤出演料)
-- 金額
-- 発注先ID (マスタから選択)
-- 担当者 (発注先の担当者)
-- ステータス
-- 発注番号
-- 各種日付 (発注日、実施日、請求書受領日、支払予定日、支払日)
-- Gmail関連情報
-- 備考
-
-#### 2.4.2 ステータス管理
-```
-1. 発注予定
-   ↓
-2. 下書き作成済
-   ↓ (Gmail送信ボックスで自動検知)
-3. 発注済
-   ↓
-4. 実施済
-   ↓ (実施日翌日に自動チェック)
-5. 請求書待ち ⚠️
-   ↓
-6. 請求書受領
-   ↓
-7. 支払済
-```
-
----
-
-### 2.5 発注メール自動生成機能
-
-#### 2.5.1 発注番号の自動採番
-- 形式: `RB-YYYYMMDD-XXX`
-- 例: `RB-20250809-001`
-- 日付ごとに連番
-- 重複チェック機能
-
-#### 2.5.2 メールテンプレート
-**件名:**
-```
-【発注 {発注番号}】{実施日} {案件名} - {項目名}
-```
-
-**本文:**
-```
-{担当者名}様
-
-お世話になっております。
-
-下記の通り、ご依頼申し上げます。
-
-━━━━━━━━━━━━━━━━━━━━━━
-■発注番号: {発注番号}
-■案件名: {案件名}
-■実施日: {実施日}
-■ご担当: {出演者/作業者名}
-■金額: {金額:,}円
-━━━━━━━━━━━━━━━━━━━━━━
-
-■お支払予定日: {支払予定日}
-
-実施後、下記内容を含む請求書をお送りいただけますと幸いです。
-・発注番号: {発注番号}
-・案件名: {案件名}
-・金額: {金額:,}円
-
-何卒よろしくお願いいたします。
-
-────────────────────────
-{署名}
-────────────────────────
-```
-
-#### 2.5.3 変数の自動置換
-- 発注先マスタから担当者名を取得
-- 案件情報から案件名・実施日を取得
-- 費用項目から金額・項目名を取得
-- 設定ファイルから署名を取得
-
----
-
-### 2.6 Gmail連携機能
-
-#### 2.6.1 使用プロトコル
-- **IMAP**: Gmail接続
-- **対象**: Google Workspace アカウント
-- **認証**: メールアドレス + アプリパスワード
-
-#### 2.6.2 下書き作成機能
-1. ユーザーが「発注メール作成」ボタンをクリック
-2. メールテンプレートに情報を埋め込み
-3. IMAPでGmail [Gmail]/Drafts に下書き保存
-4. 下書きIDをDBに記録
-5. ステータスを「下書き作成済」に更新
-6. (オプション) ブラウザでGmail下書きを開く
-
-#### 2.6.3 送信確認機能
-**トリガー:**
-- アプリ起動時
-- 発注管理タブを開いたとき
-- 手動チェックボタンクリック時
-
-**処理フロー:**
-1. IMAPでGmail [Gmail]/Sent Mail フォルダに接続
-2. 「下書き作成済」または「発注済」でない項目の発注番号でメール検索
-3. 件名に発注番号を含むメールが見つかった場合:
-   - ステータスを「発注済」に更新
-   - 送信日時を記録
-   - 送信先メールアドレスを記録
-   - order_historyに履歴を保存
-
-#### 2.6.4 Gmail設定
-- 初回起動時または設定画面で入力
-- メールアドレス
-- アプリパスワード
-- 署名
-- 設定ファイル (config.py) に保存
-
----
-
-### 2.7 アラート機能
-
-#### 2.7.1 請求書未着アラート
-**条件:**
-- ステータスが「実施済」または「請求書待ち」
-- 実施日の翌日を過ぎている
-- 請求書受領日が未設定
-
-**表示:**
-```
-⚠️ 請求書未着: 3件
-- 8/9 夏休みイベント - 伊藤出演料 (伊藤事務所/田中)
-- 8/10 番組A - ゲスト佐藤出演料 (佐藤プロ/山田)
-```
-
-#### 2.7.2 下書き未送信アラート
-**条件:**
-- ステータスが「下書き作成済」
-- 下書き作成から24時間以上経過
-
-**表示:**
-```
-📧 下書き未送信: 2件
-- 8/15 番組B - 加藤出演料 (加藤プロ/山田)
-```
-
-#### 2.7.3 アラート表示位置
-- 発注管理タブの上部に常時表示
-- 該当項目がある場合のみ表示
-- クリックで該当項目にジャンプ
-
----
-
-### 2.8 履歴管理
-
-#### 2.8.1 発注履歴 (order_history)
-- 発注番号ごとの履歴
-- メール件名・本文の記録
-- 送信日時・送信先の記録
-- Gmail下書きID・メッセージIDの記録
-
-#### 2.8.2 ステータス履歴 (status_history)
-- ステータス変更の履歴
-- 変更日時の記録
-- 備考の記録
-
----
-
-## 3. データベース設計
-
-### 3.1 新規テーブル
-
-#### 3.1.1 suppliers (発注先マスタ)
+#### 新規テーブル: `trading_partners` (取引先マスタ)
 ```sql
-CREATE TABLE suppliers (
+CREATE TABLE trading_partners (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,                             -- 発注先名
-    contact_person TEXT,                            -- 担当者名
-    email TEXT,                                     -- メールアドレス
-    phone TEXT,                                     -- 電話番号
-    address TEXT,                                   -- 住所
-    notes TEXT,                                     -- 備考
+    name TEXT NOT NULL UNIQUE,                     -- 取引先名
+    code TEXT NOT NULL UNIQUE,                     -- 取引先コード
+    type TEXT NOT NULL,                            -- 種別（発注先、支払い先、両方）
+    contact_person TEXT,                           -- 担当者名
+    email TEXT,                                    -- メールアドレス
+    phone TEXT,                                    -- 電話番号
+    address TEXT,                                  -- 住所
+    notes TEXT,                                    -- 備考
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-#### 3.1.2 projects (案件マスタ) ✅ **実装済み（拡張済み）**
-```sql
-CREATE TABLE projects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,                             -- 案件名
-    date DATE NOT NULL,                             -- 実施日（単発案件用）
-    type TEXT NOT NULL,                             -- レギュラー/単発
-    budget REAL DEFAULT 0,                          -- 予算額
-    parent_id INTEGER,                              -- 親案件ID (階層用)
-    start_date DATE,                                -- 開始日（レギュラー案件用）✅ 追加
-    end_date DATE,                                  -- 終了日（レギュラー案件用）✅ 追加
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (parent_id) REFERENCES projects(id)
-);
-```
+### UI設計
 
-**マイグレーション対応:**
-- 既存のテーブルに対して自動的に `start_date` と `end_date` カラムを追加
-- `ALTER TABLE` を使用した安全なスキーマ更新
-- アプリケーション起動時に自動実行
+#### 発注管理タブ
+- **サブタブ「取引先マスタ」**:
+  - 取引先一覧表示。
+  - 取引先の新規登録ボタン。
+  - 編集・削除機能。
 
-#### 3.1.3 expenses (費用項目)
-```sql
-CREATE TABLE expenses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER NOT NULL,                    -- 案件ID
-    item_name TEXT NOT NULL,                        -- 項目名
-    amount REAL NOT NULL,                           -- 金額
-    supplier_id INTEGER,                            -- 発注先ID
-    contact_person TEXT,                            -- 担当者
-    status TEXT DEFAULT '発注予定',                 -- ステータス
-    order_number TEXT UNIQUE,                       -- 発注番号
-    order_date DATE,                                -- 発注日
-    implementation_date DATE,                       -- 実施日
-    invoice_received_date DATE,                     -- 請求書受領日
-    payment_scheduled_date DATE,                    -- 支払予定日
-    payment_date DATE,                              -- 支払日
-    gmail_draft_id TEXT,                            -- Gmail下書きID
-    gmail_message_id TEXT,                          -- 送信後のメッセージID
-    email_sent_at TIMESTAMP,                        -- 実際の送信日時
-    notes TEXT,                                     -- 備考
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (project_id) REFERENCES projects(id),
-    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
-);
-```
-
-#### 3.1.4 order_history (発注履歴)
-```sql
-CREATE TABLE order_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    expense_id INTEGER NOT NULL,                    -- 費用項目ID
-    order_number TEXT NOT NULL,                     -- 発注番号
-    email_subject TEXT,                             -- メール件名
-    email_body TEXT,                                -- メール本文
-    sent_to TEXT,                                   -- 送信先
-    gmail_draft_id TEXT,                            -- Gmail下書きID
-    gmail_message_id TEXT,                          -- 送信後のメッセージID
-    sent_at TIMESTAMP,                              -- 送信日時
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (expense_id) REFERENCES expenses(id)
-);
-```
-
-#### 3.1.5 status_history (ステータス履歴)
-```sql
-CREATE TABLE status_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    expense_id INTEGER NOT NULL,                    -- 費用項目ID
-    old_status TEXT,                                -- 旧ステータス
-    new_status TEXT,                                -- 新ステータス
-    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    notes TEXT,                                     -- 備考
-    FOREIGN KEY (expense_id) REFERENCES expenses(id)
-);
-```
-
-### 3.2 既存データベースとの関係
-- **既存テーブルは変更しない**
-- **新規テーブルのみ追加**
-- 将来的に既存の費用管理と統合する場合は、データ移行スクリプトを別途作成
+#### 費用項目・案件編集画面
+- **取引先選択フィールド**:
+  - ドロップダウン形式で取引先を選択。
+  - 検索ボックスで取引先を検索可能。
 
 ---
 
-## 4. UI設計
-
-### 4.1 タブ構成
-
-#### 4.1.1 既存タブ (変更なし)
-- 支払い
-- 費用管理
-- 費用マスター
-- 案件絞込み
-- 監視機能
-
-#### 4.1.2 新規タブ
-- **発注管理** ← NEW!
-
-### 4.2 発注管理タブの構成
-
-#### 4.2.1 サブタブ
-```
-[案件一覧] [発注先マスタ] [設定]
-```
-
-#### 4.2.2 案件一覧画面レイアウト ✅ **実装済み（拡張済み）**
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 🚨 アラート: 請求書未着 3件 / 📧 下書き未送信 2件              │
-│ • 8/9 夏休みイベント - 伊藤出演料 [詳細へ]                     │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─ フィルター ────────────────────────────────────────────────────┐
-│ タイプ: [全て ▼]                                                │
-│ [新規案件] [編集] [複製] ✅ [削除] [費用項目追加]               │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─ 案件リスト ────────────────────────────────────────────────────┐
-│ 日付                      │案件名          │タイプ  │予算    │実績    │残  │
-│ 2025-08-09                │夏休みイベント  │単発    │150,000 │130,000 │20K │
-│ 2025-04-01 ～ 2025-09-30 │番組A 半期      │レギュラー│500,000 │480,000 │20K │✅
-│ 2025-08-20                │取材費          │単発    │50,000  │0       │50K │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**UI機能拡張:**
-- ✅ 「複製」ボタン追加
-- ✅ 日付表示のタイプ別フォーマット
-  - 単発案件: `YYYY-MM-DD` 形式
-  - レギュラー案件: `YYYY-MM-DD ～ YYYY-MM-DD` 形式
-
-#### 4.2.3 案件詳細ツリービュー
-```
-┌─ 8/9 夏休みイベント (単発) ─────────────────────────┐
-│ 予算: 150,000円 / 実績: 130,000円 / 残: 20,000円   │
-│                                         [費用追加]   │
-├─────────────────────────────────────────────────────┤
-│                                                      │
-│ ├─ 伊藤出演料: 10,000円                            │
-│ │   [請求書待ち⚠️] 実施翌日経過                     │
-│ │   発注先: 伊藤事務所 (担当: 田中)                │
-│ │   発注番号: RB-20250809-001                       │
-│ │   📧 8/5 10:30 送信済                              │
-│ │   [詳細編集] [請求書受領] [履歴表示]             │
-│ │                                                    │
-│ ├─ 加藤出演料: 20,000円                            │
-│ │   [下書き作成済📝]                                │
-│ │   発注先: 加藤プロ (担当: 山田)                  │
-│ │   発注番号: RB-20250809-002                       │
-│ │   📧 [Gmail下書きを開く]                          │
-│ │   [詳細編集] [下書き削除]                        │
-│ │                                                    │
-│ └─ 制作費: 100,000円                               │
-│     [支払済✓]                                       │
-│     発注先: ABC制作 (担当: 鈴木)                   │
-│     発注番号: RB-20250809-003                       │
-│     [詳細表示] [履歴表示]                          │
-│                                                      │
-└─────────────────────────────────────────────────────┘
-```
-
----
-
-## 5. 既存システムとの統合
-
-### 5.1 app.py への追加
-
-#### 5.1.1 インポート追加
-```python
-from order_management_tab import OrderManagementTab
-```
-
-#### 5.1.2 タブ追加 (_add_tabs メソッド)
-```python
-# 発注管理タブ
-self.order_management_tab = OrderManagementTab(tab_control, self)
-tab_control.addTab(self.order_management_tab, '発注管理')
-```
-
-#### 5.1.3 データベース初期化 (DatabaseManager)
-```python
-# database.py の init_db メソッドに追加
-self._create_order_management_tables()
-```
-
-### 5.2 config.py への追加
-
-```python
-# Gmail IMAP設定
-GMAIL_IMAP_SERVER = "imap.gmail.com"
-GMAIL_IMAP_PORT = 993
-GMAIL_SMTP_SERVER = "smtp.gmail.com"
-GMAIL_SMTP_PORT = 587
-
-# ユーザー設定（初回起動時に設定）
-GMAIL_ADDRESS = ""
-GMAIL_APP_PASSWORD = ""
-EMAIL_SIGNATURE = ""
-
-# タブ名追加
-TAB_NAMES = {
-    'payment': '支払い',
-    'expense': '費用管理',
-    'master': '費用マスター',
-    'project_filter': '案件絞込み',
-    'monitoring': '監視機能',
-    'order_management': '発注管理',  # 追加
-}
-```
-
----
-
-## 6. 実装計画と実装状況
-
-### Phase 1: 基礎構築 ✅ **完了**
-- ✅ データベース拡張
-- ✅ 発注先マスタ機能
-- ✅ 基本UI構築
-
-### Phase 2: Gmail連携 ✅ **完了**
-- ✅ Gmail設定機能
-- ✅ メール自動生成
-- ✅ Gmail下書き作成
-- ✅ 送信確認機能
-
-### Phase 3: コア機能 ✅ **完了**
-- ✅ 案件管理
-- ✅ 費用項目管理
-- ✅ ツリービュー
-- ✅ アラート機能
-
-### Phase 4: 予算管理 ⏳ **未実装**
-- 予算設定（基本機能は実装済み）
-- 予算集計（基本機能は実装済み）
-- 表示機能（基本機能は実装済み）
-
-### Phase 5: テスト・調整 ⏳ **未実装**
-- 統合テスト
-- パフォーマンス調整
-- ドキュメント作成
-
-### 追加実装済み機能 ✅ **完了**
-- ✅ レギュラー案件の日付管理（開始日・終了日）
-  - データベースマイグレーション
-  - 条件付きUI実装
-  - タイプ別日付表示
-- ✅ 案件複製機能
-  - 費用項目含む完全コピー
-  - 確認ダイアログ
-  - 自動命名（コピー接尾辞）
-
----
-
-## 7. 実装済み機能の詳細
-
-### 7.1 データベース層
-**実装ファイル:**
-- `database.py`: テーブル定義と自動マイグレーション
-- `order_management/database_manager.py`: CRUD操作
-
-**主要メソッド:**
-- `get_suppliers()`: 発注先一覧取得
-- `save_supplier()`: 発注先保存
-- `get_projects()`: 案件一覧取得
-- `save_project()`: 案件保存（開始日・終了日対応）
-- `duplicate_project()`: 案件複製（費用項目含む）✅
-- `get_expenses_by_project()`: 案件別費用項目取得
-- `save_expense_order()`: 費用項目保存
-- `get_project_summary()`: 予算・実績集計
-
-### 7.2 Gmail連携層
-**実装ファイル:**
-- `order_management/gmail_manager.py`: IMAP接続・下書き作成・送信確認
-- `order_management/email_template.py`: メールテンプレート生成
-- `order_management/order_number_generator.py`: 発注番号自動採番
-
-**主要機能:**
-- Gmail IMAP接続（アプリパスワード認証）
-- 下書きメール作成
-- 送信済みメール検索
-- 発注番号自動生成（RB-YYYYMMDD-XXX形式）
-
-### 7.3 UI層
-**実装ファイル:**
-- `order_management_tab.py`: メインタブ
-- `order_management/ui/project_list_widget.py`: 案件一覧（複製ボタン含む）✅
-- `order_management/ui/project_edit_dialog.py`: 案件編集（条件付き日付フィールド）✅
-- `order_management/ui/expense_edit_dialog.py`: 費用項目編集
-- `order_management/ui/project_tree_widget.py`: ツリービュー
-- `order_management/ui/supplier_master_widget.py`: 発注先マスタ
-- `order_management/ui/alert_widget.py`: アラート表示
-- `order_management/ui/settings_widget.py`: Gmail設定
-
-**主要UI機能:**
-- タブ構成（案件一覧・発注先マスタ・設定）
-- 案件フィルタリング（タイプ別）
-- 予算・実績・残予算の表示
-- 条件付き日付フィールド表示✅
-- 案件複製ボタン✅
-- 発注メール下書き作成
-- アラート表示（請求書未着・下書き未送信）
-
-### 7.4 アラート機能
-**実装ファイル:**
-- `order_management/alert_manager.py`: アラート検出ロジック
-
-**アラート種別:**
-- 請求書未着アラート（実施日翌日経過）
-- 下書き未送信アラート（24時間経過）
-
-### 7.5 モデル層
-**実装ファイル:**
-- `order_management/models.py`: データクラス定義
-
-**データクラス:**
-- `Supplier`: 発注先マスタ
-- `Project`: 案件マスタ（start_date/end_date含む）✅
-- `ExpenseOrder`: 費用項目
-- `OrderHistory`: 発注履歴
-- `StatusHistory`: ステータス履歴
-
----
-
-## 8. ファイル構成
-
-```
-BillingManager2.0/
-├── app.py                          # メインアプリ（タブ追加のみ）
-├── database.py                     # DB管理（テーブル追加メソッド追加）
-├── config.py                       # 設定（Gmail設定追加）
-│
-├── order_management_tab.py         # NEW: 発注管理タブのメインクラス
-├── order_management/               # NEW: 発注管理モジュール
-│   ├── __init__.py
-│   ├── models.py                   # データモデル
-│   ├── database_manager.py         # 発注管理用DB操作
-│   ├── gmail_manager.py            # Gmail IMAP連携
-│   ├── email_template.py           # メールテンプレート
-│   ├── order_number_generator.py   # 発注番号生成
-│   ├── alert_manager.py            # アラート機能
-│   │
-│   ├── ui/                         # UI関連
-│   │   ├── __init__.py
-│   │   ├── project_list_widget.py
-│   │   ├── project_tree_widget.py
-│   │   ├── supplier_master_widget.py
-│   │   ├── expense_edit_dialog.py
-│   │   ├── project_edit_dialog.py
-│   │   ├── supplier_edit_dialog.py
-│   │   ├── gmail_settings_dialog.py
-│   │   └── alert_widget.py
-│   │
-│   └── utils/                      # ユーティリティ
-│       ├── __init__.py
-│       ├── date_utils.py
-│       ├── format_utils.py
-│       └── validation.py
-│
-└── requirements_order_management.md # この要件定義書
-```
-
----
-
-**要件定義書 終わり**
+その他の既存の要件については、そのまま維持し、今回の変更が影響を与えないよう注意する。
