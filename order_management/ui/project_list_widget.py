@@ -220,7 +220,7 @@ class ProjectListWidget(QWidget):
             try:
                 self.db.save_project(project_data, is_new=False)
                 self.load_projects()
-                QMessageBox.information(self, "成功", "案件を更新しました")
+                # 成功メッセージは表示しない（煩わしいため）
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"更新に失敗しました: {e}")
 
@@ -286,6 +286,6 @@ class ProjectListWidget(QWidget):
                 self.db.save_expense_order(expense_data, is_new=True)
                 self.load_projects()  # 実績を更新するため
                 self.project_selected.emit(self.current_project_id)  # ツリービュー更新
-                QMessageBox.information(self, "成功", "費用項目を追加しました")
+                # 成功メッセージは表示しない（煩わしいため）
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")

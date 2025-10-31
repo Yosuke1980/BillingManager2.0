@@ -167,7 +167,7 @@ class ProjectTreeWidget(QWidget):
             try:
                 self.db.save_expense_order(expense_data, is_new=False)
                 self.load_project(self.current_project_id)
-                QMessageBox.information(self, "成功", "費用項目を更新しました")
+                # 成功メッセージは表示しない（煩わしいため）
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"更新に失敗しました: {e}")
 
