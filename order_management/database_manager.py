@@ -502,3 +502,261 @@ class OrderManagementDB:
             }
         finally:
             conn.close()
+
+    # ========================================
+    # 番組マスター操作
+    # ========================================
+
+    def get_programs(self, search_term: str = "", status: str = "") -> List[Tuple]:
+        """番組マスター一覧を取得
+
+        Args:
+            search_term: 検索キーワード
+            status: ステータスフィルタ（'放送中' or '終了' or ''）
+
+        Returns:
+            List[Tuple]: (id, name, description, start_date, end_date,
+                         broadcast_time, broadcast_days, status)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT id, name, description, start_date, end_date,
+                       broadcast_time, broadcast_days, status
+                FROM programs
+                WHERE 1=1
+            """
+            params = []
+
+            if search_term:
+                query += " AND name LIKE ?"
+                params.append(f"%{search_term}%")
+
+            if status:
+                query += " AND status = ?"
+                params.append(status)
+
+            query += " ORDER BY name"
+
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_program_by_id(self, program_id: int) -> Optional[Tuple]:
+        """IDで番組を取得
+
+        Returns:
+            Tuple: (id, name, description, start_date, end_date,
+                   broadcast_time, broadcast_days, status, created_at, updated_at)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, name, description, start_date, end_date,
+                       broadcast_time, broadcast_days, status,
+                       created_at, updated_at
+                FROM programs WHERE id = ?
+            """, (program_id,))
+            return cursor.fetchone()
+        finally:
+            conn.close()
+
+    def save_program(self, program_data: dict, is_new: bool = True):
+        """番組を保存
+
+        Args:
+            program_data: 番組データ辞書
+                - name: 番組名（必須）
+                - description: 備考
+                - start_date: 開始日
+                - end_date: 終了日
+                - broadcast_time: 放送時間
+                - broadcast_days: 放送曜日（カンマ区切り）
+                - status: ステータス
+            is_new: 新規登録かどうか
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            now = datetime.now()
+
+            if is_new:
+                cursor.execute("""
+                    INSERT INTO programs (
+                        name, description, start_date, end_date,
+                        broadcast_time, broadcast_days, status,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    program_data['name'],
+                    program_data.get('description', ''),
+                    program_data.get('start_date'),
+                    program_data.get('end_date'),
+                    program_data.get('broadcast_time', ''),
+                    program_data.get('broadcast_days', ''),
+                    program_data.get('status', '放送中'),
+                    now,
+                    now
+                ))
+                program_id = cursor.lastrowid
+            else:
+                cursor.execute("""
+                    UPDATE programs SET
+                        name = ?,
+                        description = ?,
+                        start_date = ?,
+                        end_date = ?,
+                        broadcast_time = ?,
+                        broadcast_days = ?,
+                        status = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """, (
+                    program_data['name'],
+                    program_data.get('description', ''),
+                    program_data.get('start_date'),
+                    program_data.get('end_date'),
+                    program_data.get('broadcast_time', ''),
+                    program_data.get('broadcast_days', ''),
+                    program_data.get('status', '放送中'),
+                    now,
+                    program_data['id']
+                ))
+                program_id = program_data['id']
+
+            conn.commit()
+            return program_id
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def delete_program(self, program_id: int):
+        """番組を削除（関連する出演者・制作会社も削除）"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 関連案件が存在するかチェック
+            cursor.execute("""
+                SELECT COUNT(*) FROM projects WHERE program_id = ?
+            """, (program_id,))
+            count = cursor.fetchone()[0]
+
+            if count > 0:
+                raise Exception(f"この番組には{count}件の案件が関連付けられています。削除できません。")
+
+            # CASCADE削除により出演者・制作会社も自動削除される
+            cursor.execute("DELETE FROM programs WHERE id = ?", (program_id,))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def get_program_cast(self, program_id: int) -> List[Tuple]:
+        """番組の出演者一覧を取得
+
+        Returns:
+            List[Tuple]: (id, program_id, cast_name, role)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, program_id, cast_name, role
+                FROM program_cast
+                WHERE program_id = ?
+                ORDER BY cast_name
+            """, (program_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def save_program_cast(self, program_id: int, cast_list: List[dict]):
+        """番組の出演者を保存（既存データを全削除して再登録）
+
+        Args:
+            program_id: 番組ID
+            cast_list: 出演者リスト [{'cast_name': '名前', 'role': '役割'}, ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 既存の出演者を全削除
+            cursor.execute("DELETE FROM program_cast WHERE program_id = ?", (program_id,))
+
+            # 新しい出演者を登録
+            now = datetime.now()
+            for cast in cast_list:
+                cursor.execute("""
+                    INSERT INTO program_cast (program_id, cast_name, role, created_at)
+                    VALUES (?, ?, ?, ?)
+                """, (program_id, cast['cast_name'], cast.get('role', ''), now))
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def get_program_producers(self, program_id: int) -> List[Tuple]:
+        """番組の制作会社一覧を取得
+
+        Returns:
+            List[Tuple]: (program_producers.id, partner_id, partner_name, partner_code)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT pp.id, pp.partner_id, p.name, p.code
+                FROM program_producers pp
+                INNER JOIN partners p ON pp.partner_id = p.id
+                WHERE pp.program_id = ?
+                ORDER BY p.name
+            """, (program_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def save_program_producers(self, program_id: int, partner_ids: List[int]):
+        """番組の制作会社を保存（既存データを全削除して再登録）
+
+        Args:
+            program_id: 番組ID
+            partner_ids: 取引先IDのリスト
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 既存の制作会社を全削除
+            cursor.execute("DELETE FROM program_producers WHERE program_id = ?", (program_id,))
+
+            # 新しい制作会社を登録
+            now = datetime.now()
+            for partner_id in partner_ids:
+                cursor.execute("""
+                    INSERT INTO program_producers (program_id, partner_id, created_at)
+                    VALUES (?, ?, ?)
+                """, (program_id, partner_id, now))
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
