@@ -114,6 +114,13 @@ class MasterTab(QWidget):
 
         search_layout.addStretch()
 
+        # 発注管理に移行ボタン
+        migrate_button = QPushButton("発注管理に移行")
+        migrate_button.setMinimumSize(self.button_min_width + 30, self.button_min_height)
+        migrate_button.setStyleSheet("background-color: #007bff; color: white; font-weight: bold;")
+        migrate_button.clicked.connect(self.migrate_to_order_management)
+        search_layout.addWidget(migrate_button)
+
         # ツリーウィジェットのフレーム
         tree_frame = QFrame()
         tree_layout = QVBoxLayout(tree_frame)
@@ -1185,11 +1192,74 @@ class MasterTab(QWidget):
             generated_count = self.db_manager.generate_master_from_payments()
             self.refresh_data()
             self.app.status_label.setText(f"マスターデータを{generated_count}件生成しました")
-            QMessageBox.information(self, "マスター生成", 
+            QMessageBox.information(self, "マスター生成",
                                    f"支払いデータからマスターデータを{generated_count}件生成しました。")
         except Exception as e:
             log_message(f"マスター生成エラー: {e}")
             QMessageBox.critical(self, "エラー", f"マスターデータの生成に失敗しました: {e}")
+
+    def migrate_to_order_management(self):
+        """費用マスターを発注管理に移行"""
+        from order_management.migrate_expense_master import ExpenseMasterMigrator
+
+        # 確認ダイアログ
+        reply = QMessageBox.question(
+            self,
+            "発注管理に移行",
+            "費用マスターのデータを発注管理のレギュラー案件として移行します。\n"
+            "この操作により、費用マスターの全データ（約76件）が発注管理に登録されます。\n\n"
+            "移行を実行しますか？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            # 移行実行
+            migrator = ExpenseMasterMigrator()
+            stats = migrator.migrate()
+            log = migrator.get_migration_log()
+
+            # ログをファイルに保存
+            log_file = f"migration_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            with open(log_file, 'w', encoding='utf-8') as f:
+                f.write("\n".join(log))
+
+            # 結果表示
+            result_msg = (
+                f"移行が完了しました\n\n"
+                f"作成された案件: {stats['projects_created']}件\n"
+                f"作成された費用項目: {stats['expenses_created']}件\n"
+                f"取引先マッチング成功: {stats['partners_matched']}件\n"
+                f"取引先未検出: {stats['partners_not_found']}件\n"
+                f"スキップ（既存）: {stats['skipped']}件\n"
+                f"エラー: {stats['errors']}件\n\n"
+                f"詳細ログ: {log_file}"
+            )
+
+            self.app.status_label.setText("発注管理への移行が完了しました")
+            QMessageBox.information(self, "移行完了", result_msg)
+
+            # 発注管理タブに切り替え
+            if hasattr(self.app, 'tab_control'):
+                # 発注管理タブのインデックスを探す
+                for i in range(self.app.tab_control.count()):
+                    if self.app.tab_control.tabText(i) == "発注管理":
+                        self.app.tab_control.setCurrentIndex(i)
+                        # 案件一覧を更新
+                        if hasattr(self.app, 'order_management_tab'):
+                            self.app.order_management_tab.sub_tabs.setCurrentIndex(0)
+                            if hasattr(self.app.order_management_tab, 'projects_widget'):
+                                self.app.order_management_tab.projects_widget.refresh_all()
+                        break
+
+        except Exception as e:
+            log_message(f"移行エラー: {e}")
+            import traceback
+            log_message(traceback.format_exc())
+            QMessageBox.critical(self, "エラー", f"移行に失敗しました:\n{str(e)}")
 
 
 # ファイル終了確認用のコメント - master_tab.py完了
