@@ -82,6 +82,10 @@ class ProjectEditDialog(QDialog):
         """プロジェクトタイプに応じて日付フィールドを更新"""
         is_regular = self.type_combo.currentText() == PROJECT_TYPE_REGULAR
 
+        # 日付ウィジェットの値を保存（削除前に保存する必要がある）
+        date_value = self.date_edit.date()
+        end_date_value = self.end_date_edit.date()
+
         # 既存の日付フィールドを削除
         if self.date_label:
             self.form_layout.removeRow(self.date_label)
@@ -89,10 +93,6 @@ class ProjectEditDialog(QDialog):
         if self.end_date_label:
             self.form_layout.removeRow(self.end_date_label)
             self.end_date_label = None
-
-        # 日付ウィジェットの値を保存
-        date_value = self.date_edit.date()
-        end_date_value = self.end_date_edit.date()
 
         # タイプに応じたフィールドを挿入（予算の前に配置）
         budget_row = self.form_layout.rowCount() - 1
