@@ -85,14 +85,31 @@ class ProjectEditDialog(QDialog):
         # 既存の日付フィールドを削除
         if self.date_label:
             self.form_layout.removeRow(self.date_label)
+            self.date_label = None
         if self.end_date_label:
             self.form_layout.removeRow(self.end_date_label)
+            self.end_date_label = None
+
+        # 日付ウィジェットの値を保存
+        date_value = self.date_edit.date()
+        end_date_value = self.end_date_edit.date()
 
         # タイプに応じたフィールドを挿入（予算の前に配置）
         budget_row = self.form_layout.rowCount() - 1
 
         if is_regular:
             # レギュラー案件: 開始日と終了日
+            # 新しいウィジェットを作成（removeRowで削除されるため）
+            self.date_edit = QDateEdit()
+            self.date_edit.setCalendarPopup(True)
+            self.date_edit.setDate(date_value)
+            self.date_edit.setDisplayFormat("yyyy-MM-dd")
+
+            self.end_date_edit = QDateEdit()
+            self.end_date_edit.setCalendarPopup(True)
+            self.end_date_edit.setDate(end_date_value)
+            self.end_date_edit.setDisplayFormat("yyyy-MM-dd")
+
             self.date_label = QLabel("開始日:")
             self.form_layout.insertRow(budget_row, self.date_label, self.date_edit)
 
@@ -100,6 +117,12 @@ class ProjectEditDialog(QDialog):
             self.form_layout.insertRow(budget_row + 1, self.end_date_label, self.end_date_edit)
         else:
             # 単発案件: 実施日のみ
+            # 新しいウィジェットを作成
+            self.date_edit = QDateEdit()
+            self.date_edit.setCalendarPopup(True)
+            self.date_edit.setDate(date_value)
+            self.date_edit.setDisplayFormat("yyyy-MM-dd")
+
             self.date_label = QLabel("実施日:")
             self.form_layout.insertRow(budget_row, self.date_label, self.date_edit)
             self.end_date_label = None

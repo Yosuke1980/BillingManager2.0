@@ -259,13 +259,17 @@ class ApplicationStyleManager:
                 border: 1px solid #dee2e6;
                 border-bottom: none;
                 border-radius: 4px 4px 0 0;
+                color: #2c3e50;
             }}
             QTabBar::tab:selected {{
                 background-color: white;
                 border-bottom: 1px solid white;
+                color: #000000;
+                font-weight: bold;
             }}
             QTabBar::tab:hover {{
                 background-color: #e9ecef;
+                color: #000000;
             }}
 
             /* フレーム */
