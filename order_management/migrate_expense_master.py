@@ -218,10 +218,9 @@ class ExpenseMasterMigrator:
         Returns:
             int: 作成されたexpense_id
         """
-        # 項目名: "支払先名（コード）"形式
-        item_name = f"{item['payee']}"
-        if item['payee_code']:
-            item_name += f"（{item['payee_code']}）"
+        # 項目名: "費用項目名（取引先名）"形式
+        # 例: "アナウンサー出演料（株式会社圭三プロダクション）"
+        item_name = f"{item['project_name']}（{item['payee']}）"
 
         # 備考欄に元の情報を記録
         notes_parts = []
