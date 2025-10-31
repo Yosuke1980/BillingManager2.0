@@ -59,74 +59,93 @@ class ProjectTreeWidget(QWidget):
         layout.addLayout(button_layout)
 
     def load_project(self, project_id: int):
-        """案件データを読み込み"""
-        self.current_project_id = project_id
+        """案件データを読み込み（単一ID、後方互換性のため残す）"""
+        self.load_projects([project_id])
+
+    def load_projects(self, project_ids: list):
+        """案件データを読み込み（複数ID対応）"""
         self.tree.clear()
 
-        if not project_id:
+        if not project_ids or not project_ids[0]:
             self.header_label.setText("案件を選択してください")
             return
 
-        # 案件情報を取得
-        project = self.db.get_project_by_id(project_id)
-        if not project:
-            return
+        # 最初のIDを保存（既存機能との互換性）
+        self.current_project_id = project_ids[0]
 
-        project_name = project[1]
-        project_date = project[2]
-        budget = project[4]
+        # 複数案件の場合の合計を計算
+        total_budget = 0
+        total_actual = 0
+        total_remaining = 0
+        project_names = []
+        project_dates = []
 
-        # サマリー取得
-        summary = self.db.get_project_summary(project_id)
+        for project_id in project_ids:
+            project = self.db.get_project_by_id(project_id)
+            if project:
+                project_names.append(project[1])
+                project_dates.append(project[2] or "")
 
-        # ヘッダー更新
-        header_text = f"{project_date} {project_name} | "
-        header_text += f"予算: {summary['budget']:,.0f}円 / "
-        header_text += f"実績: {summary['actual']:,.0f}円 / "
-        header_text += f"残: {summary['remaining']:,.0f}円"
+                summary = self.db.get_project_summary(project_id)
+                total_budget += summary['budget']
+                total_actual += summary['actual']
+                total_remaining += summary['remaining']
 
-        if summary['remaining'] < 0:
+        # ヘッダー更新（複数案件対応）
+        if len(project_ids) == 1:
+            # 単一案件の場合
+            header_text = f"{project_dates[0]} {project_names[0]} | "
+        else:
+            # 複数案件の場合
+            header_text = f"{project_names[0]} ({len(project_ids)}件) | "
+
+        header_text += f"予算: {total_budget:,.0f}円 / "
+        header_text += f"実績: {total_actual:,.0f}円 / "
+        header_text += f"残: {total_remaining:,.0f}円"
+
+        if total_remaining < 0:
             header_text += " ⚠️予算超過"
 
         self.header_label.setText(header_text)
 
-        # 費用項目を取得
-        expenses = self.db.get_expenses_by_project(project_id)
+        # 全案件の費用項目を取得して表示
+        for project_id in project_ids:
+            expenses = self.db.get_expenses_by_project(project_id)
 
-        for expense in expenses:
-            expense_id = expense[0]
-            item_name = expense[2]
-            amount = expense[3]
-            status = expense[6]
-            impl_date = expense[8] or ""
+            for expense in expenses:
+                expense_id = expense[0]
+                item_name = expense[2]
+                amount = expense[3]
+                status = expense[6]
+                impl_date = expense[8] or ""
 
-            # ツリーアイテム作成
-            tree_item = QTreeWidgetItem([
-                item_name,
-                f"{amount:,.0f}円",
-                status,
-                impl_date
-            ])
-            tree_item.setData(0, Qt.UserRole, expense_id)
+                # ツリーアイテム作成
+                tree_item = QTreeWidgetItem([
+                    item_name,
+                    f"{amount:,.0f}円",
+                    status,
+                    impl_date
+                ])
+                tree_item.setData(0, Qt.UserRole, expense_id)
 
-            # 全カラムに基本文字色を設定（Mac対応）
-            text_color = QColor("#2c3e50")  # 濃いグレー
-            for col in range(4):  # 4列分
-                tree_item.setForeground(col, text_color)
+                # 全カラムに基本文字色を設定（Mac対応）
+                text_color = QColor("#2c3e50")  # 濃いグレー
+                for col in range(4):  # 4列分
+                    tree_item.setForeground(col, text_color)
 
-            # ステータスに応じて色を変更
-            if status == "発注予定":
-                tree_item.setForeground(2, Qt.gray)
-            elif status == "下書き作成済":
-                tree_item.setForeground(2, Qt.blue)
-            elif status == "発注済":
-                tree_item.setForeground(2, Qt.darkCyan)
-            elif status == "請求書待ち":
-                tree_item.setForeground(2, Qt.darkYellow)
-            elif status == "支払済":
-                tree_item.setForeground(2, Qt.darkGreen)
+                # ステータスに応じて色を変更
+                if status == "発注予定":
+                    tree_item.setForeground(2, Qt.gray)
+                elif status == "下書き作成済":
+                    tree_item.setForeground(2, Qt.blue)
+                elif status == "発注済":
+                    tree_item.setForeground(2, Qt.darkCyan)
+                elif status == "請求書待ち":
+                    tree_item.setForeground(2, Qt.darkYellow)
+                elif status == "支払済":
+                    tree_item.setForeground(2, Qt.darkGreen)
 
-            self.tree.addTopLevelItem(tree_item)
+                self.tree.addTopLevelItem(tree_item)
 
         self.tree.resizeColumnToContents(0)
         self.tree.resizeColumnToContents(1)

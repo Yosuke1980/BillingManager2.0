@@ -100,19 +100,26 @@ class ExpenseEditDialog(QDialog):
         layout.addWidget(buttons)
 
     def refresh_suppliers(self):
-        """発注先リストを更新"""
+        """取引先リストを更新（統合取引先マスタから取得）"""
         self.supplier_combo.clear()
         self.supplier_combo.addItem("(未選択)", None)
 
-        suppliers = self.db.get_suppliers()
-        for supplier in suppliers:
-            supplier_id = supplier[0]
-            supplier_name = supplier[1]
-            contact = supplier[2] or ""
-            display_text = f"{supplier_name}"
+        # partnersテーブルから全取引先を取得
+        partners = self.db.get_partners()
+        for partner in partners:
+            partner_id = partner[0]
+            partner_name = partner[1]
+            partner_code = partner[2] or ""
+            contact = partner[3] or ""
+
+            # 表示テキスト: "取引先名 (コード) - 担当者"
+            display_text = f"{partner_name}"
+            if partner_code:
+                display_text += f" ({partner_code})"
             if contact:
-                display_text += f" ({contact})"
-            self.supplier_combo.addItem(display_text, supplier_id)
+                display_text += f" - {contact}"
+
+            self.supplier_combo.addItem(display_text, partner_id)
 
     def _load_data(self):
         """データを読み込み"""

@@ -48,12 +48,12 @@ class ProjectsMainWidget(QWidget):
 
     def _connect_signals(self):
         """シグナルを接続"""
-        # 案件選択時にツリービューを更新
-        self.project_list.project_selected.connect(self.on_project_selected)
+        # 案件選択時にツリービューを更新（複数ID対応）
+        self.project_list.projects_selected.connect(self.on_projects_selected)
 
-    def on_project_selected(self, project_id: int):
-        """案件選択時の処理"""
-        self.project_tree.load_project(project_id)
+    def on_projects_selected(self, project_ids: list):
+        """案件選択時の処理（複数ID対応）"""
+        self.project_tree.load_projects(project_ids)
         # アラートも更新
         self.alert_widget.update_alerts()
 

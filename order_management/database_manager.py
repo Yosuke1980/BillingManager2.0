@@ -19,7 +19,57 @@ class OrderManagementDB:
         return sqlite3.connect(self.db_path)
 
     # ========================================
-    # 発注先マスター操作
+    # 統合取引先マスター操作（Phase 6）
+    # ========================================
+
+    def get_partners(self, search_term: str = "") -> List[Tuple]:
+        """統合取引先マスター一覧を取得
+
+        Args:
+            search_term: 検索キーワード
+
+        Returns:
+            List[Tuple]: (id, name, code, contact_person, email, phone, address, partner_type, notes)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            if search_term:
+                cursor.execute("""
+                    SELECT id, name, code, contact_person, email, phone, address, partner_type, notes
+                    FROM partners
+                    WHERE name LIKE ? OR contact_person LIKE ? OR email LIKE ?
+                    ORDER BY name
+                """, (f"%{search_term}%", f"%{search_term}%", f"%{search_term}%"))
+            else:
+                cursor.execute("""
+                    SELECT id, name, code, contact_person, email, phone, address, partner_type, notes
+                    FROM partners
+                    ORDER BY name
+                """)
+
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_partner_by_id(self, partner_id: int) -> Optional[Tuple]:
+        """IDで統合取引先を取得"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, name, code, contact_person, email, phone, address, partner_type, notes,
+                       created_at, updated_at
+                FROM partners WHERE id = ?
+            """, (partner_id,))
+            return cursor.fetchone()
+        finally:
+            conn.close()
+
+    # ========================================
+    # 発注先マスター操作（旧版・互換性のため残す）
     # ========================================
 
     def get_suppliers(self, search_term: str = "") -> List[Tuple]:

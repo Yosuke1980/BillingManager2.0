@@ -2,6 +2,7 @@
 
 案件の一覧表示と管理を行うウィジェットです。
 """
+from collections import defaultdict
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QMessageBox, QSplitter, QLabel, QComboBox
@@ -19,12 +20,14 @@ from order_management.order_number_generator import OrderNumberGenerator
 class ProjectListWidget(QWidget):
     """案件一覧ウィジェット"""
 
-    project_selected = pyqtSignal(int)  # 案件選択シグナル
+    project_selected = pyqtSignal(int)  # 案件選択シグナル（後方互換性のため残す）
+    projects_selected = pyqtSignal(list)  # 複数案件選択シグナル（グループ化対応）
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = OrderManagementDB()
         self.current_project_id = None
+        self.current_project_ids = []  # グループ化された案件IDリスト
         self._setup_ui()
         self.load_projects()
 
@@ -83,23 +86,41 @@ class ProjectListWidget(QWidget):
         layout.addWidget(self.table)
 
     def load_projects(self):
-        """案件一覧を読み込み"""
+        """案件一覧を読み込み（案件名でグループ化表示）"""
         project_type = self.type_filter.currentData()
         projects = self.db.get_projects(project_type=project_type)
 
-        self.table.setRowCount(len(projects))
+        # 案件名でグループ化
+        grouped_projects = defaultdict(list)
+        for project in projects:
+            project_name = project[1] or ""
+            grouped_projects[project_name].append(project)
 
-        for row, project in enumerate(projects):
-            project_id = project[0]
-            project_type_str = project[3] or ""
+        # テーブル行数を設定
+        self.table.setRowCount(len(grouped_projects))
 
-            # サマリー情報を取得
-            summary = self.db.get_project_summary(project_id)
+        # グループごとに表示
+        for row, (project_name, group) in enumerate(sorted(grouped_projects.items())):
+            # グループ内の全プロジェクトIDを保存
+            project_ids = [p[0] for p in group]
 
-            # 日付表示を案件タイプに応じて変更
+            # グループ代表の情報を取得（最初のプロジェクト）
+            first_project = group[0]
+            project_type_str = first_project[3] or ""
+
+            # グループ全体の予算・実績を合計
+            total_budget = 0
+            total_actual = 0
+            for project in group:
+                summary = self.db.get_project_summary(project[0])
+                total_budget += summary['budget']
+                total_actual += summary['actual']
+
+            total_remaining = total_budget - total_actual
+
+            # 日付表示（最初のプロジェクトの日付を使用）
             if project_type_str == "レギュラー":
-                # レギュラー案件の場合、詳細情報を取得して開始日〜終了日を表示
-                detail = self.db.get_project_by_id(project_id)
+                detail = self.db.get_project_by_id(first_project[0])
                 if detail:
                     start_date = detail[6] or ""
                     end_date = detail[7] or ""
@@ -112,26 +133,32 @@ class ProjectListWidget(QWidget):
                 else:
                     date_display = ""
             else:
-                # 単発案件の場合、実施日を表示
-                date_display = project[2] or ""
+                date_display = first_project[2] or ""
 
             # テーブルに設定
-            self.table.setItem(row, 0, QTableWidgetItem(str(project[0])))  # ID
+            # ID列には複数IDをカンマ区切りで保存
+            id_str = ",".join(map(str, project_ids))
+            self.table.setItem(row, 0, QTableWidgetItem(id_str))  # ID(複数)
             self.table.setItem(row, 1, QTableWidgetItem(date_display))  # 日付
-            self.table.setItem(row, 2, QTableWidgetItem(project[1] or ""))  # 案件名
+
+            # 案件名に件数を追加表示（2件以上の場合）
+            display_name = project_name
+            if len(group) > 1:
+                display_name += f" ({len(group)}件)"
+            self.table.setItem(row, 2, QTableWidgetItem(display_name))  # 案件名
             self.table.setItem(row, 3, QTableWidgetItem(project_type_str))  # タイプ
 
             # 予算・実績・残予算
-            budget_item = QTableWidgetItem(f"{summary['budget']:,.0f}")
-            actual_item = QTableWidgetItem(f"{summary['actual']:,.0f}")
-            remaining_item = QTableWidgetItem(f"{summary['remaining']:,.0f}")
+            budget_item = QTableWidgetItem(f"{total_budget:,.0f}")
+            actual_item = QTableWidgetItem(f"{total_actual:,.0f}")
+            remaining_item = QTableWidgetItem(f"{total_remaining:,.0f}")
 
             budget_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             actual_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             remaining_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
             # 予算超過時は赤字
-            if summary['remaining'] < 0:
+            if total_remaining < 0:
                 remaining_item.setForeground(Qt.red)
 
             self.table.setItem(row, 4, budget_item)
@@ -147,12 +174,22 @@ class ProjectListWidget(QWidget):
         self.table.resizeColumnsToContents()
 
     def on_selection_changed(self):
-        """選択変更時の処理"""
+        """選択変更時の処理（グループ化対応）"""
         current_row = self.table.currentRow()
         if current_row >= 0:
-            project_id = int(self.table.item(current_row, 0).text())
-            self.current_project_id = project_id
-            self.project_selected.emit(project_id)
+            # ID列からカンマ区切りのIDリストを取得
+            id_str = self.table.item(current_row, 0).text()
+            project_ids = [int(id_) for id_ in id_str.split(",")]
+
+            # 複数IDを保存
+            self.current_project_ids = project_ids
+
+            # 後方互換性のため最初のIDを保存・通知
+            self.current_project_id = project_ids[0]
+            self.project_selected.emit(project_ids[0])
+
+            # 複数ID対応のシグナルも発行
+            self.projects_selected.emit(project_ids)
 
     def add_project(self):
         """新規案件追加"""
