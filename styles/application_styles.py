@@ -246,6 +246,41 @@ class ApplicationStyleManager:
                 background-color: #f8f9fa;
             }}
 
+            /* テーブルウィジェット */
+            QTableWidget {{
+                font-size: {font_size}px;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                background-color: white;
+                alternate-background-color: #f8f9fa;
+                gridline-color: #dee2e6;
+                selection-background-color: #007bff;
+                selection-color: white;
+                color: #2c3e50;
+            }}
+            QTableWidget::item {{
+                padding: 3px;
+                min-height: {int(font_size * 1.5)}px;
+                color: #2c3e50;
+            }}
+            QTableWidget::item:selected {{
+                background-color: #007bff;
+                color: white;
+            }}
+            QTableWidget::item:hover {{
+                background-color: #e3f2fd;
+            }}
+            QHeaderView::section {{
+                font-size: {font_size}px;
+                font-weight: bold;
+                background-color: #f8f9fa;
+                border: none;
+                border-bottom: 2px solid #dee2e6;
+                border-right: 1px solid #dee2e6;
+                padding: 6px;
+                color: #2c3e50;
+            }}
+
             /* タブウィジェット */
             QTabWidget::pane {{
                 border: 1px solid #dee2e6;
