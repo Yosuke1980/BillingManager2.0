@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QHBoxLayout, QMessageBox, QLabel
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.expense_edit_dialog import ExpenseEditDialog
 from order_management.config import OrderConfig
@@ -107,6 +108,11 @@ class ProjectTreeWidget(QWidget):
                 impl_date
             ])
             tree_item.setData(0, Qt.UserRole, expense_id)
+
+            # 全カラムに基本文字色を設定（Mac対応）
+            text_color = QColor("#2c3e50")  # 濃いグレー
+            for col in range(4):  # 4列分
+                tree_item.setForeground(col, text_color)
 
             # ステータスに応じて色を変更
             if status == "発注予定":
