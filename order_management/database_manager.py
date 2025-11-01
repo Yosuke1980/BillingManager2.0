@@ -1255,7 +1255,7 @@ class OrderManagementDB:
                     eo.order_number,
                     eo.project_id,
                     p.name as project_name,
-                    p.broadcast_days,
+                    prog.broadcast_days,
                     eo.item_name,
                     eo.supplier_id,
                     eo.expected_payment_amount,
@@ -1269,7 +1269,8 @@ class OrderManagementDB:
                     COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
                 FROM expenses_order eo
                 LEFT JOIN projects p ON eo.project_id = p.id
-                LEFT JOIN order_contracts oc ON eo.project_id = oc.program_id AND eo.supplier_id = oc.partner_id
+                LEFT JOIN programs prog ON p.program_id = prog.id
+                LEFT JOIN order_contracts oc ON p.program_id = oc.program_id AND eo.supplier_id = oc.partner_id
                 WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
                 ORDER BY eo.supplier_id, eo.expected_payment_date
             """, (target_month,))

@@ -1957,14 +1957,15 @@ class DatabaseManager:
                        eo.supplier_id, part.code as partner_code, part.name as partner_name,
                        eo.expected_payment_amount, eo.expected_payment_date,
                        eo.payment_status,
-                       p.broadcast_days,
+                       prog.broadcast_days,
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
                        COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
                 FROM expenses_order eo
                 LEFT JOIN projects p ON eo.project_id = p.id
+                LEFT JOIN programs prog ON p.program_id = prog.id
                 LEFT JOIN partners part ON eo.supplier_id = part.id
-                LEFT JOIN order_contracts oc ON eo.project_id = oc.program_id AND eo.supplier_id = oc.partner_id
+                LEFT JOIN order_contracts oc ON p.program_id = oc.program_id AND eo.supplier_id = oc.partner_id
                 WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
                   AND (eo.payment_status = '未払い' OR eo.payment_status IS NULL)
                   AND part.code IS NOT NULL AND part.code != ''
