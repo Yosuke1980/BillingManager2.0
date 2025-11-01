@@ -945,7 +945,10 @@ class OrderManagementDB:
                        oc.created_at, oc.updated_at,
                        COALESCE(oc.order_type, '発注書') as order_type,
                        COALESCE(oc.order_status, '未') as order_status,
-                       oc.email_subject, oc.email_body, oc.email_sent_date, oc.email_to
+                       oc.email_subject, oc.email_body, oc.email_sent_date, oc.email_to,
+                       COALESCE(oc.payment_type, '月額固定') as payment_type,
+                       oc.unit_price,
+                       COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -1031,6 +1034,9 @@ class OrderManagementDB:
                         email_sent_date = ?,
                         email_to = ?,
                         notes = ?,
+                        payment_type = ?,
+                        unit_price = ?,
+                        payment_timing = ?,
                         updated_at = ?
                     WHERE id = ?
                 """, (
@@ -1050,6 +1056,9 @@ class OrderManagementDB:
                     contract_data.get('email_sent_date', ''),
                     contract_data.get('email_to', ''),
                     contract_data.get('notes', ''),
+                    contract_data.get('payment_type', '月額固定'),
+                    contract_data.get('unit_price'),
+                    contract_data.get('payment_timing', '翌月末払い'),
                     now,
                     contract_id
                 ))
@@ -1062,8 +1071,9 @@ class OrderManagementDB:
                         pdf_status, pdf_file_path,
                         pdf_distributed_date, confirmed_by,
                         email_subject, email_body, email_sent_date, email_to,
-                        notes, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        notes, payment_type, unit_price, payment_timing,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     contract_data['program_id'],
                     contract_data['partner_id'],
@@ -1081,6 +1091,9 @@ class OrderManagementDB:
                     contract_data.get('email_sent_date', ''),
                     contract_data.get('email_to', ''),
                     contract_data.get('notes', ''),
+                    contract_data.get('payment_type', '月額固定'),
+                    contract_data.get('unit_price'),
+                    contract_data.get('payment_timing', '翌月末払い'),
                     now,
                     now
                 ))

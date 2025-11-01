@@ -108,6 +108,26 @@ class OrderContractEditDialog(QDialog):
         self.period_type.currentTextChanged.connect(self.on_period_type_changed)
         form_layout.addRow("契約期間:", self.period_type)
 
+        # === レギュラー番組契約条件 ===
+        # 支払タイプ
+        self.payment_type = QComboBox()
+        self.payment_type.addItems(["月額固定", "回数ベース"])
+        self.payment_type.setCurrentText("月額固定")
+        self.payment_type.currentTextChanged.connect(self.on_payment_type_changed)
+        form_layout.addRow("支払タイプ:", self.payment_type)
+
+        # 単価（回数ベースの場合のみ表示）
+        self.unit_price_label = QLabel("単価（円/回）:")
+        self.unit_price = QLineEdit()
+        self.unit_price.setPlaceholderText("例: 50000")
+        form_layout.addRow(self.unit_price_label, self.unit_price)
+
+        # 支払タイミング
+        self.payment_timing = QComboBox()
+        self.payment_timing.addItems(["翌月末払い", "当月末払い"])
+        self.payment_timing.setCurrentText("翌月末払い")
+        form_layout.addRow("支払タイミング:", self.payment_timing)
+
         # === PDF関連フィールド（契約書・発注書用） ===
         # PDFステータス
         self.pdf_status = QComboBox()
@@ -190,6 +210,19 @@ class OrderContractEditDialog(QDialog):
 
         # 初期表示：発注書モードでメールフィールドを非表示
         self.on_order_type_changed("発注書")
+        # 初期表示：月額固定モードで単価フィールドを非表示
+        self.on_payment_type_changed("月額固定")
+
+    def on_payment_type_changed(self, payment_type):
+        """支払タイプが変更されたときに単価フィールドの表示を切り替える"""
+        if payment_type == "回数ベース":
+            # 単価フィールドを表示
+            self.unit_price_label.setVisible(True)
+            self.unit_price.setVisible(True)
+        else:
+            # 単価フィールドを非表示
+            self.unit_price_label.setVisible(False)
+            self.unit_price.setVisible(False)
 
     def on_order_type_changed(self, order_type):
         """発注種別が変更されたときにフィールドの表示を切り替える"""
@@ -224,7 +257,7 @@ class OrderContractEditDialog(QDialog):
         for program in programs:
             # program: (id, name, description, start_date, end_date, broadcast_time, broadcast_days, status)
             display_text = f"{program[1]} (ID: {program[0]})"
-            self.program_combo.addItem(display_text)
+            self.program_combo.addItem(display_text, program[0])  # IDをデータとして保存
             self.program_dict[display_text] = program[0]
 
     def load_partners(self):
@@ -237,7 +270,7 @@ class OrderContractEditDialog(QDialog):
             display_text = f"{partner[1]}"
             if partner[2]:  # code
                 display_text += f" ({partner[2]})"
-            self.partner_combo.addItem(display_text)
+            self.partner_combo.addItem(display_text, partner[0])  # IDをデータとして保存
             self.partner_dict[display_text] = partner[0]
 
     def load_contract_data(self):
@@ -322,6 +355,19 @@ class OrderContractEditDialog(QDialog):
             if contract[19]:
                 self.email_to.setText(contract[19])
 
+            # 支払タイプ（インデックス20）
+            if contract[20]:
+                self.payment_type.setCurrentText(contract[20])
+                self.on_payment_type_changed(contract[20])  # フィールド表示を更新
+
+            # 単価（インデックス21）
+            if contract[21] is not None:
+                self.unit_price.setText(str(int(contract[21])))
+
+            # 支払タイミング（インデックス22）
+            if contract[22]:
+                self.payment_timing.setCurrentText(contract[22])
+
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
         period_type = self.period_type.currentText()
@@ -386,12 +432,28 @@ class OrderContractEditDialog(QDialog):
                 return
 
         # 発注書データを作成
-        program_key = self.program_combo.currentText()
-        partner_key = self.partner_combo.currentText()
+        # currentData()でIDを取得（より安全）
+        program_id = self.program_combo.currentData()
+        partner_id = self.partner_combo.currentData()
+
+        # IDが取得できない場合は辞書から取得（フォールバック）
+        if program_id is None:
+            program_key = self.program_combo.currentText()
+            program_id = self.program_dict.get(program_key)
+            if program_id is None:
+                QMessageBox.warning(self, "警告", "番組が正しく選択されていません。")
+                return
+
+        if partner_id is None:
+            partner_key = self.partner_combo.currentText()
+            partner_id = self.partner_dict.get(partner_key)
+            if partner_id is None:
+                QMessageBox.warning(self, "警告", "取引先が正しく選択されていません。")
+                return
 
         contract_data = {
-            'program_id': self.program_dict[program_key],
-            'partner_id': self.partner_dict[partner_key],
+            'program_id': program_id,
+            'partner_id': partner_id,
             'contract_start_date': self.start_date.date().toString("yyyy-MM-dd"),
             'contract_end_date': self.end_date.date().toString("yyyy-MM-dd"),
             'contract_period_type': self.period_type.currentText(),
@@ -407,7 +469,11 @@ class OrderContractEditDialog(QDialog):
             'email_body': self.email_body.toPlainText(),
             'email_sent_date': self.email_sent_date.date().toString("yyyy-MM-dd"),
             'email_to': self.email_to.text(),
-            'notes': self.notes.toPlainText()
+            'notes': self.notes.toPlainText(),
+            # レギュラー番組契約条件
+            'payment_type': self.payment_type.currentText(),
+            'unit_price': float(self.unit_price.text()) if self.unit_price.text() else None,
+            'payment_timing': self.payment_timing.currentText()
         }
 
         if self.contract_id:
