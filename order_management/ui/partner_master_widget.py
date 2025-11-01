@@ -118,6 +118,11 @@ class PartnerMasterWidget(QWidget):
                     QMessageBox.warning(self, "警告", "同じ名前の取引先が既に存在します")
                     return
 
+                # コードが空欄の場合は自動生成
+                if not partner_data['code']:
+                    import time
+                    partner_data['code'] = f"P{int(time.time())}"  # タイムスタンプベースのユニークコード
+
                 if partner_data['code'] and self.pm.check_duplicate_code(partner_data['code']):
                     QMessageBox.warning(self, "警告", "同じコードの取引先が既に存在します")
                     return
