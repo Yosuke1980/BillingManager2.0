@@ -14,6 +14,7 @@ from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
 from order_management.ui.program_edit_dialog import ProgramEditDialog
 from order_management.ui.partner_master_widget import PartnerEditDialog
+from partner_manager import PartnerManager
 
 
 class OrderContractEditDialog(QDialog):
@@ -22,6 +23,7 @@ class OrderContractEditDialog(QDialog):
     def __init__(self, parent=None, contract_id=None):
         super().__init__(parent)
         self.db = OrderManagementDB()
+        self.pm = PartnerManager()
         self.contract_id = contract_id
         self.pdf_file_path = ""
         self.pdf_dir = "order_pdfs"
@@ -324,12 +326,35 @@ class OrderContractEditDialog(QDialog):
     def add_new_partner(self):
         """新規取引先を追加"""
         dialog = PartnerEditDialog(self)
-        if dialog.exec_():
-            # 取引先一覧を再読み込み
-            current_count = self.partner_combo.count()
-            self.partner_combo.clear()
-            self.load_partners()
+        if dialog.exec_() == QDialog.Accepted:
+            partner_data = dialog.get_data()
+            try:
+                # 重複チェック
+                if self.pm.check_duplicate_name(partner_data['name']):
+                    QMessageBox.warning(self, "警告", "同じ名前の取引先が既に存在します")
+                    return
 
-            # 新しく追加された取引先を自動選択
-            if self.partner_combo.count() > current_count:
-                self.partner_combo.setCurrentIndex(self.partner_combo.count() - 1)
+                # コードが空欄の場合は自動生成
+                if not partner_data['code']:
+                    import time
+                    partner_data['code'] = f"P{int(time.time())}"  # タイムスタンプベースのユニークコード
+
+                if partner_data['code'] and self.pm.check_duplicate_code(partner_data['code']):
+                    QMessageBox.warning(self, "警告", "同じコードの取引先が既に存在します")
+                    return
+
+                # 取引先を保存
+                self.pm.save_partner(partner_data, is_new=True)
+
+                # 取引先一覧を再読み込み
+                current_count = self.partner_combo.count()
+                self.partner_combo.clear()
+                self.load_partners()
+
+                # 新しく追加された取引先を自動選択
+                if self.partner_combo.count() > current_count:
+                    self.partner_combo.setCurrentIndex(self.partner_combo.count() - 1)
+
+                QMessageBox.information(self, "成功", "取引先を追加しました")
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")
