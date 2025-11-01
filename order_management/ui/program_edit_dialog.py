@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QTextEdit, QDateEdit, QPushButton, QMessageBox, QLabel,
-    QRadioButton, QButtonGroup, QCheckBox, QListWidget, QComboBox
+    QRadioButton, QButtonGroup, QCheckBox, QListWidget, QComboBox, QWidget
 )
 from PyQt5.QtCore import Qt, QDate
 from order_management.database_manager import OrderManagementDB
@@ -69,10 +69,12 @@ class ProgramEditDialog(QDialog):
         self.day_checkboxes = {}
         for day in ["月", "火", "水", "木", "金", "土", "日"]:
             checkbox = QCheckBox(day)
+            checkbox.setMinimumWidth(50)  # 最小幅を設定して切れないようにする
             self.day_checkboxes[day] = checkbox
             broadcast_days_layout.addWidget(checkbox)
+        broadcast_days_layout.addStretch()
 
-        broadcast_days_widget = QLabel()
+        broadcast_days_widget = QWidget()
         broadcast_days_widget.setLayout(broadcast_days_layout)
         form_layout.addRow("放送曜日:", broadcast_days_widget)
 
@@ -81,6 +83,8 @@ class ProgramEditDialog(QDialog):
         self.status_group = QButtonGroup()
         self.status_broadcasting = QRadioButton("放送中")
         self.status_ended = QRadioButton("終了")
+        self.status_broadcasting.setMinimumWidth(80)  # 最小幅を設定
+        self.status_ended.setMinimumWidth(80)  # 最小幅を設定
         self.status_group.addButton(self.status_broadcasting)
         self.status_group.addButton(self.status_ended)
         self.status_broadcasting.setChecked(True)
@@ -88,7 +92,7 @@ class ProgramEditDialog(QDialog):
         status_layout.addWidget(self.status_ended)
         status_layout.addStretch()
 
-        status_widget = QLabel()
+        status_widget = QWidget()
         status_widget.setLayout(status_layout)
         form_layout.addRow("ステータス:", status_widget)
 

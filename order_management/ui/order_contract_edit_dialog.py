@@ -45,13 +45,15 @@ class OrderContractEditDialog(QDialog):
         self.program_combo = QComboBox()
         self.program_combo.setEditable(True)  # 編集可能に
         self.program_combo.setInsertPolicy(QComboBox.NoInsert)  # 入力しても追加しない
+        self.program_combo.setMinimumWidth(300)  # 最小幅を設定
         self.program_combo.completer().setCompletionMode(self.program_combo.completer().PopupCompletion)
         self.program_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致
         self.load_programs()
-        program_layout.addWidget(self.program_combo)
+        program_layout.addWidget(self.program_combo, 1)  # ストレッチファクター1で伸縮可能に
 
         add_program_btn = create_button("新規番組追加", self.add_new_program)
-        program_layout.addWidget(add_program_btn)
+        add_program_btn.setMinimumWidth(120)  # ボタンの最小幅を設定
+        program_layout.addWidget(add_program_btn, 0)  # ストレッチファクター0で固定サイズ
 
         form_layout.addRow("番組名:", program_layout)
 
@@ -60,13 +62,15 @@ class OrderContractEditDialog(QDialog):
         self.partner_combo = QComboBox()
         self.partner_combo.setEditable(True)  # 編集可能に
         self.partner_combo.setInsertPolicy(QComboBox.NoInsert)  # 入力しても追加しない
+        self.partner_combo.setMinimumWidth(300)  # 最小幅を設定
         self.partner_combo.completer().setCompletionMode(self.partner_combo.completer().PopupCompletion)
         self.partner_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致
         self.load_partners()
-        partner_layout.addWidget(self.partner_combo)
+        partner_layout.addWidget(self.partner_combo, 1)  # ストレッチファクター1で伸縮可能に
 
         add_partner_btn = create_button("新規取引先追加", self.add_new_partner)
-        partner_layout.addWidget(add_partner_btn)
+        add_partner_btn.setMinimumWidth(140)  # ボタンの最小幅を設定
+        partner_layout.addWidget(add_partner_btn, 0)  # ストレッチファクター0で固定サイズ
 
         form_layout.addRow("取引先名:", partner_layout)
 
