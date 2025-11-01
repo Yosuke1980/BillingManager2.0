@@ -1191,3 +1191,215 @@ class OrderManagementDB:
             return cursor.fetchall()
         finally:
             conn.close()
+
+    # ========================================
+    # 発注・支払照合機能
+    # ========================================
+
+    def generate_monthly_payment_list(self, year: int, month: int) -> List[dict]:
+        """指定月の発注から支払予定リストを生成
+
+        Args:
+            year: 年（例: 2024）
+            month: 月（例: 10）
+
+        Returns:
+            List[dict]: 取引先ごとの支払予定情報
+            [
+                {
+                    'partner_id': 取引先ID,
+                    'partner_name': 取引先名,
+                    'partner_code': 取引先コード,
+                    'orders': [
+                        {
+                            'order_id': 発注ID,
+                            'order_number': 発注番号,
+                            'project_name': 案件名,
+                            'item_name': 項目名,
+                            'amount': 金額,
+                            'expected_payment_date': 支払予定日,
+                            'payment_status': 支払ステータス,
+                            'order_type': 発注種別（契約から取得）
+                        },
+                        ...
+                    ],
+                    'total_amount': 合計金額
+                },
+                ...
+            ]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 指定月の支払予定がある発注を取得
+            # expected_payment_dateがYYYY-MM形式で指定月と一致するもの
+            target_month = f"{year:04d}-{month:02d}"
+
+            cursor.execute("""
+                SELECT
+                    eo.id,
+                    eo.order_number,
+                    eo.project_id,
+                    p.name as project_name,
+                    eo.item_name,
+                    eo.supplier_id,
+                    eo.expected_payment_amount,
+                    eo.expected_payment_date,
+                    eo.payment_status,
+                    eo.payment_matched_id,
+                    eo.payment_difference,
+                    oc.order_type
+                FROM expenses_order eo
+                LEFT JOIN projects p ON eo.project_id = p.id
+                LEFT JOIN order_contracts oc ON eo.project_id = oc.program_id AND eo.supplier_id = oc.partner_id
+                WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
+                ORDER BY eo.supplier_id, eo.expected_payment_date
+            """, (target_month,))
+
+            orders = cursor.fetchall()
+
+            # 取引先ごとにグループ化
+            partners_dict = {}
+
+            for order in orders:
+                (order_id, order_number, project_id, project_name, item_name,
+                 supplier_id, amount, payment_date, payment_status,
+                 payment_matched_id, payment_difference, order_type) = order
+
+                if supplier_id is None:
+                    continue  # 取引先が設定されていない発注はスキップ
+
+                # 取引先情報を取得（初回のみ）
+                if supplier_id not in partners_dict:
+                    # partnersテーブルから取引先情報を取得
+                    cursor.execute("""
+                        SELECT id, name, code
+                        FROM partners
+                        WHERE id = ?
+                    """, (supplier_id,))
+                    partner_info = cursor.fetchone()
+
+                    if partner_info:
+                        partner_id, partner_name, partner_code = partner_info
+                        partners_dict[supplier_id] = {
+                            'partner_id': partner_id,
+                            'partner_name': partner_name,
+                            'partner_code': partner_code or '',
+                            'orders': [],
+                            'total_amount': 0
+                        }
+
+                # 発注情報を追加
+                if supplier_id in partners_dict:
+                    partners_dict[supplier_id]['orders'].append({
+                        'order_id': order_id,
+                        'order_number': order_number or '',
+                        'project_name': project_name or '',
+                        'item_name': item_name or '',
+                        'amount': amount or 0,
+                        'expected_payment_date': payment_date or '',
+                        'payment_status': payment_status or '未払い',
+                        'payment_matched_id': payment_matched_id,
+                        'payment_difference': payment_difference or 0,
+                        'order_type': order_type or '発注書'
+                    })
+                    partners_dict[supplier_id]['total_amount'] += (amount or 0)
+
+            # リストに変換して返す
+            result = list(partners_dict.values())
+
+            # 取引先名でソート
+            result.sort(key=lambda x: x['partner_name'])
+
+            return result
+
+        finally:
+            conn.close()
+
+    def get_payment_summary(self, year: int, month: int) -> dict:
+        """指定月の支払サマリーを取得
+
+        Args:
+            year: 年
+            month: 月
+
+        Returns:
+            dict: サマリー情報
+            {
+                'total_orders': 発注件数,
+                'total_amount': 発注総額,
+                'paid_count': 支払済件数,
+                'paid_amount': 支払済金額,
+                'unpaid_count': 未払い件数,
+                'unpaid_amount': 未払い金額,
+                'mismatch_count': 金額相違件数,
+                'mismatch_amount': 金額相違合計
+            }
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            target_month = f"{year:04d}-{month:02d}"
+
+            # 全体統計
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total_orders,
+                    COALESCE(SUM(expected_payment_amount), 0) as total_amount
+                FROM expenses_order
+                WHERE strftime('%Y-%m', expected_payment_date) = ?
+            """, (target_month,))
+
+            total_orders, total_amount = cursor.fetchone()
+
+            # 支払済
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as paid_count,
+                    COALESCE(SUM(expected_payment_amount), 0) as paid_amount
+                FROM expenses_order
+                WHERE strftime('%Y-%m', expected_payment_date) = ?
+                  AND payment_status = '支払済'
+            """, (target_month,))
+
+            paid_count, paid_amount = cursor.fetchone()
+
+            # 未払い
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as unpaid_count,
+                    COALESCE(SUM(expected_payment_amount), 0) as unpaid_amount
+                FROM expenses_order
+                WHERE strftime('%Y-%m', expected_payment_date) = ?
+                  AND payment_status = '未払い'
+            """, (target_month,))
+
+            unpaid_count, unpaid_amount = cursor.fetchone()
+
+            # 金額相違
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as mismatch_count,
+                    COALESCE(SUM(ABS(payment_difference)), 0) as mismatch_amount
+                FROM expenses_order
+                WHERE strftime('%Y-%m', expected_payment_date) = ?
+                  AND payment_status = '金額相違'
+            """, (target_month,))
+
+            mismatch_count, mismatch_amount = cursor.fetchone()
+
+            return {
+                'total_orders': total_orders or 0,
+                'total_amount': total_amount or 0,
+                'paid_count': paid_count or 0,
+                'paid_amount': paid_amount or 0,
+                'unpaid_count': unpaid_count or 0,
+                'unpaid_amount': unpaid_amount or 0,
+                'mismatch_count': mismatch_count or 0,
+                'mismatch_amount': mismatch_amount or 0
+            }
+
+        finally:
+            conn.close()

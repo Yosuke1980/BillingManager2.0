@@ -1918,5 +1918,174 @@ class DatabaseManager:
         finally:
             conn.close()
 
+    def match_orders_with_payments(self, year, month):
+        """発注と支払を照合（order_management.db の expenses_order と billing.db の payments）
+
+        照合条件:
+        1. 取引先コード（partner code = payee_code）
+        2. 金額完全一致
+        3. 支払予定月と支払月の一致
+
+        Args:
+            year: 年（例: 2024）
+            month: 月（例: 10）
+
+        Returns:
+            tuple: (照合成功件数, 未照合件数, エラーメッセージリスト)
+        """
+        from utils import format_payee_code
+
+        # order_management.dbに接続
+        order_conn = sqlite3.connect("order_management.db")
+        order_cursor = order_conn.cursor()
+
+        # billing.dbに接続
+        billing_conn = sqlite3.connect(self.billing_db)
+        billing_cursor = billing_conn.cursor()
+
+        try:
+            target_month = f"{year:04d}-{month:02d}"
+
+            # 指定月の発注データを取得（未照合のもののみ）
+            order_cursor.execute("""
+                SELECT eo.id, eo.order_number, eo.project_id, p.name as project_name,
+                       eo.supplier_id, part.code as partner_code, part.name as partner_name,
+                       eo.expected_payment_amount, eo.expected_payment_date,
+                       eo.payment_status
+                FROM expenses_order eo
+                LEFT JOIN projects p ON eo.project_id = p.id
+                LEFT JOIN partners part ON eo.supplier_id = part.id
+                WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
+                  AND (eo.payment_status = '未払い' OR eo.payment_status IS NULL)
+                  AND part.code IS NOT NULL AND part.code != ''
+                ORDER BY eo.id
+            """, (target_month,))
+
+            order_rows = order_cursor.fetchall()
+
+            if not order_rows:
+                log_message(f"{year}年{month}月の照合対象発注データがありません")
+                return 0, 0, []
+
+            # 支払データを取得（未照合のもの）
+            billing_cursor.execute("""
+                SELECT id, subject, project_name, payee, payee_code, amount, payment_date, status
+                FROM payments
+                WHERE payee_code IS NOT NULL AND payee_code != ''
+                  AND status != '照合済'
+                ORDER BY id
+            """)
+
+            payment_rows = billing_cursor.fetchall()
+
+            if not payment_rows:
+                log_message("照合対象の支払いデータがありません")
+                return 0, len(order_rows), []
+
+            log_message(f"照合処理開始: 発注データ {len(order_rows)}件、支払いデータ {len(payment_rows)}件")
+
+            # 照合結果カウント
+            matched_count = 0
+            not_matched_count = 0
+            errors = []
+
+            # 更新済みIDを記録（重複照合を防ぐ）
+            matched_order_ids = set()
+            matched_payment_ids = set()
+
+            # 各発注について支払を探す
+            for order_row in order_rows:
+                (order_id, order_number, project_id, project_name,
+                 supplier_id, partner_code, partner_name,
+                 order_amount, payment_date, payment_status) = order_row
+
+                # 取引先コードをフォーマット（4桁ゼロパディング）
+                formatted_partner_code = format_payee_code(partner_code)
+
+                # 支払予定日から年月を抽出
+                try:
+                    order_year_month = payment_date[:7] if payment_date else ""  # YYYY-MM
+                except:
+                    order_year_month = ""
+
+                # マッチする支払を探す
+                matched = False
+
+                for payment_row in payment_rows:
+                    (payment_id, subject, pay_project_name, payee, payee_code,
+                     pay_amount, pay_date, pay_status) = payment_row
+
+                    # 既に照合済みの支払はスキップ
+                    if payment_id in matched_payment_ids:
+                        continue
+
+                    # 支払先コードをフォーマット
+                    formatted_payee_code = format_payee_code(payee_code)
+
+                    # 支払日から年月を抽出（YYYY/MM/DD形式）
+                    try:
+                        pay_year_month = pay_date[:7].replace('/', '-') if pay_date else ""  # YYYY-MM
+                    except:
+                        pay_year_month = ""
+
+                    # 照合条件チェック
+                    # 1. 取引先コード一致
+                    # 2. 金額完全一致（整数変換して比較）
+                    # 3. 年月一致
+                    code_match = (formatted_partner_code == formatted_payee_code)
+                    amount_match = (int(order_amount or 0) == int(pay_amount or 0))
+                    month_match = (order_year_month == pay_year_month)
+
+                    if code_match and amount_match and month_match:
+                        # 照合成功
+                        # 発注テーブルを更新
+                        order_cursor.execute("""
+                            UPDATE expenses_order
+                            SET payment_status = '支払済',
+                                payment_matched_id = ?,
+                                payment_verified_date = ?,
+                                payment_difference = 0
+                            WHERE id = ?
+                        """, (payment_id, datetime.now().strftime('%Y-%m-%d'), order_id))
+
+                        # 支払テーブルを更新
+                        billing_cursor.execute("""
+                            UPDATE payments
+                            SET status = '照合済'
+                            WHERE id = ?
+                        """, (payment_id,))
+
+                        matched_order_ids.add(order_id)
+                        matched_payment_ids.add(payment_id)
+                        matched_count += 1
+                        matched = True
+
+                        log_message(f"  照合成功: 発注#{order_number} ⇔ 支払#{payment_id} "
+                                  f"({partner_name} / {int(order_amount):,}円)")
+                        break
+
+                if not matched:
+                    not_matched_count += 1
+                    log_message(f"  未照合: 発注#{order_number} ({partner_name} / {int(order_amount):,}円)")
+
+            # コミット
+            order_conn.commit()
+            billing_conn.commit()
+
+            log_message(f"照合完了: {matched_count}件照合、{not_matched_count}件未照合")
+
+            return matched_count, not_matched_count, errors
+
+        except Exception as e:
+            log_message(f"照合処理エラー: {e}")
+            import traceback
+            log_message(f"エラー詳細: {traceback.format_exc()}")
+            order_conn.rollback()
+            billing_conn.rollback()
+            return 0, 0, [str(e)]
+        finally:
+            order_conn.close()
+            billing_conn.close()
+
 
 # ファイル終了確認用のコメント - database.py完了
