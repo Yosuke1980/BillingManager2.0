@@ -49,7 +49,7 @@ class OrderManagementTab(QWidget):
         self.sub_tabs.addTab(self.partner_widget, "取引先マスター")
         self.sub_tabs.addTab(self.cast_widget, "出演者マスター")
         self.sub_tabs.addTab(self.program_widget, "番組マスター")
-        self.sub_tabs.addTab(self.order_contract_widget, "発注書管理")
+        self.sub_tabs.addTab(self.order_contract_widget, "発注書マスタ")
         self.sub_tabs.addTab(self.settings_widget, "設定")
 
         # タブ切り替え時にデータを更新
