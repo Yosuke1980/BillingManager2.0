@@ -208,10 +208,6 @@ class PartnerEditDialog(QDialog):
         self.code_edit = QLineEdit()
         self.code_edit.setPlaceholderText("例: SUP001（省略可）")
 
-        self.type_combo = QComboBox()
-        for ptype in PARTNER_TYPES:
-            self.type_combo.addItem(ptype)
-
         self.contact_edit = QLineEdit()
         self.contact_edit.setPlaceholderText("例: 山田太郎")
 
@@ -230,7 +226,6 @@ class PartnerEditDialog(QDialog):
 
         form_layout.addRow("取引先名 *:", self.name_edit)
         form_layout.addRow("取引先コード:", self.code_edit)
-        form_layout.addRow("取引先区分 *:", self.type_combo)
         form_layout.addRow("担当者:", self.contact_edit)
         form_layout.addRow("メールアドレス:", self.email_edit)
         form_layout.addRow("電話番号:", self.phone_edit)
@@ -258,12 +253,6 @@ class PartnerEditDialog(QDialog):
             # partner_data: (id, name, code, contact_person, email, phone, address, partner_type, notes)
             self.name_edit.setText(self.partner_data[1] or "")
             self.code_edit.setText(self.partner_data[2] or "")
-
-            partner_type = self.partner_data[7] or "両方"
-            index = self.type_combo.findText(partner_type)
-            if index >= 0:
-                self.type_combo.setCurrentIndex(index)
-
             self.contact_edit.setText(self.partner_data[3] or "")
             self.email_edit.setText(self.partner_data[4] or "")
             self.phone_edit.setText(self.partner_data[5] or "")
@@ -283,7 +272,7 @@ class PartnerEditDialog(QDialog):
         return {
             'name': self.name_edit.text().strip(),
             'code': self.code_edit.text().strip(),
-            'partner_type': self.type_combo.currentText(),
+            'partner_type': '両方',  # 常に「両方」に設定
             'contact_person': self.contact_edit.text().strip(),
             'email': self.email_edit.text().strip(),
             'phone': self.phone_edit.text().strip(),
