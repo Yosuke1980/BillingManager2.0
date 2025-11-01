@@ -760,3 +760,107 @@ class OrderManagementDB:
             raise e
         finally:
             conn.close()
+
+    # ========================================
+    # 出演者マスター操作
+    # ========================================
+
+    def get_casts(self, search_term: str = "") -> List[Tuple]:
+        """出演者マスター一覧を取得"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            query = """
+                SELECT c.id, c.name, p.name, p.code, c.notes
+                FROM cast c INNER JOIN partners p ON c.partner_id = p.id WHERE 1=1
+            """
+            params = []
+            if search_term:
+                query += " AND (c.name LIKE ? OR p.name LIKE ?)"
+                params.extend([f"%{search_term}%", f"%{search_term}%"])
+            query += " ORDER BY c.name"
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_cast_by_id(self, cast_id: int) -> Optional[Tuple]:
+        """IDで出演者を取得"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT id, name, partner_id, notes, created_at, updated_at FROM cast WHERE id = ?", (cast_id,))
+            return cursor.fetchone()
+        finally:
+            conn.close()
+
+    def save_cast(self, cast_data: dict, is_new: bool = True):
+        """出演者を保存"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            now = datetime.now()
+            if is_new:
+                cursor.execute("INSERT INTO cast (name, partner_id, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                              (cast_data['name'], cast_data['partner_id'], cast_data.get('notes', ''), now, now))
+                cast_id = cursor.lastrowid
+            else:
+                cursor.execute("UPDATE cast SET name=?, partner_id=?, notes=?, updated_at=? WHERE id=?",
+                              (cast_data['name'], cast_data['partner_id'], cast_data.get('notes', ''), now, cast_data['id']))
+                cast_id = cast_data['id']
+            conn.commit()
+            return cast_id
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def delete_cast(self, cast_id: int):
+        """出演者を削除"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT COUNT(*) FROM program_cast WHERE cast_id = ?", (cast_id,))
+            if cursor.fetchone()[0] > 0:
+                raise Exception("この出演者は番組に関連付けられています。削除できません。")
+            cursor.execute("DELETE FROM cast WHERE id = ?", (cast_id,))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def get_program_cast_v2(self, program_id: int) -> List[Tuple]:
+        """番組の出演者一覧を取得（castテーブル経由）"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                SELECT pc.id, c.id, c.name, p.name, pc.role
+                FROM program_cast pc
+                INNER JOIN cast c ON pc.cast_id = c.id
+                INNER JOIN partners p ON c.partner_id = p.id
+                WHERE pc.program_id = ? ORDER BY c.name
+            """, (program_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def save_program_cast_v2(self, program_id: int, cast_assignments: List[dict]):
+        """番組の出演者を保存（castテーブル経由）"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM program_cast WHERE program_id = ?", (program_id,))
+            now = datetime.now()
+            for assignment in cast_assignments:
+                cursor.execute("INSERT INTO program_cast (program_id, cast_id, role, created_at) VALUES (?, ?, ?, ?)",
+                              (program_id, assignment['cast_id'], assignment.get('role', ''), now))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
