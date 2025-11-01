@@ -370,4 +370,46 @@ class ApplicationStyleManager:
             QScrollBar::handle:vertical:hover {{
                 background-color: #adb5bd;
             }}
+
+            /* リストウィジェット（Mac対応強化） */
+            QListWidget {{
+                font-size: {font_size}px;
+                background-color: white;
+                color: #2c3e50;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+            }}
+            QListWidget::item {{
+                color: #2c3e50;
+                padding: 4px;
+                min-height: {int(font_size * 1.5)}px;
+            }}
+            QListWidget::item:selected {{
+                background-color: #007bff;
+                color: white;
+            }}
+            QListWidget::item:hover {{
+                background-color: #e3f2fd;
+            }}
+
+            /* ダイアログ（Mac対応強化） */
+            QDialog {{
+                background-color: white;
+                color: #2c3e50;
+            }}
+
+            /* コンボボックス（Mac対応強化） */
+            QComboBox {{
+                color: #495057;
+                background-color: white;
+            }}
+            QComboBox::drop-down {{
+                background-color: #f8f9fa;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: white;
+                color: #2c3e50;
+                selection-background-color: #007bff;
+                selection-color: white;
+            }}
         """
