@@ -1924,7 +1924,11 @@ class DatabaseManager:
         照合条件:
         1. 取引先コード（partner code = payee_code）
         2. 金額完全一致
+           - 月額固定: 発注金額と比較
+           - 回数ベース: 放送回数×単価で計算した金額と比較
         3. 支払予定月と支払月の一致
+           - 当月末払い: 発注月と支払月が同じ
+           - 翌月末払い: 発注月の翌月と支払月を照合
 
         Args:
             year: 年（例: 2024）
@@ -1947,14 +1951,20 @@ class DatabaseManager:
             target_month = f"{year:04d}-{month:02d}"
 
             # 指定月の発注データを取得（未照合のもののみ）
+            # 契約情報（payment_type, unit_price, payment_timing）も取得
             order_cursor.execute("""
                 SELECT eo.id, eo.order_number, eo.project_id, p.name as project_name,
                        eo.supplier_id, part.code as partner_code, part.name as partner_name,
                        eo.expected_payment_amount, eo.expected_payment_date,
-                       eo.payment_status
+                       eo.payment_status,
+                       p.broadcast_days,
+                       COALESCE(oc.payment_type, '月額固定') as payment_type,
+                       oc.unit_price,
+                       COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
                 FROM expenses_order eo
                 LEFT JOIN projects p ON eo.project_id = p.id
                 LEFT JOIN partners part ON eo.supplier_id = part.id
+                LEFT JOIN order_contracts oc ON eo.project_id = oc.program_id AND eo.supplier_id = oc.partner_id
                 WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
                   AND (eo.payment_status = '未払い' OR eo.payment_status IS NULL)
                   AND part.code IS NOT NULL AND part.code != ''
@@ -1997,7 +2007,8 @@ class DatabaseManager:
             for order_row in order_rows:
                 (order_id, order_number, project_id, project_name,
                  supplier_id, partner_code, partner_name,
-                 order_amount, payment_date, payment_status) = order_row
+                 order_amount, payment_date, payment_status,
+                 broadcast_days, payment_type, unit_price, payment_timing) = order_row
 
                 # 取引先コードをフォーマット（4桁ゼロパディング）
                 formatted_partner_code = format_payee_code(partner_code)
@@ -2005,8 +2016,37 @@ class DatabaseManager:
                 # 支払予定日から年月を抽出
                 try:
                     order_year_month = payment_date[:7] if payment_date else ""  # YYYY-MM
+                    # 支払タイミングに応じて照合対象月を調整
+                    if payment_timing == "当月末払い":
+                        # 当月末払いの場合、発注月と支払月が同じ
+                        expected_payment_year_month = order_year_month
+                    else:  # 翌月末払い
+                        # 翌月末払いの場合、発注月の翌月と照合
+                        from order_management.broadcast_utils import adjust_payment_date_by_timing
+                        order_year = int(order_year_month[:4])
+                        order_month = int(order_year_month[5:7])
+                        adjusted_year, adjusted_month = adjust_payment_date_by_timing(
+                            order_year, order_month, payment_timing
+                        )
+                        expected_payment_year_month = f"{adjusted_year:04d}-{adjusted_month:02d}"
                 except:
                     order_year_month = ""
+                    expected_payment_year_month = ""
+
+                # 回数ベースの場合、期待金額を計算
+                if payment_type == "回数ベース" and broadcast_days and unit_price:
+                    from order_management.broadcast_utils import calculate_monthly_broadcast_count
+                    try:
+                        payment_year = int(payment_date[:4])
+                        payment_month = int(payment_date[5:7])
+                        broadcast_count = calculate_monthly_broadcast_count(
+                            payment_year, payment_month, broadcast_days
+                        )
+                        expected_amount = broadcast_count * unit_price
+                    except:
+                        expected_amount = order_amount
+                else:
+                    expected_amount = order_amount
 
                 # マッチする支払を探す
                 matched = False
@@ -2030,11 +2070,11 @@ class DatabaseManager:
 
                     # 照合条件チェック
                     # 1. 取引先コード一致
-                    # 2. 金額完全一致（整数変換して比較）
-                    # 3. 年月一致
+                    # 2. 金額完全一致（計算した期待金額と比較）
+                    # 3. 年月一致（支払タイミング調整後の月と比較）
                     code_match = (formatted_partner_code == formatted_payee_code)
-                    amount_match = (int(order_amount or 0) == int(pay_amount or 0))
-                    month_match = (order_year_month == pay_year_month)
+                    amount_match = (int(expected_amount or 0) == int(pay_amount or 0))
+                    month_match = (expected_payment_year_month == pay_year_month)
 
                     if code_match and amount_match and month_match:
                         # 照合成功
@@ -2060,13 +2100,21 @@ class DatabaseManager:
                         matched_count += 1
                         matched = True
 
+                        # ログに照合情報を出力
+                        payment_info = f"{int(expected_amount):,}円"
+                        if payment_type == "回数ベース" and broadcast_days and unit_price:
+                            payment_info += f" ({payment_type})"
                         log_message(f"  照合成功: 発注#{order_number} ⇔ 支払#{payment_id} "
-                                  f"({partner_name} / {int(order_amount):,}円)")
+                                  f"({partner_name} / {payment_info} / {payment_timing})")
                         break
 
                 if not matched:
                     not_matched_count += 1
-                    log_message(f"  未照合: 発注#{order_number} ({partner_name} / {int(order_amount):,}円)")
+                    payment_info = f"{int(expected_amount):,}円"
+                    if payment_type == "回数ベース":
+                        payment_info += f" ({payment_type})"
+                    log_message(f"  未照合: 発注#{order_number} ({partner_name} / {payment_info} / "
+                              f"期待月:{expected_payment_year_month})")
 
             # コミット
             order_conn.commit()
