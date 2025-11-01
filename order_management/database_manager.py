@@ -1255,6 +1255,7 @@ class OrderManagementDB:
                     eo.order_number,
                     eo.project_id,
                     p.name as project_name,
+                    p.broadcast_days,
                     eo.item_name,
                     eo.supplier_id,
                     eo.expected_payment_amount,
@@ -1262,7 +1263,10 @@ class OrderManagementDB:
                     eo.payment_status,
                     eo.payment_matched_id,
                     eo.payment_difference,
-                    oc.order_type
+                    COALESCE(oc.order_type, '発注書') as order_type,
+                    COALESCE(oc.payment_type, '月額固定') as payment_type,
+                    oc.unit_price,
+                    COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
                 FROM expenses_order eo
                 LEFT JOIN projects p ON eo.project_id = p.id
                 LEFT JOIN order_contracts oc ON eo.project_id = oc.program_id AND eo.supplier_id = oc.partner_id
@@ -1276,9 +1280,10 @@ class OrderManagementDB:
             partners_dict = {}
 
             for order in orders:
-                (order_id, order_number, project_id, project_name, item_name,
+                (order_id, order_number, project_id, project_name, broadcast_days, item_name,
                  supplier_id, amount, payment_date, payment_status,
-                 payment_matched_id, payment_difference, order_type) = order
+                 payment_matched_id, payment_difference, order_type,
+                 payment_type, unit_price, payment_timing) = order
 
                 if supplier_id is None:
                     continue  # 取引先が設定されていない発注はスキップ
@@ -1303,6 +1308,26 @@ class OrderManagementDB:
                             'total_amount': 0
                         }
 
+                # 計算内訳を生成
+                calculation_detail = ""
+                if payment_type == "回数ベース" and broadcast_days and unit_price:
+                    # 放送回数を計算
+                    from order_management.broadcast_utils import calculate_monthly_broadcast_count
+                    try:
+                        # payment_dateから年月を抽出
+                        payment_year = int(payment_date[:4])
+                        payment_month = int(payment_date[5:7])
+                        broadcast_count = calculate_monthly_broadcast_count(
+                            payment_year, payment_month, broadcast_days
+                        )
+                        calculation_detail = f"{broadcast_count}回 × {int(unit_price):,}円"
+                    except:
+                        calculation_detail = "計算エラー"
+                elif payment_type == "月額固定":
+                    calculation_detail = "月額固定"
+                else:
+                    calculation_detail = "-"
+
                 # 発注情報を追加
                 if supplier_id in partners_dict:
                     partners_dict[supplier_id]['orders'].append({
@@ -1315,7 +1340,11 @@ class OrderManagementDB:
                         'payment_status': payment_status or '未払い',
                         'payment_matched_id': payment_matched_id,
                         'payment_difference': payment_difference or 0,
-                        'order_type': order_type or '発注書'
+                        'order_type': order_type or '発注書',
+                        'payment_type': payment_type or '月額固定',
+                        'unit_price': unit_price,
+                        'payment_timing': payment_timing or '翌月末払い',
+                        'calculation_detail': calculation_detail
                     })
                     partners_dict[supplier_id]['total_amount'] += (amount or 0)
 

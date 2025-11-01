@@ -98,10 +98,11 @@ class OrderPaymentReconciliationTab(QWidget):
 
         # テーブル
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(11)
         self.table.setHorizontalHeaderLabels([
             "取引先コード", "取引先名", "発注番号", "案件名", "項目名",
-            "発注金額", "支払予定日", "ステータス"
+            "支払タイプ", "計算内訳", "発注金額", "支払予定日",
+            "支払タイミング", "ステータス"
         ])
 
         # カラム幅を調整
@@ -111,9 +112,12 @@ class OrderPaymentReconciliationTab(QWidget):
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 発注番号
         header.setSectionResizeMode(3, QHeaderView.Stretch)  # 案件名
         header.setSectionResizeMode(4, QHeaderView.Stretch)  # 項目名
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 発注金額
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 支払予定日
-        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # ステータス
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 支払タイプ
+        header.setSectionResizeMode(6, QHeaderView.Stretch)  # 計算内訳
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # 発注金額
+        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # 支払予定日
+        header.setSectionResizeMode(9, QHeaderView.ResizeToContents)  # 支払タイミング
+        header.setSectionResizeMode(10, QHeaderView.ResizeToContents)  # ステータス
 
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -159,30 +163,46 @@ class OrderPaymentReconciliationTab(QWidget):
                 for order in partner['orders']:
                     self.table.insertRow(row)
 
-                    # 取引先コード
+                    # 取引先コード (col 0)
                     self.table.setItem(row, 0, QTableWidgetItem(partner_code))
 
-                    # 取引先名
+                    # 取引先名 (col 1)
                     self.table.setItem(row, 1, QTableWidgetItem(partner_name))
 
-                    # 発注番号
+                    # 発注番号 (col 2)
                     self.table.setItem(row, 2, QTableWidgetItem(order['order_number']))
 
-                    # 案件名
+                    # 案件名 (col 3)
                     self.table.setItem(row, 3, QTableWidgetItem(order['project_name']))
 
-                    # 項目名
+                    # 項目名 (col 4)
                     self.table.setItem(row, 4, QTableWidgetItem(order['item_name']))
 
-                    # 発注金額
+                    # 支払タイプ (col 5)
+                    payment_type = order.get('payment_type', '-')
+                    payment_type_item = QTableWidgetItem(payment_type)
+                    payment_type_item.setTextAlignment(Qt.AlignCenter)
+                    self.table.setItem(row, 5, payment_type_item)
+
+                    # 計算内訳 (col 6)
+                    calculation_detail = order.get('calculation_detail', '-')
+                    self.table.setItem(row, 6, QTableWidgetItem(calculation_detail))
+
+                    # 発注金額 (col 7)
                     amount_item = QTableWidgetItem(format_amount(order['amount']))
                     amount_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                    self.table.setItem(row, 5, amount_item)
+                    self.table.setItem(row, 7, amount_item)
 
-                    # 支払予定日
-                    self.table.setItem(row, 6, QTableWidgetItem(order['expected_payment_date']))
+                    # 支払予定日 (col 8)
+                    self.table.setItem(row, 8, QTableWidgetItem(order['expected_payment_date']))
 
-                    # ステータス
+                    # 支払タイミング (col 9)
+                    payment_timing = order.get('payment_timing', '-')
+                    payment_timing_item = QTableWidgetItem(payment_timing)
+                    payment_timing_item.setTextAlignment(Qt.AlignCenter)
+                    self.table.setItem(row, 9, payment_timing_item)
+
+                    # ステータス (col 10)
                     status = order['payment_status']
                     status_item = QTableWidgetItem(status)
                     status_item.setTextAlignment(Qt.AlignCenter)
@@ -197,7 +217,7 @@ class OrderPaymentReconciliationTab(QWidget):
                     else:
                         status_item.setBackground(QColor(211, 211, 211))  # グレー
 
-                    self.table.setItem(row, 7, status_item)
+                    self.table.setItem(row, 10, status_item)
 
                     row += 1
 
@@ -341,7 +361,8 @@ class OrderPaymentReconciliationTab(QWidget):
                 writer.writerow(["明細"])
                 writer.writerow([
                     "取引先コード", "取引先名", "発注番号", "案件名", "項目名",
-                    "発注金額", "支払予定日", "ステータス", "金額差異"
+                    "支払タイプ", "計算内訳", "発注金額", "支払予定日",
+                    "支払タイミング", "ステータス", "金額差異"
                 ])
 
                 for partner in payment_list:
@@ -352,8 +373,11 @@ class OrderPaymentReconciliationTab(QWidget):
                             order['order_number'],
                             order['project_name'],
                             order['item_name'],
+                            order.get('payment_type', '-'),
+                            order.get('calculation_detail', '-'),
                             order['amount'],
                             order['expected_payment_date'],
+                            order.get('payment_timing', '-'),
                             order['payment_status'],
                             order['payment_difference']
                         ])
