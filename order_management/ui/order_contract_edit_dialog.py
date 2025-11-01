@@ -40,9 +40,13 @@ class OrderContractEditDialog(QDialog):
 
         form_layout = QFormLayout()
 
-        # 番組選択
+        # 番組選択（検索可能）
         program_layout = QHBoxLayout()
         self.program_combo = QComboBox()
+        self.program_combo.setEditable(True)  # 編集可能に
+        self.program_combo.setInsertPolicy(QComboBox.NoInsert)  # 入力しても追加しない
+        self.program_combo.completer().setCompletionMode(self.program_combo.completer().PopupCompletion)
+        self.program_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致
         self.load_programs()
         program_layout.addWidget(self.program_combo)
 
@@ -51,9 +55,13 @@ class OrderContractEditDialog(QDialog):
 
         form_layout.addRow("番組名:", program_layout)
 
-        # 取引先選択
+        # 取引先選択（検索可能）
         partner_layout = QHBoxLayout()
         self.partner_combo = QComboBox()
+        self.partner_combo.setEditable(True)  # 編集可能に
+        self.partner_combo.setInsertPolicy(QComboBox.NoInsert)  # 入力しても追加しない
+        self.partner_combo.completer().setCompletionMode(self.partner_combo.completer().PopupCompletion)
+        self.partner_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致
         self.load_partners()
         partner_layout.addWidget(self.partner_combo)
 
