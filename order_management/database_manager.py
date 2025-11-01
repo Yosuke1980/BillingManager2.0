@@ -944,14 +944,17 @@ class OrderManagementDB:
                        oc.pdf_file_path, oc.notes,
                        oc.created_at, oc.updated_at,
                        COALESCE(oc.order_type, '発注書') as order_type,
-                       COALESCE(oc.order_status, '未') as order_status,
+                       COALESCE(oc.order_status, '未完了') as order_status,
                        oc.email_subject, oc.email_body, oc.email_sent_date, oc.email_to,
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
-                       COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
+                       COALESCE(oc.payment_timing, '翌月末払い') as payment_timing,
+                       oc.project_id, proj.name as project_name,
+                       oc.item_name
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
+                LEFT JOIN projects proj ON oc.project_id = proj.id
                 WHERE oc.id = ?
             """, (contract_id,))
             return cursor.fetchone()
@@ -1018,6 +1021,8 @@ class OrderManagementDB:
                 # 更新
                 cursor.execute("""
                     UPDATE order_contracts SET
+                        project_id = ?,
+                        item_name = ?,
                         program_id = ?,
                         partner_id = ?,
                         contract_start_date = ?,
@@ -1040,13 +1045,15 @@ class OrderManagementDB:
                         updated_at = ?
                     WHERE id = ?
                 """, (
-                    contract_data['program_id'],
+                    contract_data.get('project_id'),
+                    contract_data.get('item_name'),
+                    contract_data.get('program_id'),
                     contract_data['partner_id'],
                     contract_data['contract_start_date'],
                     contract_data['contract_end_date'],
                     contract_data.get('contract_period_type', '半年'),
                     contract_data.get('order_type', '発注書'),
-                    contract_data.get('order_status', '未'),
+                    contract_data.get('order_status', '未完了'),
                     contract_data.get('pdf_status', '未配布'),
                     contract_data.get('pdf_file_path', ''),
                     contract_data.get('pdf_distributed_date', ''),
@@ -1066,22 +1073,25 @@ class OrderManagementDB:
                 # 新規追加
                 cursor.execute("""
                     INSERT INTO order_contracts (
-                        program_id, partner_id, contract_start_date, contract_end_date,
+                        project_id, item_name, program_id, partner_id,
+                        contract_start_date, contract_end_date,
                         contract_period_type, order_type, order_status,
                         pdf_status, pdf_file_path,
                         pdf_distributed_date, confirmed_by,
                         email_subject, email_body, email_sent_date, email_to,
                         notes, payment_type, unit_price, payment_timing,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    contract_data['program_id'],
+                    contract_data.get('project_id'),
+                    contract_data.get('item_name'),
+                    contract_data.get('program_id'),
                     contract_data['partner_id'],
                     contract_data['contract_start_date'],
                     contract_data['contract_end_date'],
                     contract_data.get('contract_period_type', '半年'),
                     contract_data.get('order_type', '発注書'),
-                    contract_data.get('order_status', '未'),
+                    contract_data.get('order_status', '未完了'),
                     contract_data.get('pdf_status', '未配布'),
                     contract_data.get('pdf_file_path', ''),
                     contract_data.get('pdf_distributed_date', ''),
@@ -1270,7 +1280,9 @@ class OrderManagementDB:
                 FROM expenses_order eo
                 LEFT JOIN projects p ON eo.project_id = p.id
                 LEFT JOIN programs prog ON p.program_id = prog.id
-                LEFT JOIN order_contracts oc ON p.program_id = oc.program_id AND eo.supplier_id = oc.partner_id
+                LEFT JOIN order_contracts oc ON eo.project_id = oc.project_id
+                    AND eo.item_name = oc.item_name
+                    AND eo.supplier_id = oc.partner_id
                 WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
                 ORDER BY eo.supplier_id, eo.expected_payment_date
             """, (target_month,))

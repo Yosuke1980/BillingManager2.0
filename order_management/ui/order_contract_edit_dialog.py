@@ -51,10 +51,28 @@ class OrderContractEditDialog(QDialog):
 
         # 発注ステータス
         self.order_status_combo = QComboBox()
-        self.order_status_combo.addItems(["未", "済"])
+        self.order_status_combo.addItems(["未完了", "完了"])
         form_layout.addRow("発注ステータス:", self.order_status_combo)
 
-        # 番組選択（検索可能）
+        # 案件選択（検索可能）
+        project_layout = QHBoxLayout()
+        self.project_combo = QComboBox()
+        self.project_combo.setEditable(True)  # 編集可能に
+        self.project_combo.setInsertPolicy(QComboBox.NoInsert)  # 入力しても追加しない
+        self.project_combo.setMinimumWidth(300)  # 最小幅を設定
+        self.project_combo.completer().setCompletionMode(self.project_combo.completer().PopupCompletion)
+        self.project_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致
+        self.load_projects()
+        project_layout.addWidget(self.project_combo, 1)  # ストレッチファクター1で伸縮可能に
+
+        form_layout.addRow("案件名:", project_layout)
+
+        # 費用項目（自由入力）
+        self.item_name = QLineEdit()
+        self.item_name.setPlaceholderText("例: 山田太郎出演料、制作費")
+        form_layout.addRow("費用項目:", self.item_name)
+
+        # 番組選択（検索可能）- 互換性のため残す
         program_layout = QHBoxLayout()
         self.program_combo = QComboBox()
         self.program_combo.setEditable(True)  # 編集可能に
@@ -289,6 +307,17 @@ class OrderContractEditDialog(QDialog):
             self.partner_combo.addItem(display_text, partner[0])  # IDをデータとして保存
             self.partner_dict[display_text] = partner[0]
 
+    def load_projects(self):
+        """案件一覧を読み込み"""
+        projects = self.db.get_projects()
+        self.project_dict = {}
+
+        for project in projects:
+            # project: (id, name, date, type, budget, parent_id, start_date, end_date, created_at, updated_at, program_id)
+            display_text = f"{project[1]}"
+            self.project_combo.addItem(display_text, project[0])  # IDをデータとして保存
+            self.project_dict[display_text] = project[0]
+
     def load_contract_data(self):
         """発注書データを読み込み"""
         contract = self.db.get_order_contract_by_id(self.contract_id)
@@ -384,6 +413,17 @@ class OrderContractEditDialog(QDialog):
             if contract[22]:
                 self.payment_timing.setCurrentText(contract[22])
 
+            # 案件選択（インデックス23）
+            if contract[23]:
+                for i in range(self.project_combo.count()):
+                    if self.project_dict.get(self.project_combo.itemText(i)) == contract[23]:
+                        self.project_combo.setCurrentIndex(i)
+                        break
+
+            # 費用項目（インデックス25）
+            if contract[25]:
+                self.item_name.setText(contract[25])
+
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
         period_type = self.period_type.currentText()
@@ -418,8 +458,12 @@ class OrderContractEditDialog(QDialog):
     def save(self):
         """保存"""
         # バリデーション
-        if self.program_combo.currentIndex() < 0:
-            QMessageBox.warning(self, "警告", "番組を選択してください。")
+        if self.project_combo.currentIndex() < 0:
+            QMessageBox.warning(self, "警告", "案件を選択してください。")
+            return
+
+        if not self.item_name.text().strip():
+            QMessageBox.warning(self, "警告", "費用項目を入力してください。")
             return
 
         if self.partner_combo.currentIndex() < 0:
@@ -449,16 +493,22 @@ class OrderContractEditDialog(QDialog):
 
         # 発注書データを作成
         # currentData()でIDを取得（より安全）
+        project_id = self.project_combo.currentData()
         program_id = self.program_combo.currentData()
         partner_id = self.partner_combo.currentData()
 
         # IDが取得できない場合は辞書から取得（フォールバック）
+        if project_id is None:
+            project_key = self.project_combo.currentText()
+            project_id = self.project_dict.get(project_key)
+            if project_id is None:
+                QMessageBox.warning(self, "警告", "案件が正しく選択されていません。")
+                return
+
         if program_id is None:
             program_key = self.program_combo.currentText()
             program_id = self.program_dict.get(program_key)
-            if program_id is None:
-                QMessageBox.warning(self, "警告", "番組が正しく選択されていません。")
-                return
+            # program_idは必須ではないのでNoneでもOK
 
         if partner_id is None:
             partner_key = self.partner_combo.currentText()
@@ -468,6 +518,8 @@ class OrderContractEditDialog(QDialog):
                 return
 
         contract_data = {
+            'project_id': project_id,
+            'item_name': self.item_name.text().strip(),
             'program_id': program_id,
             'partner_id': partner_id,
             'contract_start_date': self.start_date.date().toString("yyyy-MM-dd"),
