@@ -130,12 +130,13 @@ class OrderContractEditDialog(QDialog):
 
         # === PDF関連フィールド（契約書・発注書用） ===
         # PDFステータス
+        self.pdf_status_label = QLabel("PDFステータス:")
         self.pdf_status = QComboBox()
         self.pdf_status.addItems(["未配布", "配布済", "受領確認済"])
-        self.pdf_status_row = form_layout.rowCount()
-        form_layout.addRow("PDFステータス:", self.pdf_status)
+        form_layout.addRow(self.pdf_status_label, self.pdf_status)
 
         # PDFファイル
+        self.pdf_file_label = QLabel("PDFファイル:")
         pdf_layout = QHBoxLayout()
         self.pdf_label = QLabel("(未選択)")
         pdf_layout.addWidget(self.pdf_label)
@@ -143,47 +144,46 @@ class OrderContractEditDialog(QDialog):
         pdf_layout.addWidget(pdf_btn)
         self.pdf_widget = QWidget()
         self.pdf_widget.setLayout(pdf_layout)
-        self.pdf_file_row = form_layout.rowCount()
-        form_layout.addRow("PDFファイル:", self.pdf_widget)
+        form_layout.addRow(self.pdf_file_label, self.pdf_widget)
 
         # PDF配布日
+        self.distributed_date_label = QLabel("PDF配布日:")
         self.distributed_date = QDateEdit()
         self.distributed_date.setCalendarPopup(True)
         self.distributed_date.setDate(QDate.currentDate())
-        self.distributed_date_row = form_layout.rowCount()
-        form_layout.addRow("PDF配布日:", self.distributed_date)
+        form_layout.addRow(self.distributed_date_label, self.distributed_date)
 
         # 確認者
+        self.confirmed_by_label = QLabel("配布確認者:")
         self.confirmed_by = QLineEdit()
-        self.confirmed_by_row = form_layout.rowCount()
-        form_layout.addRow("配布確認者:", self.confirmed_by)
+        form_layout.addRow(self.confirmed_by_label, self.confirmed_by)
 
         # === メール関連フィールド（メール発注用） ===
         # メール件名
+        self.email_subject_label = QLabel("メール件名:")
         self.email_subject = QLineEdit()
         self.email_subject.setPlaceholderText("例: 2025年度上期 番組制作委託のお願い")
-        self.email_subject_row = form_layout.rowCount()
-        form_layout.addRow("メール件名:", self.email_subject)
+        form_layout.addRow(self.email_subject_label, self.email_subject)
 
         # メール送信先
+        self.email_to_label = QLabel("送信先アドレス:")
         self.email_to = QLineEdit()
         self.email_to.setPlaceholderText("例: partner@example.com")
-        self.email_to_row = form_layout.rowCount()
-        form_layout.addRow("送信先アドレス:", self.email_to)
+        form_layout.addRow(self.email_to_label, self.email_to)
 
         # メール送信日
+        self.email_sent_date_label = QLabel("送信日:")
         self.email_sent_date = QDateEdit()
         self.email_sent_date.setCalendarPopup(True)
         self.email_sent_date.setDate(QDate.currentDate())
-        self.email_sent_date_row = form_layout.rowCount()
-        form_layout.addRow("送信日:", self.email_sent_date)
+        form_layout.addRow(self.email_sent_date_label, self.email_sent_date)
 
         # メール本文
+        self.email_body_label = QLabel("メール本文:")
         self.email_body = QTextEdit()
         self.email_body.setMaximumHeight(150)
         self.email_body.setPlaceholderText("メール本文を入力...")
-        self.email_body_row = form_layout.rowCount()
-        form_layout.addRow("メール本文:", self.email_body)
+        form_layout.addRow(self.email_body_label, self.email_body)
 
         # 備考
         self.notes = QTextEdit()
@@ -228,26 +228,42 @@ class OrderContractEditDialog(QDialog):
         """発注種別が変更されたときにフィールドの表示を切り替える"""
         if order_type == "メール発注":
             # PDFフィールドを非表示、メールフィールドを表示
-            self.form_layout.setRowVisible(self.pdf_status_row, False)
-            self.form_layout.setRowVisible(self.pdf_file_row, False)
-            self.form_layout.setRowVisible(self.distributed_date_row, False)
-            self.form_layout.setRowVisible(self.confirmed_by_row, False)
+            self.pdf_status_label.setVisible(False)
+            self.pdf_status.setVisible(False)
+            self.pdf_file_label.setVisible(False)
+            self.pdf_widget.setVisible(False)
+            self.distributed_date_label.setVisible(False)
+            self.distributed_date.setVisible(False)
+            self.confirmed_by_label.setVisible(False)
+            self.confirmed_by.setVisible(False)
 
-            self.form_layout.setRowVisible(self.email_subject_row, True)
-            self.form_layout.setRowVisible(self.email_to_row, True)
-            self.form_layout.setRowVisible(self.email_sent_date_row, True)
-            self.form_layout.setRowVisible(self.email_body_row, True)
+            self.email_subject_label.setVisible(True)
+            self.email_subject.setVisible(True)
+            self.email_to_label.setVisible(True)
+            self.email_to.setVisible(True)
+            self.email_sent_date_label.setVisible(True)
+            self.email_sent_date.setVisible(True)
+            self.email_body_label.setVisible(True)
+            self.email_body.setVisible(True)
         else:
             # 契約書 or 発注書: PDFフィールドを表示、メールフィールドを非表示
-            self.form_layout.setRowVisible(self.pdf_status_row, True)
-            self.form_layout.setRowVisible(self.pdf_file_row, True)
-            self.form_layout.setRowVisible(self.distributed_date_row, True)
-            self.form_layout.setRowVisible(self.confirmed_by_row, True)
+            self.pdf_status_label.setVisible(True)
+            self.pdf_status.setVisible(True)
+            self.pdf_file_label.setVisible(True)
+            self.pdf_widget.setVisible(True)
+            self.distributed_date_label.setVisible(True)
+            self.distributed_date.setVisible(True)
+            self.confirmed_by_label.setVisible(True)
+            self.confirmed_by.setVisible(True)
 
-            self.form_layout.setRowVisible(self.email_subject_row, False)
-            self.form_layout.setRowVisible(self.email_to_row, False)
-            self.form_layout.setRowVisible(self.email_sent_date_row, False)
-            self.form_layout.setRowVisible(self.email_body_row, False)
+            self.email_subject_label.setVisible(False)
+            self.email_subject.setVisible(False)
+            self.email_to_label.setVisible(False)
+            self.email_to.setVisible(False)
+            self.email_sent_date_label.setVisible(False)
+            self.email_sent_date.setVisible(False)
+            self.email_body_label.setVisible(False)
+            self.email_body.setVisible(False)
 
     def load_programs(self):
         """番組一覧を読み込み"""
