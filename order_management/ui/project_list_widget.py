@@ -210,7 +210,12 @@ class ProjectListWidget(QWidget):
             QMessageBox.warning(self, "警告", "編集する案件を選択してください")
             return
 
-        project_id = int(self.table.item(current_row, 0).text())
+        # ID列からカンマ区切りのIDリストを取得（グループ化対応）
+        id_str = self.table.item(current_row, 0).text()
+        project_ids = [int(id_) for id_ in id_str.split(",")]
+
+        # グループ化されている場合は最初のIDを編集
+        project_id = project_ids[0]
         project = self.db.get_project_by_id(project_id)
 
         dialog = ProjectEditDialog(self, project)
@@ -231,7 +236,12 @@ class ProjectListWidget(QWidget):
             QMessageBox.warning(self, "警告", "削除する案件を選択してください")
             return
 
-        project_id = int(self.table.item(current_row, 0).text())
+        # ID列からカンマ区切りのIDリストを取得（グループ化対応）
+        id_str = self.table.item(current_row, 0).text()
+        project_ids = [int(id_) for id_ in id_str.split(",")]
+
+        # グループ化されている場合は最初のIDを削除
+        project_id = project_ids[0]
         project_name = self.table.item(current_row, 2).text()
 
         reply = QMessageBox.question(
@@ -256,7 +266,12 @@ class ProjectListWidget(QWidget):
             QMessageBox.warning(self, "警告", "複製する案件を選択してください")
             return
 
-        project_id = int(self.table.item(current_row, 0).text())
+        # ID列からカンマ区切りのIDリストを取得（グループ化対応）
+        id_str = self.table.item(current_row, 0).text()
+        project_ids = [int(id_) for id_ in id_str.split(",")]
+
+        # グループ化されている場合は最初のIDを複製
+        project_id = project_ids[0]
         project_name = self.table.item(current_row, 2).text()
 
         reply = QMessageBox.question(
