@@ -323,12 +323,15 @@ class OrderContractEditDialog(QDialog):
         contract = self.db.get_order_contract_by_id(self.contract_id)
 
         if contract:
-            # contract: (id, program_id, program_name, partner_id, partner_name,
-            #            contract_start_date, contract_end_date, contract_period_type,
-            #            pdf_status, pdf_distributed_date, confirmed_by,
-            #            pdf_file_path, notes, created_at, updated_at,
-            #            order_type, order_status,
-            #            email_subject, email_body, email_sent_date, email_to)
+            # contract フィールド順序:
+            # 0:id, 1:program_id, 2:program_name, 3:partner_id, 4:partner_name,
+            # 5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
+            # 8:pdf_status, 9:pdf_distributed_date, 10:confirmed_by,
+            # 11:pdf_file_path, 12:notes, 13:created_at, 14:updated_at,
+            # 15:order_type, 16:order_status,
+            # 17:email_subject, 18:email_body, 19:email_sent_date, 20:email_to,
+            # 21:payment_type, 22:unit_price, 23:payment_timing,
+            # 24:project_id, 25:project_name, 26:item_name
 
             # 番組選択
             for i in range(self.program_combo.count()):
@@ -396,33 +399,33 @@ class OrderContractEditDialog(QDialog):
             if contract[18]:
                 self.email_sent_date.setDate(QDate.fromString(contract[18], "yyyy-MM-dd"))
 
-            # メール送信先（インデックス19）
-            if contract[19]:
-                self.email_to.setText(contract[19])
-
-            # 支払タイプ（インデックス20）
+            # メール送信先（インデックス20）
             if contract[20]:
-                self.payment_type.setCurrentText(contract[20])
-                self.on_payment_type_changed(contract[20])  # フィールド表示を更新
+                self.email_to.setText(contract[20])
 
-            # 単価（インデックス21）
-            if contract[21] is not None:
-                self.unit_price.setText(str(int(contract[21])))
+            # 支払タイプ（インデックス21）
+            if contract[21]:
+                self.payment_type.setCurrentText(contract[21])
+                self.on_payment_type_changed(contract[21])  # フィールド表示を更新
 
-            # 支払タイミング（インデックス22）
-            if contract[22]:
-                self.payment_timing.setCurrentText(contract[22])
+            # 単価（インデックス22）
+            if contract[22] is not None:
+                self.unit_price.setText(str(int(contract[22])))
 
-            # 案件選択（インデックス23）
+            # 支払タイミング（インデックス23）
             if contract[23]:
+                self.payment_timing.setCurrentText(contract[23])
+
+            # 案件選択（インデックス24）
+            if contract[24]:
                 for i in range(self.project_combo.count()):
-                    if self.project_dict.get(self.project_combo.itemText(i)) == contract[23]:
+                    if self.project_dict.get(self.project_combo.itemText(i)) == contract[24]:
                         self.project_combo.setCurrentIndex(i)
                         break
 
-            # 費用項目（インデックス25）
-            if contract[25]:
-                self.item_name.setText(contract[25])
+            # 費用項目（インデックス26）
+            if contract[26]:
+                self.item_name.setText(contract[26])
 
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
