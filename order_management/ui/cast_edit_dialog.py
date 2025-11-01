@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from order_management.database_manager import OrderManagementDB
-from order_management.ui.program_edit_dialog import ProducerSelectDialog
+from order_management.ui.producer_select_dialog import ProducerSelectDialog
 
 
 class CastEditDialog(QDialog):
