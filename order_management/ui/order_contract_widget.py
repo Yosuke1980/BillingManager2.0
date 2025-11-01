@@ -44,6 +44,18 @@ class OrderContractWidget(QWidget):
         self.search_input.textChanged.connect(self.load_contracts)
         filter_layout.addWidget(self.search_input)
 
+        filter_layout.addWidget(QLabel("発注種別:"))
+        self.order_type_filter = QComboBox()
+        self.order_type_filter.addItems(["すべて", "契約書", "発注書", "メール発注"])
+        self.order_type_filter.currentTextChanged.connect(self.load_contracts)
+        filter_layout.addWidget(self.order_type_filter)
+
+        filter_layout.addWidget(QLabel("発注ステータス:"))
+        self.order_status_filter = QComboBox()
+        self.order_status_filter.addItems(["すべて", "未", "済"])
+        self.order_status_filter.currentTextChanged.connect(self.load_contracts)
+        filter_layout.addWidget(self.order_status_filter)
+
         filter_layout.addWidget(QLabel("PDFステータス:"))
         self.status_filter = QComboBox()
         self.status_filter.addItems(["すべて", "未配布", "配布済", "受領確認済"])
@@ -58,16 +70,16 @@ class OrderContractWidget(QWidget):
 
         # テーブル
         self.table = QTableWidget()
-        self.table.setColumnCount(11)
+        self.table.setColumnCount(13)
         self.table.setHorizontalHeaderLabels([
-            "ID", "番組名", "取引先名", "委託開始日", "委託終了日",
+            "ID", "発注種別", "発注ステータス", "番組名", "取引先名", "委託開始日", "委託終了日",
             "契約期間", "PDFステータス", "配布日", "確認者", "PDFパス", "備考"
         ])
 
         # カラム幅の設定
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 番組名
-        header.setSectionResizeMode(2, QHeaderView.Stretch)  # 取引先名
+        header.setSectionResizeMode(3, QHeaderView.Stretch)  # 番組名
+        header.setSectionResizeMode(4, QHeaderView.Stretch)  # 取引先名
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.doubleClicked.connect(self.edit_contract)
@@ -105,11 +117,17 @@ class OrderContractWidget(QWidget):
         """発注書一覧を読み込み"""
         search_term = self.search_input.text()
         status_filter = self.status_filter.currentText()
+        order_type_filter = self.order_type_filter.currentText()
+        order_status_filter = self.order_status_filter.currentText()
 
         if status_filter == "すべて":
             status_filter = None
+        if order_type_filter == "すべて":
+            order_type_filter = None
+        if order_status_filter == "すべて":
+            order_status_filter = None
 
-        contracts = self.db.get_order_contracts(search_term, status_filter)
+        contracts = self.db.get_order_contracts(search_term, status_filter, order_type_filter, order_status_filter)
 
         self.table.setRowCount(len(contracts))
 
@@ -117,19 +135,22 @@ class OrderContractWidget(QWidget):
             # contract: (id, program_id, program_name, partner_id, partner_name,
             #            contract_start_date, contract_end_date, contract_period_type,
             #            pdf_status, pdf_distributed_date, confirmed_by,
-            #            pdf_file_path, notes)
+            #            pdf_file_path, notes, order_type, order_status,
+            #            email_subject, email_body, email_sent_date, email_to)
 
             self.table.setItem(row, 0, QTableWidgetItem(str(contract[0])))  # ID
-            self.table.setItem(row, 1, QTableWidgetItem(contract[2] or ""))  # 番組名
-            self.table.setItem(row, 2, QTableWidgetItem(contract[4] or ""))  # 取引先名
-            self.table.setItem(row, 3, QTableWidgetItem(contract[5] or ""))  # 委託開始日
-            self.table.setItem(row, 4, QTableWidgetItem(contract[6] or ""))  # 委託終了日
-            self.table.setItem(row, 5, QTableWidgetItem(contract[7] or ""))  # 契約期間
-            self.table.setItem(row, 6, QTableWidgetItem(contract[8] or ""))  # PDFステータス
-            self.table.setItem(row, 7, QTableWidgetItem(contract[9] or ""))  # 配布日
-            self.table.setItem(row, 8, QTableWidgetItem(contract[10] or ""))  # 確認者
-            self.table.setItem(row, 9, QTableWidgetItem(contract[11] or ""))  # PDFパス
-            self.table.setItem(row, 10, QTableWidgetItem(contract[12] or ""))  # 備考
+            self.table.setItem(row, 1, QTableWidgetItem(contract[13] or "発注書"))  # 発注種別
+            self.table.setItem(row, 2, QTableWidgetItem(contract[14] or "未"))  # 発注ステータス
+            self.table.setItem(row, 3, QTableWidgetItem(contract[2] or ""))  # 番組名
+            self.table.setItem(row, 4, QTableWidgetItem(contract[4] or ""))  # 取引先名
+            self.table.setItem(row, 5, QTableWidgetItem(contract[5] or ""))  # 委託開始日
+            self.table.setItem(row, 6, QTableWidgetItem(contract[6] or ""))  # 委託終了日
+            self.table.setItem(row, 7, QTableWidgetItem(contract[7] or ""))  # 契約期間
+            self.table.setItem(row, 8, QTableWidgetItem(contract[8] or ""))  # PDFステータス
+            self.table.setItem(row, 9, QTableWidgetItem(contract[9] or ""))  # 配布日
+            self.table.setItem(row, 10, QTableWidgetItem(contract[10] or ""))  # 確認者
+            self.table.setItem(row, 11, QTableWidgetItem(contract[11] or ""))  # PDFパス
+            self.table.setItem(row, 12, QTableWidgetItem(contract[12] or ""))  # 備考
 
             # 期限切れ間近の行を赤色でハイライト
             if contract[6]:  # contract_end_date
@@ -145,9 +166,9 @@ class OrderContractWidget(QWidget):
                 except:
                     pass
 
-        # IDカラムを非表示
+        # IDカラムとPDFパスカラムを非表示
         self.table.setColumnHidden(0, True)
-        self.table.setColumnHidden(9, True)  # PDFパスも非表示
+        self.table.setColumnHidden(11, True)  # PDFパスも非表示
 
     def show_expiring_contracts(self):
         """期限切れ間近の発注書を表示"""

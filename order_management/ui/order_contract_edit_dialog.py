@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
-                             QDateEdit, QTextEdit, QFileDialog, QMessageBox)
+                             QDateEdit, QTextEdit, QFileDialog, QMessageBox, QWidget)
 from PyQt5.QtCore import QDate, Qt
 from datetime import datetime, timedelta
 import os
@@ -41,6 +41,18 @@ class OrderContractEditDialog(QDialog):
         layout = QVBoxLayout()
 
         form_layout = QFormLayout()
+
+        # 発注種別選択
+        self.order_type_combo = QComboBox()
+        self.order_type_combo.addItems(["契約書", "発注書", "メール発注"])
+        self.order_type_combo.setCurrentText("発注書")
+        self.order_type_combo.currentTextChanged.connect(self.on_order_type_changed)
+        form_layout.addRow("発注種別:", self.order_type_combo)
+
+        # 発注ステータス
+        self.order_status_combo = QComboBox()
+        self.order_status_combo.addItems(["未", "済"])
+        form_layout.addRow("発注ステータス:", self.order_status_combo)
 
         # 番組選択（検索可能）
         program_layout = QHBoxLayout()
@@ -96,9 +108,11 @@ class OrderContractEditDialog(QDialog):
         self.period_type.currentTextChanged.connect(self.on_period_type_changed)
         form_layout.addRow("契約期間:", self.period_type)
 
+        # === PDF関連フィールド（契約書・発注書用） ===
         # PDFステータス
         self.pdf_status = QComboBox()
         self.pdf_status.addItems(["未配布", "配布済", "受領確認済"])
+        self.pdf_status_row = form_layout.rowCount()
         form_layout.addRow("PDFステータス:", self.pdf_status)
 
         # PDFファイル
@@ -107,22 +121,57 @@ class OrderContractEditDialog(QDialog):
         pdf_layout.addWidget(self.pdf_label)
         pdf_btn = create_button("ファイル選択", self.select_pdf)
         pdf_layout.addWidget(pdf_btn)
-        form_layout.addRow("PDFファイル:", pdf_layout)
+        self.pdf_widget = QWidget()
+        self.pdf_widget.setLayout(pdf_layout)
+        self.pdf_file_row = form_layout.rowCount()
+        form_layout.addRow("PDFファイル:", self.pdf_widget)
 
         # PDF配布日
         self.distributed_date = QDateEdit()
         self.distributed_date.setCalendarPopup(True)
         self.distributed_date.setDate(QDate.currentDate())
+        self.distributed_date_row = form_layout.rowCount()
         form_layout.addRow("PDF配布日:", self.distributed_date)
 
         # 確認者
         self.confirmed_by = QLineEdit()
+        self.confirmed_by_row = form_layout.rowCount()
         form_layout.addRow("配布確認者:", self.confirmed_by)
+
+        # === メール関連フィールド（メール発注用） ===
+        # メール件名
+        self.email_subject = QLineEdit()
+        self.email_subject.setPlaceholderText("例: 2025年度上期 番組制作委託のお願い")
+        self.email_subject_row = form_layout.rowCount()
+        form_layout.addRow("メール件名:", self.email_subject)
+
+        # メール送信先
+        self.email_to = QLineEdit()
+        self.email_to.setPlaceholderText("例: partner@example.com")
+        self.email_to_row = form_layout.rowCount()
+        form_layout.addRow("送信先アドレス:", self.email_to)
+
+        # メール送信日
+        self.email_sent_date = QDateEdit()
+        self.email_sent_date.setCalendarPopup(True)
+        self.email_sent_date.setDate(QDate.currentDate())
+        self.email_sent_date_row = form_layout.rowCount()
+        form_layout.addRow("送信日:", self.email_sent_date)
+
+        # メール本文
+        self.email_body = QTextEdit()
+        self.email_body.setMaximumHeight(150)
+        self.email_body.setPlaceholderText("メール本文を入力...")
+        self.email_body_row = form_layout.rowCount()
+        form_layout.addRow("メール本文:", self.email_body)
 
         # 備考
         self.notes = QTextEdit()
         self.notes.setMaximumHeight(80)
         form_layout.addRow("備考:", self.notes)
+
+        # フォームレイアウトを保存（後で行を表示/非表示にするため）
+        self.form_layout = form_layout
 
         layout.addLayout(form_layout)
 
@@ -138,6 +187,34 @@ class OrderContractEditDialog(QDialog):
         layout.addLayout(button_layout)
 
         self.setLayout(layout)
+
+        # 初期表示：発注書モードでメールフィールドを非表示
+        self.on_order_type_changed("発注書")
+
+    def on_order_type_changed(self, order_type):
+        """発注種別が変更されたときにフィールドの表示を切り替える"""
+        if order_type == "メール発注":
+            # PDFフィールドを非表示、メールフィールドを表示
+            self.form_layout.setRowVisible(self.pdf_status_row, False)
+            self.form_layout.setRowVisible(self.pdf_file_row, False)
+            self.form_layout.setRowVisible(self.distributed_date_row, False)
+            self.form_layout.setRowVisible(self.confirmed_by_row, False)
+
+            self.form_layout.setRowVisible(self.email_subject_row, True)
+            self.form_layout.setRowVisible(self.email_to_row, True)
+            self.form_layout.setRowVisible(self.email_sent_date_row, True)
+            self.form_layout.setRowVisible(self.email_body_row, True)
+        else:
+            # 契約書 or 発注書: PDFフィールドを表示、メールフィールドを非表示
+            self.form_layout.setRowVisible(self.pdf_status_row, True)
+            self.form_layout.setRowVisible(self.pdf_file_row, True)
+            self.form_layout.setRowVisible(self.distributed_date_row, True)
+            self.form_layout.setRowVisible(self.confirmed_by_row, True)
+
+            self.form_layout.setRowVisible(self.email_subject_row, False)
+            self.form_layout.setRowVisible(self.email_to_row, False)
+            self.form_layout.setRowVisible(self.email_sent_date_row, False)
+            self.form_layout.setRowVisible(self.email_body_row, False)
 
     def load_programs(self):
         """番組一覧を読み込み"""
@@ -171,7 +248,9 @@ class OrderContractEditDialog(QDialog):
             # contract: (id, program_id, program_name, partner_id, partner_name,
             #            contract_start_date, contract_end_date, contract_period_type,
             #            pdf_status, pdf_distributed_date, confirmed_by,
-            #            pdf_file_path, notes, created_at, updated_at)
+            #            pdf_file_path, notes, created_at, updated_at,
+            #            order_type, order_status,
+            #            email_subject, email_body, email_sent_date, email_to)
 
             # 番組選択
             for i in range(self.program_combo.count()):
@@ -217,6 +296,31 @@ class OrderContractEditDialog(QDialog):
             # 備考
             if contract[12]:
                 self.notes.setPlainText(contract[12])
+
+            # 発注種別（インデックス14）
+            if contract[14]:
+                self.order_type_combo.setCurrentText(contract[14])
+                self.on_order_type_changed(contract[14])  # フィールド表示を更新
+
+            # 発注ステータス（インデックス15）
+            if contract[15]:
+                self.order_status_combo.setCurrentText(contract[15])
+
+            # メール件名（インデックス16）
+            if contract[16]:
+                self.email_subject.setText(contract[16])
+
+            # メール本文（インデックス17）
+            if contract[17]:
+                self.email_body.setPlainText(contract[17])
+
+            # メール送信日（インデックス18）
+            if contract[18]:
+                self.email_sent_date.setDate(QDate.fromString(contract[18], "yyyy-MM-dd"))
+
+            # メール送信先（インデックス19）
+            if contract[19]:
+                self.email_to.setText(contract[19])
 
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
@@ -291,12 +395,18 @@ class OrderContractEditDialog(QDialog):
             'contract_start_date': self.start_date.date().toString("yyyy-MM-dd"),
             'contract_end_date': self.end_date.date().toString("yyyy-MM-dd"),
             'contract_period_type': self.period_type.currentText(),
+            'order_type': self.order_type_combo.currentText(),
+            'order_status': self.order_status_combo.currentText(),
             'pdf_status': self.pdf_status.currentText(),
             'pdf_file_path': saved_pdf_path if saved_pdf_path else (
                 self.pdf_file_path if self.contract_id else ""
             ),
             'pdf_distributed_date': self.distributed_date.date().toString("yyyy-MM-dd"),
             'confirmed_by': self.confirmed_by.text(),
+            'email_subject': self.email_subject.text(),
+            'email_body': self.email_body.toPlainText(),
+            'email_sent_date': self.email_sent_date.date().toString("yyyy-MM-dd"),
+            'email_to': self.email_to.text(),
             'notes': self.notes.toPlainText()
         }
 

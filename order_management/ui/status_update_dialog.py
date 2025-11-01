@@ -31,6 +31,11 @@ class StatusUpdateDialog(QDialog):
 
         form_layout = QFormLayout()
 
+        # 発注ステータス
+        self.order_status = QComboBox()
+        self.order_status.addItems(["未", "済"])
+        form_layout.addRow("発注ステータス:", self.order_status)
+
         # PDFステータス
         self.pdf_status = QComboBox()
         self.pdf_status.addItems(["未配布", "配布済", "受領確認済"])
@@ -67,6 +72,10 @@ class StatusUpdateDialog(QDialog):
         contract = self.db.get_order_contract_by_id(self.contract_id)
 
         if contract:
+            # contract[15]: order_status
+            if contract[15]:
+                self.order_status.setCurrentText(contract[15])
+
             # contract[8]: pdf_status
             if contract[8]:
                 self.pdf_status.setCurrentText(contract[8])
@@ -82,13 +91,30 @@ class StatusUpdateDialog(QDialog):
     def update(self):
         """ステータスを更新"""
         try:
-            self.db.update_pdf_status(
-                self.contract_id,
-                self.pdf_status.currentText(),
-                self.distributed_date.date().toString("yyyy-MM-dd"),
-                self.confirmed_by.text()
-            )
-            QMessageBox.information(self, "成功", "配布ステータスを更新しました。")
-            self.accept()
+            # 発注ステータスとPDFステータスを両方更新
+            contract = self.db.get_order_contract_by_id(self.contract_id)
+            if contract:
+                contract_data = {
+                    'id': self.contract_id,
+                    'program_id': contract[1],
+                    'partner_id': contract[3],
+                    'contract_start_date': contract[5],
+                    'contract_end_date': contract[6],
+                    'contract_period_type': contract[7],
+                    'order_type': contract[14],
+                    'order_status': self.order_status.currentText(),  # 更新
+                    'pdf_status': self.pdf_status.currentText(),  # 更新
+                    'pdf_file_path': contract[11],
+                    'pdf_distributed_date': self.distributed_date.date().toString("yyyy-MM-dd"),  # 更新
+                    'confirmed_by': self.confirmed_by.text(),  # 更新
+                    'email_subject': contract[16] if len(contract) > 16 else '',
+                    'email_body': contract[17] if len(contract) > 17 else '',
+                    'email_sent_date': contract[18] if len(contract) > 18 else '',
+                    'email_to': contract[19] if len(contract) > 19 else '',
+                    'notes': contract[12]
+                }
+                self.db.save_order_contract(contract_data)
+                QMessageBox.information(self, "成功", "ステータスを更新しました。")
+                self.accept()
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"ステータスの更新に失敗しました:\n{str(e)}")
