@@ -3,7 +3,7 @@
 このモジュールはMacで背景と文字色が同じになる問題を防ぐため、
 全てのUIコンポーネントに明示的な色設定を提供します。
 """
-from PyQt5.QtWidgets import QTableWidgetItem, QListWidgetItem
+from PyQt5.QtWidgets import QTableWidgetItem, QListWidgetItem, QPushButton
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 
@@ -81,3 +81,22 @@ def set_list_item_color(item: QListWidgetItem):
     """
     if item:
         item.setForeground(TEXT_COLOR)
+
+
+def create_button(text: str, callback=None) -> QPushButton:
+    """ボタンを作成（色設定済み）
+
+    Args:
+        text: ボタンのテキスト
+        callback: クリック時のコールバック関数（任意）
+
+    Returns:
+        QPushButton: 色設定済みのボタン
+    """
+    button = QPushButton(text)
+    apply_mac_safe_style(button)
+
+    if callback:
+        button.clicked.connect(callback)
+
+    return button
