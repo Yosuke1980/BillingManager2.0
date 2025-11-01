@@ -12,6 +12,8 @@ import shutil
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
+from order_management.ui.program_edit_dialog import ProgramEditDialog
+from order_management.ui.partner_master_widget import PartnerEditDialog
 
 
 class OrderContractEditDialog(QDialog):
@@ -39,14 +41,26 @@ class OrderContractEditDialog(QDialog):
         form_layout = QFormLayout()
 
         # 番組選択
+        program_layout = QHBoxLayout()
         self.program_combo = QComboBox()
         self.load_programs()
-        form_layout.addRow("番組名:", self.program_combo)
+        program_layout.addWidget(self.program_combo)
+
+        add_program_btn = create_button("新規番組追加", self.add_new_program)
+        program_layout.addWidget(add_program_btn)
+
+        form_layout.addRow("番組名:", program_layout)
 
         # 取引先選択
+        partner_layout = QHBoxLayout()
         self.partner_combo = QComboBox()
         self.load_partners()
-        form_layout.addRow("取引先名:", self.partner_combo)
+        partner_layout.addWidget(self.partner_combo)
+
+        add_partner_btn = create_button("新規取引先追加", self.add_new_partner)
+        partner_layout.addWidget(add_partner_btn)
+
+        form_layout.addRow("取引先名:", partner_layout)
 
         # 委託開始日
         self.start_date = QDateEdit()
@@ -281,3 +295,29 @@ class OrderContractEditDialog(QDialog):
             self.accept()
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"発注書の保存に失敗しました:\n{str(e)}")
+
+    def add_new_program(self):
+        """新規番組を追加"""
+        dialog = ProgramEditDialog(self)
+        if dialog.exec_():
+            # 番組一覧を再読み込み
+            current_count = self.program_combo.count()
+            self.program_combo.clear()
+            self.load_programs()
+
+            # 新しく追加された番組を自動選択
+            if self.program_combo.count() > current_count:
+                self.program_combo.setCurrentIndex(self.program_combo.count() - 1)
+
+    def add_new_partner(self):
+        """新規取引先を追加"""
+        dialog = PartnerEditDialog(self)
+        if dialog.exec_():
+            # 取引先一覧を再読み込み
+            current_count = self.partner_combo.count()
+            self.partner_combo.clear()
+            self.load_partners()
+
+            # 新しく追加された取引先を自動選択
+            if self.partner_combo.count() > current_count:
+                self.partner_combo.setCurrentIndex(self.partner_combo.count() - 1)
