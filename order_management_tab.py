@@ -8,6 +8,7 @@ from order_management.ui.projects_main_widget import ProjectsMainWidget
 from order_management.ui.partner_master_widget import PartnerMasterWidget
 from order_management.ui.cast_master_widget import CastMasterWidget
 from order_management.ui.program_master_widget import ProgramMasterWidget
+from order_management.ui.order_contract_widget import OrderContractWidget
 from order_management.ui.settings_widget import SettingsWidget
 
 
@@ -38,6 +39,9 @@ class OrderManagementTab(QWidget):
         # 番組マスタータブ
         self.program_widget = ProgramMasterWidget()
 
+        # 発注書管理タブ
+        self.order_contract_widget = OrderContractWidget()
+
         # 設定タブ
         self.settings_widget = SettingsWidget()
 
@@ -45,6 +49,7 @@ class OrderManagementTab(QWidget):
         self.sub_tabs.addTab(self.partner_widget, "取引先マスター")
         self.sub_tabs.addTab(self.cast_widget, "出演者マスター")
         self.sub_tabs.addTab(self.program_widget, "番組マスター")
+        self.sub_tabs.addTab(self.order_contract_widget, "発注書管理")
         self.sub_tabs.addTab(self.settings_widget, "設定")
 
         # タブ切り替え時にデータを更新

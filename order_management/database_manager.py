@@ -864,3 +864,286 @@ class OrderManagementDB:
             raise e
         finally:
             conn.close()
+
+    # ========================================
+    # 発注書マスター操作
+    # ========================================
+
+    def get_order_contracts(self, search_term: str = "", pdf_status: str = None) -> List[Tuple]:
+        """発注書一覧を取得
+
+        Args:
+            search_term: 検索キーワード（取引先名、番組名）
+            pdf_status: PDFステータスフィルタ
+
+        Returns:
+            List[Tuple]: (id, program_id, program_name, partner_id, partner_name,
+                         contract_start_date, contract_end_date, contract_period_type,
+                         pdf_status, pdf_distributed_date, confirmed_by)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT oc.id, oc.program_id, prog.name as program_name,
+                       oc.partner_id, p.name as partner_name,
+                       oc.contract_start_date, oc.contract_end_date,
+                       oc.contract_period_type, oc.pdf_status,
+                       oc.pdf_distributed_date, oc.confirmed_by,
+                       oc.pdf_file_path, oc.notes
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN partners p ON oc.partner_id = p.id
+                WHERE 1=1
+            """
+            params = []
+
+            if search_term:
+                query += " AND (prog.name LIKE ? OR p.name LIKE ?)"
+                params.extend([f"%{search_term}%", f"%{search_term}%"])
+
+            if pdf_status:
+                query += " AND oc.pdf_status = ?"
+                params.append(pdf_status)
+
+            query += " ORDER BY oc.contract_end_date DESC"
+
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_order_contract_by_id(self, contract_id: int) -> Optional[Tuple]:
+        """IDで発注書を取得"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT oc.id, oc.program_id, prog.name as program_name,
+                       oc.partner_id, p.name as partner_name,
+                       oc.contract_start_date, oc.contract_end_date,
+                       oc.contract_period_type, oc.pdf_status,
+                       oc.pdf_distributed_date, oc.confirmed_by,
+                       oc.pdf_file_path, oc.notes,
+                       oc.created_at, oc.updated_at
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN partners p ON oc.partner_id = p.id
+                WHERE oc.id = ?
+            """, (contract_id,))
+            return cursor.fetchone()
+        finally:
+            conn.close()
+
+    def get_order_contracts_by_program(self, program_id: int) -> List[Tuple]:
+        """番組IDで発注書を取得"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT oc.id, oc.program_id, prog.name as program_name,
+                       oc.partner_id, p.name as partner_name,
+                       oc.contract_start_date, oc.contract_end_date,
+                       oc.contract_period_type, oc.pdf_status,
+                       oc.pdf_distributed_date, oc.confirmed_by,
+                       oc.pdf_file_path, oc.notes
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN partners p ON oc.partner_id = p.id
+                WHERE oc.program_id = ?
+                ORDER BY oc.contract_start_date DESC
+            """, (program_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def save_order_contract(self, contract_data: dict) -> int:
+        """発注書を保存
+
+        Args:
+            contract_data: 発注書データ
+                - id: 契約ID（更新時のみ）
+                - program_id: 番組ID
+                - partner_id: 取引先ID
+                - contract_start_date: 委託開始日
+                - contract_end_date: 委託終了日
+                - contract_period_type: 契約期間種別
+                - pdf_status: PDFステータス
+                - pdf_file_path: PDFファイルパス
+                - pdf_distributed_date: PDF配布日
+                - confirmed_by: 確認者
+                - notes: 備考
+
+        Returns:
+            int: 契約ID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            contract_id = contract_data.get('id')
+            now = datetime.now()
+
+            if contract_id:
+                # 更新
+                cursor.execute("""
+                    UPDATE order_contracts SET
+                        program_id = ?,
+                        partner_id = ?,
+                        contract_start_date = ?,
+                        contract_end_date = ?,
+                        contract_period_type = ?,
+                        pdf_status = ?,
+                        pdf_file_path = ?,
+                        pdf_distributed_date = ?,
+                        confirmed_by = ?,
+                        notes = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                """, (
+                    contract_data['program_id'],
+                    contract_data['partner_id'],
+                    contract_data['contract_start_date'],
+                    contract_data['contract_end_date'],
+                    contract_data.get('contract_period_type', '半年'),
+                    contract_data.get('pdf_status', '未配布'),
+                    contract_data.get('pdf_file_path', ''),
+                    contract_data.get('pdf_distributed_date', ''),
+                    contract_data.get('confirmed_by', ''),
+                    contract_data.get('notes', ''),
+                    now,
+                    contract_id
+                ))
+            else:
+                # 新規追加
+                cursor.execute("""
+                    INSERT INTO order_contracts (
+                        program_id, partner_id, contract_start_date, contract_end_date,
+                        contract_period_type, pdf_status, pdf_file_path,
+                        pdf_distributed_date, confirmed_by, notes,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    contract_data['program_id'],
+                    contract_data['partner_id'],
+                    contract_data['contract_start_date'],
+                    contract_data['contract_end_date'],
+                    contract_data.get('contract_period_type', '半年'),
+                    contract_data.get('pdf_status', '未配布'),
+                    contract_data.get('pdf_file_path', ''),
+                    contract_data.get('pdf_distributed_date', ''),
+                    contract_data.get('confirmed_by', ''),
+                    contract_data.get('notes', ''),
+                    now,
+                    now
+                ))
+                contract_id = cursor.lastrowid
+
+            conn.commit()
+            return contract_id
+
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def delete_order_contract(self, contract_id: int):
+        """発注書を削除"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("DELETE FROM order_contracts WHERE id = ?", (contract_id,))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def update_pdf_status(self, contract_id: int, pdf_status: str,
+                         distributed_date: str = None, confirmed_by: str = None):
+        """PDF配布ステータスを更新"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            now = datetime.now()
+            cursor.execute("""
+                UPDATE order_contracts SET
+                    pdf_status = ?,
+                    pdf_distributed_date = ?,
+                    confirmed_by = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (pdf_status, distributed_date or '', confirmed_by or '', now, contract_id))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def sync_contract_to_program(self, contract_id: int) -> bool:
+        """発注書の委託期間を番組マスタに同期"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 発注書情報を取得
+            cursor.execute("""
+                SELECT program_id, contract_start_date, contract_end_date
+                FROM order_contracts WHERE id = ?
+            """, (contract_id,))
+
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            program_id, start_date, end_date = row
+
+            # 番組マスタを更新
+            now = datetime.now()
+            cursor.execute("""
+                UPDATE programs SET
+                    start_date = ?,
+                    end_date = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (start_date, end_date, now, program_id))
+
+            conn.commit()
+            return True
+
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def get_expiring_contracts(self, days_before: int = 30) -> List[Tuple]:
+        """期限切れ間近の発注書を取得"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT oc.id, oc.program_id, prog.name as program_name,
+                       oc.partner_id, p.name as partner_name,
+                       oc.contract_start_date, oc.contract_end_date,
+                       oc.contract_period_type, oc.pdf_status,
+                       oc.pdf_distributed_date, oc.confirmed_by
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN partners p ON oc.partner_id = p.id
+                WHERE DATE(oc.contract_end_date) BETWEEN DATE('now')
+                      AND DATE('now', '+' || ? || ' days')
+                ORDER BY oc.contract_end_date ASC
+            """, (days_before,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
