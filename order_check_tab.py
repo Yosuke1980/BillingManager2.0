@@ -300,27 +300,49 @@ class OrderCheckTab(QWidget):
             elif choice == 1:
                 # 番組マスタに自動追加
                 try:
-                    # broadcast_daysがある場合は使用、なければ空文字
-                    broadcast_days = expense_item.get('broadcast_days', '')
+                    # 既に同じ名前の番組が存在するか再チェック
+                    # （ユーザーが選択肢を選んでいる間に別のユーザーが追加した可能性を考慮）
+                    programs = self.order_db.get_programs()
+                    for prog in programs:
+                        if prog[1] == program_name:  # prog[1] = name
+                            program_id = prog[0]
+                            QMessageBox.information(
+                                self, "情報",
+                                f"番組「{program_name}」は既に番組マスタに存在していました。"
+                            )
+                            use_custom_name = False
+                            break
+                    else:
+                        # broadcast_daysがある場合は使用、なければ空文字
+                        broadcast_days = expense_item.get('broadcast_days', '')
 
-                    # 番組マスタに追加
-                    program_data = {
-                        'name': program_name,
-                        'broadcast_days': broadcast_days,
-                        'notes': '発注チェックから自動追加'
-                    }
-                    program_id = self.order_db.save_program(program_data)
+                        # 番組マスタに追加
+                        program_data = {
+                            'name': program_name,
+                            'broadcast_days': broadcast_days,
+                            'notes': '発注チェックから自動追加'
+                        }
+                        program_id = self.order_db.save_program(program_data)
 
-                    QMessageBox.information(
-                        self, "成功",
-                        f"番組「{program_name}」を番組マスタに追加しました。"
-                    )
-                    use_custom_name = False
+                        QMessageBox.information(
+                            self, "成功",
+                            f"番組「{program_name}」を番組マスタに追加しました。"
+                        )
+                        use_custom_name = False
                 except Exception as e:
-                    QMessageBox.critical(
-                        self, "エラー",
-                        f"番組マスタへの追加に失敗しました:\n{str(e)}"
-                    )
+                    # UNIQUE constraint違反の場合
+                    error_msg = str(e)
+                    if 'UNIQUE constraint failed' in error_msg or 'UNIQUE' in error_msg:
+                        QMessageBox.warning(
+                            self, "番組名が重複",
+                            f"番組「{program_name}」は既に番組マスタに登録されています。\n"
+                            f"別の番組名を使用するか、自由入力モードを選択してください。"
+                        )
+                    else:
+                        QMessageBox.critical(
+                            self, "エラー",
+                            f"番組マスタへの追加に失敗しました:\n{error_msg}"
+                        )
                     return
             elif choice == 2:
                 # 自由入力モード
