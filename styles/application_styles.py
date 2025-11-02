@@ -166,11 +166,16 @@ class ApplicationStyleManager:
                 border: 1px solid #ced4da;
                 border-radius: 4px;
                 background-color: white;
-                color: #495057;
+                color: #2c3e50;
             }}
             QLineEdit:focus {{
                 border-color: #80bdff;
                 outline: none;
+                background-color: white;
+            }}
+            QLineEdit:disabled {{
+                background-color: #f8f9fa;
+                color: #6c757d;
             }}
 
             /* コンボボックス */
@@ -355,6 +360,14 @@ class ApplicationStyleManager:
                 background-color: white;
             }}
 
+            /* スクロールエリア内のウィジェット（ダークモード対策） */
+            QScrollArea > QWidget {{
+                background-color: white;
+            }}
+            QScrollArea > QWidget > QWidget {{
+                background-color: white;
+            }}
+
             /* スクロールバー */
             QScrollBar:vertical {{
                 background-color: #f8f9fa;
@@ -411,5 +424,37 @@ class ApplicationStyleManager:
                 color: #2c3e50;
                 selection-background-color: #007bff;
                 selection-color: white;
+            }}
+
+            /* テキスト編集エリア（ダークモード対策） */
+            QTextEdit {{
+                font-size: {font_size}px;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                background-color: white;
+                color: #2c3e50;
+                padding: 4px;
+            }}
+            QTextEdit:focus {{
+                border-color: #80bdff;
+                background-color: white;
+            }}
+            QTextEdit:disabled {{
+                background-color: #f8f9fa;
+                color: #6c757d;
+            }}
+
+            /* プレーンテキスト編集エリア */
+            QPlainTextEdit {{
+                font-size: {font_size}px;
+                border: 1px solid #ced4da;
+                border-radius: 4px;
+                background-color: white;
+                color: #2c3e50;
+                padding: 4px;
+            }}
+            QPlainTextEdit:focus {{
+                border-color: #80bdff;
+                background-color: white;
             }}
         """

@@ -271,6 +271,7 @@ class UnifiedOrderDialog(QDialog):
         # フォームエリアをスクロール可能にする
         form_widget = QWidget()
         form_widget.setLayout(form_layout)
+        form_widget.setStyleSheet("background-color: white;")
 
         scroll_area = QScrollArea()
         scroll_area.setWidget(form_widget)
