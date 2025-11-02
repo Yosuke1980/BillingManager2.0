@@ -23,12 +23,9 @@ from styles import ApplicationStyleManager
 from ui import MenuBuilder, ToolbarBuilder, StatusBarManager
 from database import DatabaseManager
 from payment_tab import PaymentTab
-from expense_tab import ExpenseTab
-from master_tab import MasterTab
 from order_management_tab import OrderManagementTab
-from order_payment_reconciliation_tab import OrderPaymentReconciliationTab
-from order_check_tab import OrderCheckTab
 from payment_order_check_tab import PaymentOrderCheckTab
+from data_management_tab import DataManagementTab
 from utils import get_latest_csv_file, log_message
 
 
@@ -129,45 +126,34 @@ class RadioBillingApp(QMainWindow):
 
     def _add_tabs(self, tab_control):
         """各タブを追加"""
-        # 支払いタブ
+        # メインタブ1: 支払い情報（毎日使う）
         self.payment_tab = PaymentTab(tab_control, self)
         tab_control.addTab(self.payment_tab, self.config.TAB_NAMES['payment'])
 
-        # 費用管理タブ
-        self.expense_tab = ExpenseTab(tab_control, self)
-        tab_control.addTab(self.expense_tab, self.config.TAB_NAMES['expense'])
+        # メインタブ2: 支払い・発注チェック（毎日使う）
+        self.payment_order_check_tab = PaymentOrderCheckTab()
+        tab_control.addTab(self.payment_order_check_tab, self.config.TAB_NAMES['payment_order_check'])
 
-        # 費用マスタータブ
-        self.master_tab = MasterTab(tab_control, self)
-        tab_control.addTab(self.master_tab, self.config.TAB_NAMES['master'])
-
-        # 発注管理タブ
+        # メインタブ3: 発注管理（毎日使う）
         self.order_management_tab = OrderManagementTab(tab_control, self)
         tab_control.addTab(self.order_management_tab, self.config.TAB_NAMES['order_management'])
 
-        # 発注チェックタブ
-        self.order_check_tab = OrderCheckTab()
-        tab_control.addTab(self.order_check_tab, "発注チェック")
+        # メインタブ4: データ管理（たまに使う、サブタブあり）
+        self.data_management_tab = DataManagementTab(tab_control, self)
+        tab_control.addTab(self.data_management_tab, self.config.TAB_NAMES['data_management'])
 
         # シグナル接続：発注追加時に発注書マスタを更新
-        self.order_check_tab.order_added.connect(
+        self.data_management_tab.order_check_tab.order_added.connect(
             self.order_management_tab.order_contract_widget.load_contracts
         )
-
-        # 支払い・発注チェックタブ
-        self.payment_order_check_tab = PaymentOrderCheckTab()
-        tab_control.addTab(self.payment_order_check_tab, "支払い・発注チェック")
-
-        # 発注・支払照合タブ
-        self.reconciliation_tab = OrderPaymentReconciliationTab()
-        tab_control.addTab(self.reconciliation_tab, "発注・支払照合")
 
     def _load_initial_data(self):
         """初期データの読み込み"""
         self.import_latest_csv()
         self.payment_tab.refresh_data()
-        self.expense_tab.refresh_data()
-        self.master_tab.refresh_data()
+        # データ管理タブ内のサブタブのデータを更新
+        self.data_management_tab.expense_tab.refresh_data()
+        self.data_management_tab.master_tab.refresh_data()
 
     # ========================================
     # データ管理メソッド
