@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QRadioButton, QButtonGroup, QLineEdit, QHeaderView,
                              QMessageBox, QComboBox)
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QBrush
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
@@ -241,11 +241,13 @@ class PaymentOrderCheckTab(QWidget):
             status_item.setBackground(bg_color)
             self.table.setItem(row, 11, status_item)
 
-            # 行全体の背景色
+            # 行全体の背景色と文字色を設定
+            text_color = QColor(0, 0, 0)  # 黒
             for col in range(self.table.columnCount()):
                 cell_item = self.table.item(row, col)
                 if cell_item:
                     cell_item.setBackground(bg_color)
+                    cell_item.setForeground(QBrush(text_color))
 
     def update_statistics(self):
         """統計情報を更新"""

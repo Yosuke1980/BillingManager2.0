@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLabel, QComboBox,
                              QMessageBox, QHeaderView, QGroupBox, QGridLayout)
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QBrush
 from datetime import datetime
 from order_management.database_manager import OrderManagementDB
 from database import DatabaseManager
@@ -208,6 +208,7 @@ class OrderPaymentReconciliationTab(QWidget):
                     status_item.setTextAlignment(Qt.AlignCenter)
 
                     # ステータスに応じて色分け
+                    text_color = QColor(0, 0, 0)  # 黒
                     if status == '支払済':
                         status_item.setBackground(QColor(144, 238, 144))  # 薄緑
                     elif status == '金額相違':
@@ -217,6 +218,7 @@ class OrderPaymentReconciliationTab(QWidget):
                     else:
                         status_item.setBackground(QColor(211, 211, 211))  # グレー
 
+                    status_item.setForeground(QBrush(text_color))
                     self.table.setItem(row, 10, status_item)
 
                     row += 1

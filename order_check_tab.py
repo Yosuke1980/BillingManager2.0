@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QRadioButton, QButtonGroup, QLineEdit, QHeaderView,
                              QMessageBox)
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QBrush
 
 from database import DatabaseManager
 from order_management.database_manager import OrderManagementDB
@@ -188,10 +188,12 @@ class OrderCheckTab(QWidget):
             # 発注状況
             status_text = "✓ 登録済" if item['has_order'] else "✕ 未登録"
             status_item = QTableWidgetItem(status_text)
+            text_color = QColor(0, 0, 0)  # 黒
             if item['has_order']:
                 status_item.setBackground(QColor(200, 255, 200))  # 薄い緑
             else:
                 status_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            status_item.setForeground(QBrush(text_color))
             self.table.setItem(row, 7, status_item)
 
             # アクションボタン
@@ -206,11 +208,12 @@ class OrderCheckTab(QWidget):
             # 元の案件名 (非表示)
             self.table.setItem(row, 9, QTableWidgetItem(item['project_name_full']))
 
-            # 行全体の背景色
+            # 行全体の背景色と文字色
             for col in range(self.table.columnCount()):
                 cell_item = self.table.item(row, col)
                 if cell_item and not item['has_order']:
                     cell_item.setBackground(QColor(255, 240, 240))  # とても薄い赤
+                    cell_item.setForeground(QBrush(text_color))
 
     def add_order_contract(self, row):
         """発注契約を追加"""
