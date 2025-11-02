@@ -955,7 +955,8 @@ class OrderManagementDB:
                        COALESCE(oc.project_name_type, 'program') as project_name_type,
                        oc.custom_project_name,
                        oc.implementation_date,
-                       oc.spot_amount
+                       oc.spot_amount,
+                       COALESCE(oc.order_category, 'レギュラー制作発注書') as order_category
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -1052,6 +1053,7 @@ class OrderManagementDB:
                         custom_project_name = ?,
                         implementation_date = ?,
                         spot_amount = ?,
+                        order_category = ?,
                         updated_at = ?
                     WHERE id = ?
                 """, (
@@ -1081,6 +1083,7 @@ class OrderManagementDB:
                     contract_data.get('custom_project_name', ''),
                     contract_data.get('implementation_date', ''),
                     contract_data.get('spot_amount'),
+                    contract_data.get('order_category', 'レギュラー制作発注書'),
                     now,
                     contract_id
                 ))
@@ -1096,9 +1099,9 @@ class OrderManagementDB:
                         email_subject, email_body, email_sent_date, email_to,
                         notes, payment_type, unit_price, payment_timing,
                         contract_type, project_name_type, custom_project_name,
-                        implementation_date, spot_amount,
+                        implementation_date, spot_amount, order_category,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     contract_data.get('project_id'),
                     contract_data.get('item_name'),
@@ -1126,6 +1129,7 @@ class OrderManagementDB:
                     contract_data.get('custom_project_name', ''),
                     contract_data.get('implementation_date', ''),
                     contract_data.get('spot_amount'),
+                    contract_data.get('order_category', 'レギュラー制作発注書'),
                     now,
                     now
                 ))
