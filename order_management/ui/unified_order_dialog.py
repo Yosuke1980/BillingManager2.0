@@ -5,7 +5,7 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
                              QDateEdit, QTextEdit, QFileDialog, QMessageBox, QWidget,
-                             QRadioButton, QButtonGroup)
+                             QRadioButton, QButtonGroup, QScrollArea, QApplication)
 from PyQt5.QtCore import QDate, Qt
 from datetime import datetime, timedelta
 import os
@@ -30,7 +30,12 @@ class UnifiedOrderDialog(QDialog):
         self.pdf_dir = "order_pdfs"
 
         self.setWindowTitle("発注書編集" if contract_id else "新規発注書")
-        self.setMinimumWidth(600)
+
+        # 画面サイズを取得して適切なダイアログサイズを設定
+        screen = QApplication.primaryScreen().geometry()
+        dialog_height = min(800, int(screen.height() * 0.8))  # 画面の80%または800pxの小さい方
+        self.setMinimumSize(650, 600)
+        self.resize(700, dialog_height)
 
         self.init_ui(category)
 
@@ -263,9 +268,18 @@ class UnifiedOrderDialog(QDialog):
         # フォームレイアウトを保存（後で行を表示/非表示にするため）
         self.form_layout = form_layout
 
-        layout.addLayout(form_layout)
+        # フォームエリアをスクロール可能にする
+        form_widget = QWidget()
+        form_widget.setLayout(form_layout)
 
-        # ボタン
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(form_widget)
+        scroll_area.setWidgetResizable(True)
+        # 固定高さではなく、ボタンエリアの高さを確保しつつ最大限使用
+
+        layout.addWidget(scroll_area, 1)  # ストレッチファクター1で伸縮可能
+
+        # ボタン（スクロールエリアの外に配置）
         button_layout = QHBoxLayout()
         save_btn = create_button("保存", self.save)
         button_layout.addWidget(save_btn)
@@ -274,7 +288,7 @@ class UnifiedOrderDialog(QDialog):
         button_layout.addWidget(cancel_btn)
 
         button_layout.addStretch()
-        layout.addLayout(button_layout)
+        layout.addLayout(button_layout, 0)  # ストレッチファクター0で固定サイズ
 
         self.setLayout(layout)
 
@@ -315,15 +329,19 @@ class UnifiedOrderDialog(QDialog):
         self.spot_amount.setVisible(not is_regular)
 
     def on_payment_type_changed(self, payment_type):
-        """支払タイプが変更されたときに単価フィールドの表示を切り替える"""
+        """支払タイプが変更されたときに単価フィールドのラベルを変更する"""
         if payment_type == "回数ベース":
-            # 単価フィールドを表示
-            self.unit_price_label.setVisible(True)
-            self.unit_price.setVisible(True)
+            # 回数ベース：単価として表示
+            self.unit_price_label.setText("単価（円/回）:")
+            self.unit_price.setPlaceholderText("例: 50000")
         else:
-            # 単価フィールドを非表示
-            self.unit_price_label.setVisible(False)
-            self.unit_price.setVisible(False)
+            # 月額固定：月額金額として表示
+            self.unit_price_label.setText("月額金額（円）:")
+            self.unit_price.setPlaceholderText("例: 180000")
+
+        # 常に表示
+        self.unit_price_label.setVisible(True)
+        self.unit_price.setVisible(True)
 
     def on_project_name_type_changed(self):
         """案件名の選択方式が変更されたときの処理"""
@@ -604,7 +622,12 @@ class UnifiedOrderDialog(QDialog):
         category = self.order_category_combo.currentText()
         is_regular = category.startswith("レギュラー")
 
-        if not is_regular:
+        if is_regular:
+            # レギュラーの場合は月額金額（または単価）が必須
+            if not self.unit_price.text().strip():
+                QMessageBox.warning(self, "警告", "月額金額（または単価）を入力してください。")
+                return
+        else:
             # 単発の場合は金額が必須
             if not self.spot_amount.text().strip():
                 QMessageBox.warning(self, "警告", "金額を入力してください。")

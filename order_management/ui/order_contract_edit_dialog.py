@@ -5,7 +5,7 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
                              QDateEdit, QTextEdit, QFileDialog, QMessageBox, QWidget,
-                             QRadioButton, QButtonGroup)
+                             QRadioButton, QButtonGroup, QScrollArea, QApplication)
 from PyQt5.QtCore import QDate, Qt
 from datetime import datetime, timedelta
 import os
@@ -30,7 +30,12 @@ class OrderContractEditDialog(QDialog):
         self.pdf_dir = "order_pdfs"
 
         self.setWindowTitle("発注書編集" if contract_id else "新規発注書")
-        self.setMinimumWidth(600)
+
+        # 画面サイズを取得して適切なダイアログサイズを設定
+        screen = QApplication.primaryScreen().geometry()
+        dialog_height = min(800, int(screen.height() * 0.8))  # 画面の80%または800pxの小さい方
+        self.setMinimumSize(650, 600)
+        self.resize(700, dialog_height)
 
         self.init_ui()
 
@@ -40,8 +45,12 @@ class OrderContractEditDialog(QDialog):
     def init_ui(self):
         """UIの初期化"""
         layout = QVBoxLayout()
+        layout.setContentsMargins(10, 10, 10, 10)  # ダイアログ全体の余白を10pxに設定
+        layout.setSpacing(5)  # ウィジェット間のスペースを5pxに設定
 
         form_layout = QFormLayout()
+        form_layout.setVerticalSpacing(5)  # 縦のスペースを5pxに設定（さらにコンパクト）
+        form_layout.setContentsMargins(10, 10, 10, 10)  # 余白を調整
 
         # 発注種別選択
         self.order_type_combo = QComboBox()
@@ -127,18 +136,23 @@ class OrderContractEditDialog(QDialog):
 
         form_layout.addRow("取引先名:", partner_layout)
 
-        # 委託開始日
+        # 委託期間（開始日と終了日を横並び）
+        date_layout = QHBoxLayout()
+        date_layout.addWidget(QLabel("開始日:"))
         self.start_date = QDateEdit()
         self.start_date.setCalendarPopup(True)
         self.start_date.setDate(QDate.currentDate())
         self.start_date.dateChanged.connect(self.on_start_date_changed)
-        form_layout.addRow("委託開始日:", self.start_date)
+        date_layout.addWidget(self.start_date)
 
-        # 委託終了日
+        date_layout.addWidget(QLabel("  終了日:"))
         self.end_date = QDateEdit()
         self.end_date.setCalendarPopup(True)
         self.end_date.setDate(QDate.currentDate().addMonths(6))
-        form_layout.addRow("委託終了日:", self.end_date)
+        date_layout.addWidget(self.end_date)
+        date_layout.addStretch()
+
+        form_layout.addRow("委託期間:", date_layout)
 
         # 契約期間種別
         self.period_type = QComboBox()
@@ -148,24 +162,35 @@ class OrderContractEditDialog(QDialog):
         form_layout.addRow("契約期間:", self.period_type)
 
         # === レギュラー番組契約条件 ===
-        # 支払タイプ
+        # 支払タイプと単価を横並び
+        payment_layout = QHBoxLayout()
+        payment_layout.addWidget(QLabel("支払タイプ:"))
         self.payment_type = QComboBox()
         self.payment_type.addItems(["月額固定", "回数ベース"])
         self.payment_type.setCurrentText("月額固定")
         self.payment_type.currentTextChanged.connect(self.on_payment_type_changed)
-        form_layout.addRow("支払タイプ:", self.payment_type)
+        payment_layout.addWidget(self.payment_type)
 
-        # 単価（回数ベースの場合のみ表示）
-        self.unit_price_label = QLabel("単価（円/回）:")
+        payment_layout.addWidget(QLabel("  金額:"))
+        self.unit_price_label = QLabel("")  # ラベルは非表示にして、QHBoxLayoutで管理
         self.unit_price = QLineEdit()
         self.unit_price.setPlaceholderText("例: 50000")
-        form_layout.addRow(self.unit_price_label, self.unit_price)
+        self.unit_price.setMaximumWidth(150)
+        payment_layout.addWidget(self.unit_price)
+        payment_layout.addStretch()
 
-        # 支払タイミング
+        form_layout.addRow("支払条件:", payment_layout)
+
+        # 支払タイミングと契約期間を横並び
+        timing_layout = QHBoxLayout()
+        timing_layout.addWidget(QLabel("支払タイミング:"))
         self.payment_timing = QComboBox()
         self.payment_timing.addItems(["翌月末払い", "当月末払い"])
         self.payment_timing.setCurrentText("翌月末払い")
-        form_layout.addRow("支払タイミング:", self.payment_timing)
+        timing_layout.addWidget(self.payment_timing)
+        timing_layout.addStretch()
+
+        form_layout.addRow("", timing_layout)
 
         # === PDF関連フィールド（契約書・発注書用） ===
         # PDFステータス
@@ -232,9 +257,19 @@ class OrderContractEditDialog(QDialog):
         # フォームレイアウトを保存（後で行を表示/非表示にするため）
         self.form_layout = form_layout
 
-        layout.addLayout(form_layout)
+        # フォームエリアをスクロール可能にする
+        form_widget = QWidget()
+        form_widget.setLayout(form_layout)
 
-        # ボタン
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(form_widget)
+        scroll_area.setWidgetResizable(True)
+        # 固定高さではなく、ボタンエリアの高さを確保しつつ最大限使用
+        # （レイアウトが自動的に調整する）
+
+        layout.addWidget(scroll_area, 1)  # ストレッチファクター1で伸縮可能
+
+        # ボタン（スクロールエリアの外に配置）
         button_layout = QHBoxLayout()
         save_btn = create_button("保存", self.save)
         button_layout.addWidget(save_btn)
@@ -243,7 +278,7 @@ class OrderContractEditDialog(QDialog):
         button_layout.addWidget(cancel_btn)
 
         button_layout.addStretch()
-        layout.addLayout(button_layout)
+        layout.addLayout(button_layout, 0)  # ストレッチファクター0で固定サイズ
 
         self.setLayout(layout)
 
@@ -253,15 +288,9 @@ class OrderContractEditDialog(QDialog):
         self.on_payment_type_changed("月額固定")
 
     def on_payment_type_changed(self, payment_type):
-        """支払タイプが変更されたときに単価フィールドの表示を切り替える"""
-        if payment_type == "回数ベース":
-            # 単価フィールドを表示
-            self.unit_price_label.setVisible(True)
-            self.unit_price.setVisible(True)
-        else:
-            # 単価フィールドを非表示
-            self.unit_price_label.setVisible(False)
-            self.unit_price.setVisible(False)
+        """支払タイプが変更されたときの処理（横並びレイアウトなので常に表示）"""
+        # 金額フィールドは常に表示されているので、特に処理は不要
+        pass
 
     def on_project_name_type_changed(self):
         """案件名の選択方式が変更されたときの処理"""
@@ -405,26 +434,26 @@ class OrderContractEditDialog(QDialog):
             if contract[12]:
                 self.notes.setPlainText(contract[12])
 
-            # 発注種別（インデックス14）
-            if contract[14]:
-                self.order_type_combo.setCurrentText(contract[14])
-                self.on_order_type_changed(contract[14])  # フィールド表示を更新
-
-            # 発注ステータス（インデックス15）
+            # 発注種別（インデックス15）
             if contract[15]:
-                self.order_status_combo.setCurrentText(contract[15])
+                self.order_type_combo.setCurrentText(contract[15])
+                self.on_order_type_changed(contract[15])  # フィールド表示を更新
 
-            # メール件名（インデックス16）
+            # 発注ステータス（インデックス16）
             if contract[16]:
-                self.email_subject.setText(contract[16])
+                self.order_status_combo.setCurrentText(contract[16])
 
-            # メール本文（インデックス17）
+            # メール件名（インデックス17）
             if contract[17]:
-                self.email_body.setPlainText(contract[17])
+                self.email_subject.setText(contract[17])
 
-            # メール送信日（インデックス18）
+            # メール本文（インデックス18）
             if contract[18]:
-                self.email_sent_date.setDate(QDate.fromString(contract[18], "yyyy-MM-dd"))
+                self.email_body.setPlainText(contract[18])
+
+            # メール送信日（インデックス19）
+            if contract[19]:
+                self.email_sent_date.setDate(QDate.fromString(contract[19], "yyyy-MM-dd"))
 
             # メール送信先（インデックス20）
             if contract[20]:
