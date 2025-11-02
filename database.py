@@ -2139,5 +2139,143 @@ class DatabaseManager:
             order_conn.close()
             billing_conn.close()
 
+    def _split_program_and_item(self, project_name_full):
+        """
+        費用マスターのproject_nameから番組名と費用項目を分離
+
+        Args:
+            project_name_full: 完全な案件名（例: "Baile Yokohama出演料"）
+
+        Returns:
+            tuple: (番組名, 費用項目)
+        """
+        # 費用項目キーワードリスト
+        item_keywords = [
+            "出演料", "出演費", "制作費", "構成料", "使用料",
+            "技術費", "編集費", "音響費", "ディレクター費"
+        ]
+
+        # 最後に出現するキーワードを探す
+        found_keyword = None
+        found_pos = -1
+
+        for keyword in item_keywords:
+            pos = project_name_full.rfind(keyword)
+            if pos > found_pos:
+                found_pos = pos
+                found_keyword = keyword
+
+        if found_keyword and found_pos > 0:
+            # 番組名 = キーワードの前まで（スペース除去）
+            program_name = project_name_full[:found_pos].strip()
+            # 費用項目 = キーワード以降
+            item_name = project_name_full[found_pos:].strip()
+            return program_name, item_name
+        else:
+            # キーワードが見つからない場合は全体を番組名として返す
+            return project_name_full, ""
+
+    def get_expense_master_with_order_status(self):
+        """
+        費用マスターの全レコードと発注登録状況を取得
+
+        Returns:
+            list: 費用マスター情報と発注状況のリスト
+            [
+                {
+                    'master_id': int,
+                    'project_name_full': str,
+                    'program_name': str,
+                    'item_name': str,
+                    'payee': str,
+                    'payee_code': str,
+                    'amount': float,
+                    'start_date': str,
+                    'end_date': str,
+                    'payment_type': str,
+                    'payment_timing': str,
+                    'broadcast_days': str,
+                    'has_order': bool,
+                    'order_contract_id': int or None
+                },
+                ...
+            ]
+        """
+        master_conn = sqlite3.connect(self.expense_master_db)
+        order_conn = sqlite3.connect("order_management.db")
+
+        try:
+            master_cursor = master_conn.cursor()
+            order_cursor = order_conn.cursor()
+
+            # 費用マスターの全レコードを取得
+            master_cursor.execute("""
+                SELECT id, project_name, payee, payee_code, amount,
+                       start_date, end_date, payment_type, payment_timing,
+                       broadcast_days
+                FROM expense_master
+                ORDER BY project_name
+            """)
+
+            expense_records = master_cursor.fetchall()
+            results = []
+
+            for record in expense_records:
+                (master_id, project_name_full, payee, payee_code, amount,
+                 start_date, end_date, payment_type, payment_timing,
+                 broadcast_days) = record
+
+                # 番組名と費用項目を分離
+                program_name, item_name = self._split_program_and_item(project_name_full)
+
+                # order_contractsで照合
+                # 照合条件:
+                # 1. programs.name = 抽出した番組名
+                # 2. order_contracts.item_name = 抽出した費用項目
+                # 3. partners.name = 取引先名
+                order_cursor.execute("""
+                    SELECT oc.id
+                    FROM order_contracts oc
+                    LEFT JOIN programs prog ON oc.program_id = prog.id
+                    LEFT JOIN partners p ON oc.partner_id = p.id
+                    WHERE (prog.name = ? OR oc.custom_project_name = ?)
+                      AND (oc.item_name = ? OR oc.item_name IS NULL)
+                      AND p.name = ?
+                    LIMIT 1
+                """, (program_name, program_name, item_name, payee))
+
+                order_result = order_cursor.fetchone()
+                has_order = order_result is not None
+                order_contract_id = order_result[0] if has_order else None
+
+                results.append({
+                    'master_id': master_id,
+                    'project_name_full': project_name_full or "",
+                    'program_name': program_name or "",
+                    'item_name': item_name or "",
+                    'payee': payee or "",
+                    'payee_code': payee_code or "",
+                    'amount': amount or 0.0,
+                    'start_date': start_date or "",
+                    'end_date': end_date or "",
+                    'payment_type': payment_type or "月額固定",
+                    'payment_timing': payment_timing or "翌月末払い",
+                    'broadcast_days': broadcast_days or "",
+                    'has_order': has_order,
+                    'order_contract_id': order_contract_id
+                })
+
+            log_message(f"費用マスターチェック完了: 全{len(results)}件")
+            return results
+
+        except Exception as e:
+            log_message(f"費用マスターチェックエラー: {e}")
+            import traceback
+            log_message(f"エラー詳細: {traceback.format_exc()}")
+            return []
+        finally:
+            master_conn.close()
+            order_conn.close()
+
 
 # ファイル終了確認用のコメント - database.py完了
