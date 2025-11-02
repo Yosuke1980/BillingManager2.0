@@ -264,8 +264,101 @@ class SpotContractEditDialog(QDialog):
 
     def load_contract_data(self):
         """発注書データを読み込み"""
-        # TODO: データ読み込み実装（次のステップ）
-        pass
+        contract = self.db.get_order_contract_by_id(self.contract_id)
+        if not contract:
+            QMessageBox.warning(self, "エラー", "発注書データが見つかりません。")
+            return
+
+        # インデックス対応表:
+        # 0:id, 1:program_id, 2:program_name, 3:partner_id, 4:partner_name,
+        # 5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
+        # 8:pdf_status, 9:pdf_distributed_date, 10:confirmed_by,
+        # 11:pdf_file_path, 12:notes, 13:created_at, 14:updated_at,
+        # 15:order_type, 16:order_status, 17:email_subject, 18:email_body,
+        # 19:email_sent_date, 20:email_to, 21:payment_type, 22:unit_price,
+        # 23:payment_timing, 24:project_id, 25:project_name, 26:item_name,
+        # 27:contract_type, 28:project_name_type, 29:custom_project_name,
+        # 30:implementation_date, 31:spot_amount
+
+        # 案件名の設定
+        project_name_type = contract[28] if len(contract) > 28 else 'program'
+        if project_name_type == 'custom':
+            self.rb_custom.setChecked(True)
+            custom_name = contract[29] if len(contract) > 29 else ""
+            self.custom_project_name.setText(custom_name or "")
+        else:
+            self.rb_program.setChecked(True)
+            program_id = contract[1]
+            if program_id:
+                for i in range(self.program_combo.count()):
+                    if self.program_combo.itemData(i) == program_id:
+                        self.program_combo.setCurrentIndex(i)
+                        break
+
+        # 費用項目
+        self.item_name.setText(contract[26] or "")
+
+        # 取引先
+        partner_id = contract[3]
+        if partner_id:
+            for i in range(self.partner_combo.count()):
+                if self.partner_combo.itemData(i) == partner_id:
+                    self.partner_combo.setCurrentIndex(i)
+                    break
+
+        # 実施日
+        if contract[30]:
+            self.implementation_date.setDate(QDate.fromString(contract[30], "yyyy-MM-dd"))
+
+        # 金額
+        if contract[31]:
+            self.amount.setText(str(contract[31]))
+
+        # 発注種別
+        order_type = contract[15] or "発注書"
+        index = self.order_type_combo.findText(order_type)
+        if index >= 0:
+            self.order_type_combo.setCurrentIndex(index)
+
+        # 発注ステータス
+        order_status = contract[16] or "未完了"
+        index = self.order_status_combo.findText(order_status)
+        if index >= 0:
+            self.order_status_combo.setCurrentIndex(index)
+
+        # PDFステータス
+        pdf_status = contract[8] or "未配布"
+        index = self.pdf_status.findText(pdf_status)
+        if index >= 0:
+            self.pdf_status.setCurrentIndex(index)
+
+        # PDFファイルパス
+        if contract[11]:
+            self.pdf_file_path = contract[11]
+            self.pdf_label.setText(os.path.basename(contract[11]))
+
+        # PDF配布日
+        if contract[9]:
+            self.distributed_date.setDate(QDate.fromString(contract[9], "yyyy-MM-dd"))
+
+        # 確認者
+        self.confirmed_by.setText(contract[10] or "")
+
+        # メール件名
+        self.email_subject.setText(contract[17] or "")
+
+        # メール本文
+        self.email_body.setPlainText(contract[18] or "")
+
+        # メール送信日
+        if contract[19]:
+            self.email_sent_date.setDate(QDate.fromString(contract[19], "yyyy-MM-dd"))
+
+        # メール送信先
+        self.email_to.setText(contract[20] or "")
+
+        # 備考
+        self.notes.setPlainText(contract[12] or "")
 
     def select_pdf(self):
         """PDFファイルを選択"""

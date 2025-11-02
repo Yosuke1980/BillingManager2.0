@@ -950,7 +950,12 @@ class OrderManagementDB:
                        oc.unit_price,
                        COALESCE(oc.payment_timing, '翌月末払い') as payment_timing,
                        oc.project_id, proj.name as project_name,
-                       oc.item_name
+                       oc.item_name,
+                       COALESCE(oc.contract_type, 'regular_fixed') as contract_type,
+                       COALESCE(oc.project_name_type, 'program') as project_name_type,
+                       oc.custom_project_name,
+                       oc.implementation_date,
+                       oc.spot_amount
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -1042,6 +1047,11 @@ class OrderManagementDB:
                         payment_type = ?,
                         unit_price = ?,
                         payment_timing = ?,
+                        contract_type = ?,
+                        project_name_type = ?,
+                        custom_project_name = ?,
+                        implementation_date = ?,
+                        spot_amount = ?,
                         updated_at = ?
                     WHERE id = ?
                 """, (
@@ -1049,8 +1059,8 @@ class OrderManagementDB:
                     contract_data.get('item_name'),
                     contract_data.get('program_id'),
                     contract_data['partner_id'],
-                    contract_data['contract_start_date'],
-                    contract_data['contract_end_date'],
+                    contract_data.get('contract_start_date', ''),
+                    contract_data.get('contract_end_date', ''),
                     contract_data.get('contract_period_type', '半年'),
                     contract_data.get('order_type', '発注書'),
                     contract_data.get('order_status', '未完了'),
@@ -1066,6 +1076,11 @@ class OrderManagementDB:
                     contract_data.get('payment_type', '月額固定'),
                     contract_data.get('unit_price'),
                     contract_data.get('payment_timing', '翌月末払い'),
+                    contract_data.get('contract_type', 'regular_fixed'),
+                    contract_data.get('project_name_type', 'program'),
+                    contract_data.get('custom_project_name', ''),
+                    contract_data.get('implementation_date', ''),
+                    contract_data.get('spot_amount'),
                     now,
                     contract_id
                 ))
@@ -1080,15 +1095,17 @@ class OrderManagementDB:
                         pdf_distributed_date, confirmed_by,
                         email_subject, email_body, email_sent_date, email_to,
                         notes, payment_type, unit_price, payment_timing,
+                        contract_type, project_name_type, custom_project_name,
+                        implementation_date, spot_amount,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     contract_data.get('project_id'),
                     contract_data.get('item_name'),
                     contract_data.get('program_id'),
                     contract_data['partner_id'],
-                    contract_data['contract_start_date'],
-                    contract_data['contract_end_date'],
+                    contract_data.get('contract_start_date', ''),
+                    contract_data.get('contract_end_date', ''),
                     contract_data.get('contract_period_type', '半年'),
                     contract_data.get('order_type', '発注書'),
                     contract_data.get('order_status', '未完了'),
@@ -1104,6 +1121,11 @@ class OrderManagementDB:
                     contract_data.get('payment_type', '月額固定'),
                     contract_data.get('unit_price'),
                     contract_data.get('payment_timing', '翌月末払い'),
+                    contract_data.get('contract_type', 'regular_fixed'),
+                    contract_data.get('project_name_type', 'program'),
+                    contract_data.get('custom_project_name', ''),
+                    contract_data.get('implementation_date', ''),
+                    contract_data.get('spot_amount'),
                     now,
                     now
                 ))

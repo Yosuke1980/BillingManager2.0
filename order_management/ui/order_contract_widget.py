@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
-                             QComboBox, QMessageBox, QFileDialog, QHeaderView)
+                             QComboBox, QMessageBox, QFileDialog, QHeaderView, QMenu)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from datetime import datetime, timedelta
@@ -13,6 +13,7 @@ import shutil
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
+from order_management.ui.spot_contract_edit_dialog import SpotContractEditDialog
 from order_management.ui.ui_helpers import create_button
 
 
@@ -88,7 +89,14 @@ class OrderContractWidget(QWidget):
         # ボタンエリア
         button_layout = QHBoxLayout()
 
-        add_btn = create_button("新規発注書", self.add_contract)
+        # 新規追加ボタン（ドロップダウン付き）
+        add_btn = QPushButton("新規追加 ▼")
+        add_menu = QMenu()
+        add_spot_action = add_menu.addAction("単発発注を追加")
+        add_regular_action = add_menu.addAction("レギュラー発注を追加")
+        add_spot_action.triggered.connect(lambda: self.add_contract("spot"))
+        add_regular_action.triggered.connect(lambda: self.add_contract("regular"))
+        add_btn.setMenu(add_menu)
         button_layout.addWidget(add_btn)
 
         edit_btn = create_button("編集", self.edit_contract)
@@ -201,9 +209,17 @@ class OrderContractWidget(QWidget):
                 if item:
                     item.setBackground(QColor(255, 204, 204))
 
-    def add_contract(self):
-        """新規発注書追加"""
-        dialog = OrderContractEditDialog(self)
+    def add_contract(self, contract_type="regular"):
+        """新規発注書追加
+
+        Args:
+            contract_type: 'spot' (単発) or 'regular' (レギュラー)
+        """
+        if contract_type == "spot":
+            dialog = SpotContractEditDialog(self)
+        else:
+            dialog = OrderContractEditDialog(self)
+
         if dialog.exec_():
             self.load_contracts()
 
@@ -215,7 +231,21 @@ class OrderContractWidget(QWidget):
             return
 
         contract_id = int(self.table.item(selected_row, 0).text())
-        dialog = OrderContractEditDialog(self, contract_id)
+
+        # 発注書の種類を取得して適切なダイアログを開く
+        contract = self.db.get_order_contract_by_id(contract_id)
+        if contract and len(contract) > 27:
+            # contract_typeはインデックス27
+            contract_type = contract[27]
+
+            if contract_type == "spot":
+                dialog = SpotContractEditDialog(self, contract_id)
+            else:
+                dialog = OrderContractEditDialog(self, contract_id)
+        else:
+            # デフォルトはレギュラー
+            dialog = OrderContractEditDialog(self, contract_id)
+
         if dialog.exec_():
             self.load_contracts()
 
