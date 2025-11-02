@@ -300,7 +300,16 @@ class ProgramEditDialog(QDialog):
 
             self.accept()
         except Exception as e:
-            QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")
+            error_msg = str(e)
+            # UNIQUE constraint違反の場合
+            if 'UNIQUE constraint failed' in error_msg or 'UNIQUE' in error_msg:
+                QMessageBox.warning(
+                    self, "番組名が重複",
+                    f"番組名「{program_data['name']}」は既に登録されています。\n"
+                    f"別の名前を使用してください。"
+                )
+            else:
+                QMessageBox.critical(self, "エラー", f"保存に失敗しました: {error_msg}")
 
     def get_data(self):
         """データ取得（互換性のため）"""
