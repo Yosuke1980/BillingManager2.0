@@ -12,7 +12,7 @@ from PyQt5.QtGui import QColor
 
 from database import DatabaseManager
 from order_management.database_manager import OrderManagementDB
-from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
+from order_management.ui.unified_order_dialog import UnifiedOrderDialog
 
 
 class OrderCheckTab(QWidget):
@@ -233,6 +233,18 @@ class OrderCheckTab(QWidget):
 
     def open_order_dialog_with_data(self, expense_item):
         """費用マスターのデータを使って発注ダイアログを開く"""
+        # 発注種別を費用項目名から推定
+        item_name = expense_item['item_name']
+
+        # デフォルトはレギュラー制作発注書
+        category = "レギュラー制作発注書"
+
+        # 費用項目名から判定
+        if "出演" in item_name:
+            category = "レギュラー出演契約書"
+        elif "制作" in item_name or "構成" in item_name or "演出" in item_name:
+            category = "レギュラー制作発注書"
+
         # 発注ダイアログを開く前に、番組と取引先の存在を確認
         program_name = expense_item['program_name']
         payee_name = expense_item['payee']
@@ -330,8 +342,8 @@ class OrderCheckTab(QWidget):
             )
             return
 
-        # レギュラー発注ダイアログを開く
-        dialog = OrderContractEditDialog(self)
+        # 統合発注ダイアログを開く（推定された種別で）
+        dialog = UnifiedOrderDialog(self, category=category)
 
         # 自動入力
         if use_custom_name:
@@ -363,27 +375,36 @@ class OrderCheckTab(QWidget):
                 dialog.partner_combo.setCurrentIndex(i)
                 break
 
-        # 契約開始日・終了日
-        if expense_item['start_date']:
-            from PyQt5.QtCore import QDate
-            start_date = QDate.fromString(expense_item['start_date'], "yyyy-MM-dd")
-            dialog.start_date.setDate(start_date)
+        # 契約開始日・終了日（レギュラーの場合のみ）
+        if category.startswith("レギュラー"):
+            if expense_item['start_date']:
+                from PyQt5.QtCore import QDate
+                start_date = QDate.fromString(expense_item['start_date'], "yyyy-MM-dd")
+                dialog.contract_start_date.setDate(start_date)
 
-        if expense_item['end_date']:
-            from PyQt5.QtCore import QDate
-            end_date = QDate.fromString(expense_item['end_date'], "yyyy-MM-dd")
-            dialog.end_date.setDate(end_date)
+            if expense_item['end_date']:
+                from PyQt5.QtCore import QDate
+                end_date = QDate.fromString(expense_item['end_date'], "yyyy-MM-dd")
+                dialog.contract_end_date.setDate(end_date)
 
-        # 支払タイプ
-        if expense_item['payment_type']:
-            dialog.payment_type.setCurrentText(expense_item['payment_type'])
+            # 支払タイプ（レギュラーの場合のみ）
+            if expense_item['payment_type']:
+                dialog.payment_type.setCurrentText(expense_item['payment_type'])
 
-        # 支払タイミング
-        if expense_item['payment_timing']:
-            dialog.payment_timing.setCurrentText(expense_item['payment_timing'])
+            # 支払タイミング（レギュラーの場合のみ）
+            if expense_item['payment_timing']:
+                dialog.payment_timing.setCurrentText(expense_item['payment_timing'])
+        else:
+            # 単発の場合は実施日を設定
+            # 開始日がある場合は実施日として使用
+            if expense_item['start_date']:
+                from PyQt5.QtCore import QDate
+                impl_date = QDate.fromString(expense_item['start_date'], "yyyy-MM-dd")
+                dialog.implementation_date.setDate(impl_date)
 
-        # 金額 (月額固定の場合はそのまま、回数ベースの場合は単価として扱う)
-        # TODO: 回数ベースの場合、放送回数から単価を逆算する処理が必要
+            # 金額を設定
+            if expense_item['amount']:
+                dialog.spot_amount.setValue(float(expense_item['amount']))
 
         # ダイアログを表示
         if dialog.exec_():
