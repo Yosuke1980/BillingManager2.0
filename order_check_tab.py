@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLabel,
                              QRadioButton, QButtonGroup, QLineEdit, QHeaderView,
                              QMessageBox)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QColor
 
 from database import DatabaseManager
@@ -17,6 +17,9 @@ from order_management.ui.order_contract_edit_dialog import OrderContractEditDial
 
 class OrderCheckTab(QWidget):
     """発注チェックタブ"""
+
+    # シグナル定義：発注追加時に発火
+    order_added = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -245,21 +248,71 @@ class OrderCheckTab(QWidget):
         # 番組が存在しない場合、確認ダイアログを表示
         use_custom_name = False
         if program_id is None:
-            reply = QMessageBox.question(
-                self,
-                "番組未登録",
+            # カスタムダイアログで3つの選択肢を提供
+            from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+
+            choice_dialog = QDialog(self)
+            choice_dialog.setWindowTitle("番組未登録")
+            choice_dialog.setMinimumWidth(400)
+
+            layout = QVBoxLayout()
+
+            message = QLabel(
                 f"番組「{program_name}」が番組マスタに登録されていません。\n\n"
-                f"自由入力モードで案件名として登録しますか？\n"
-                f"(「いいえ」を選ぶと、先に番組マスタに登録してください)",
-                QMessageBox.Yes | QMessageBox.No
+                f"どのように処理しますか？"
             )
-            if reply == QMessageBox.No:
-                QMessageBox.information(
-                    self, "キャンセル",
-                    "先に番組マスタに番組を登録してから、再度発注追加を行ってください。"
-                )
+            message.setWordWrap(True)
+            layout.addWidget(message)
+
+            # 選択肢1: 番組マスタに自動追加
+            auto_add_btn = QPushButton("1. 番組マスタに自動追加して発注を作成")
+            auto_add_btn.clicked.connect(lambda: choice_dialog.done(1))
+            layout.addWidget(auto_add_btn)
+
+            # 選択肢2: 自由入力モードで案件名として登録
+            custom_name_btn = QPushButton("2. 自由入力モードで案件名として登録")
+            custom_name_btn.clicked.connect(lambda: choice_dialog.done(2))
+            layout.addWidget(custom_name_btn)
+
+            # 選択肢3: キャンセル
+            cancel_btn = QPushButton("3. キャンセル")
+            cancel_btn.clicked.connect(lambda: choice_dialog.done(0))
+            layout.addWidget(cancel_btn)
+
+            choice_dialog.setLayout(layout)
+            choice = choice_dialog.exec_()
+
+            if choice == 0:
+                # キャンセル
                 return
-            use_custom_name = True
+            elif choice == 1:
+                # 番組マスタに自動追加
+                try:
+                    # broadcast_daysがある場合は使用、なければ空文字
+                    broadcast_days = expense_item.get('broadcast_days', '')
+
+                    # 番組マスタに追加
+                    program_data = {
+                        'name': program_name,
+                        'broadcast_days': broadcast_days,
+                        'notes': '発注チェックから自動追加'
+                    }
+                    program_id = self.order_db.save_program(program_data)
+
+                    QMessageBox.information(
+                        self, "成功",
+                        f"番組「{program_name}」を番組マスタに追加しました。"
+                    )
+                    use_custom_name = False
+                except Exception as e:
+                    QMessageBox.critical(
+                        self, "エラー",
+                        f"番組マスタへの追加に失敗しました:\n{str(e)}"
+                    )
+                    return
+            elif choice == 2:
+                # 自由入力モード
+                use_custom_name = True
 
         # 取引先の存在確認
         partners = self.order_db.get_partners()
@@ -288,11 +341,18 @@ class OrderCheckTab(QWidget):
         else:
             # 番組選択モード
             dialog.rb_program.setChecked(True)
-            # 番組コンボボックスで該当番組を選択
-            for i in range(dialog.program_combo.count()):
-                if dialog.program_combo.itemData(i) == program_id:
-                    dialog.program_combo.setCurrentIndex(i)
-                    break
+
+            # 番組が自動追加された場合、コンボボックスを再読み込み
+            if program_id:
+                # 番組コンボボックスを再読み込み
+                dialog.program_combo.clear()
+                dialog.load_programs()
+
+                # 番組コンボボックスで該当番組を選択
+                for i in range(dialog.program_combo.count()):
+                    if dialog.program_combo.itemData(i) == program_id:
+                        dialog.program_combo.setCurrentIndex(i)
+                        break
 
         # 費用項目
         dialog.item_name.setText(expense_item['item_name'])
@@ -330,6 +390,9 @@ class OrderCheckTab(QWidget):
             # 保存成功したら再読み込み
             QMessageBox.information(self, "成功", "発注契約を追加しました。")
             self.load_data()
+
+            # シグナルを発火して、発注書マスタを更新
+            self.order_added.emit()
 
     def update_statistics(self):
         """統計情報を更新"""

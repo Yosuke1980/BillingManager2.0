@@ -61,3 +61,5 @@ class OrderManagementTab(QWidget):
         """タブ切り替え時の処理"""
         if index == 0:  # 案件一覧タブ
             self.projects_widget.refresh_all()
+        elif index == 4:  # 発注書マスタタブ（5番目）
+            self.order_contract_widget.load_contracts()

@@ -148,6 +148,11 @@ class RadioBillingApp(QMainWindow):
         self.order_check_tab = OrderCheckTab()
         tab_control.addTab(self.order_check_tab, "発注チェック")
 
+        # シグナル接続：発注追加時に発注書マスタを更新
+        self.order_check_tab.order_added.connect(
+            self.order_management_tab.order_contract_widget.load_contracts
+        )
+
         # 発注・支払照合タブ
         self.reconciliation_tab = OrderPaymentReconciliationTab()
         tab_control.addTab(self.reconciliation_tab, "発注・支払照合")
