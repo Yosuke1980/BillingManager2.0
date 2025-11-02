@@ -12,8 +12,7 @@ import os
 import shutil
 
 from order_management.database_manager import OrderManagementDB
-from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
-from order_management.ui.spot_contract_edit_dialog import SpotContractEditDialog
+from order_management.ui.unified_order_dialog import UnifiedOrderDialog
 from order_management.ui.ui_helpers import create_button
 
 
@@ -92,10 +91,16 @@ class OrderContractWidget(QWidget):
         # 新規追加ボタン（ドロップダウン付き）
         add_btn = QPushButton("新規追加 ▼")
         add_menu = QMenu()
-        add_spot_action = add_menu.addAction("単発発注を追加")
-        add_regular_action = add_menu.addAction("レギュラー発注を追加")
-        add_spot_action.triggered.connect(lambda: self.add_contract("spot"))
-        add_regular_action.triggered.connect(lambda: self.add_contract("regular"))
+        add_regular_cast_action = add_menu.addAction("レギュラー出演契約書")
+        add_regular_production_action = add_menu.addAction("レギュラー制作発注書")
+        add_spot_cast_action = add_menu.addAction("単発出演発注書")
+        add_spot_production_action = add_menu.addAction("単発制作発注書")
+
+        add_regular_cast_action.triggered.connect(lambda: self.add_contract("レギュラー出演契約書"))
+        add_regular_production_action.triggered.connect(lambda: self.add_contract("レギュラー制作発注書"))
+        add_spot_cast_action.triggered.connect(lambda: self.add_contract("単発出演発注書"))
+        add_spot_production_action.triggered.connect(lambda: self.add_contract("単発制作発注書"))
+
         add_btn.setMenu(add_menu)
         button_layout.addWidget(add_btn)
 
@@ -209,17 +214,13 @@ class OrderContractWidget(QWidget):
                 if item:
                     item.setBackground(QColor(255, 204, 204))
 
-    def add_contract(self, contract_type="regular"):
+    def add_contract(self, category="レギュラー制作発注書"):
         """新規発注書追加
 
         Args:
-            contract_type: 'spot' (単発) or 'regular' (レギュラー)
+            category: 発注種別（レギュラー出演契約書/レギュラー制作発注書/単発出演発注書/単発制作発注書）
         """
-        if contract_type == "spot":
-            dialog = SpotContractEditDialog(self)
-        else:
-            dialog = OrderContractEditDialog(self)
-
+        dialog = UnifiedOrderDialog(self, category=category)
         if dialog.exec_():
             self.load_contracts()
 
@@ -234,18 +235,13 @@ class OrderContractWidget(QWidget):
 
         # 発注書の種類を取得して適切なダイアログを開く
         contract = self.db.get_order_contract_by_id(contract_id)
-        if contract and len(contract) > 27:
-            # contract_typeはインデックス27
-            contract_type = contract[27]
-
-            if contract_type == "spot":
-                dialog = SpotContractEditDialog(self, contract_id)
-            else:
-                dialog = OrderContractEditDialog(self, contract_id)
+        if contract and len(contract) > 32:
+            # order_categoryはインデックス32（最後から2番目）
+            order_category = contract[32] if contract[32] else "レギュラー制作発注書"
         else:
-            # デフォルトはレギュラー
-            dialog = OrderContractEditDialog(self, contract_id)
+            order_category = "レギュラー制作発注書"
 
+        dialog = UnifiedOrderDialog(self, contract_id=contract_id, category=order_category)
         if dialog.exec_():
             self.load_contracts()
 
