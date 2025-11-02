@@ -11,6 +11,8 @@ class DatabaseManager:
         self.expenses_db = "expenses.db"
         self.expense_master_db = "expense_master.db"
         self.payee_master_db = "payee_master.db"  # 支払い先マスター追加
+        self.order_db_path = "order_management.db"  # 発注管理データベース
+        self.db_name = self.billing_db  # expensesテーブル用
 
     def init_db(self):
         """データベースの初期化"""
@@ -2276,6 +2278,274 @@ class DatabaseManager:
         finally:
             master_conn.close()
             order_conn.close()
+
+    def generate_monthly_payment_schedule(self, target_month=None):
+        """発注マスターから月次支払予定を生成
+
+        Args:
+            target_month: 対象月 "YYYY-MM" 形式。Noneの場合は全期間
+
+        Returns:
+            List[dict]: 月次支払予定のリスト
+        """
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+
+        order_conn = sqlite3.connect(self.order_db_path)
+        order_conn.row_factory = sqlite3.Row
+        order_cursor = order_conn.cursor()
+
+        schedule = []
+
+        try:
+            # order_contractsから全レコードを取得
+            order_cursor.execute("""
+                SELECT
+                    oc.id as order_contract_id,
+                    oc.program_id,
+                    prog.name as program_name,
+                    oc.partner_id,
+                    p.name as partner_name,
+                    oc.item_name,
+                    oc.contract_start_date,
+                    oc.contract_end_date,
+                    oc.implementation_date,
+                    COALESCE(oc.payment_type, '月額固定') as payment_type,
+                    oc.unit_price,
+                    oc.spot_amount,
+                    COALESCE(oc.order_category, 'レギュラー制作発注書') as order_category,
+                    COALESCE(oc.order_type, '発注書') as order_type,
+                    oc.pdf_status,
+                    oc.pdf_distributed_date,
+                    oc.email_sent_date,
+                    oc.project_id,
+                    proj.name as project_name,
+                    oc.custom_project_name
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN partners p ON oc.partner_id = p.id
+                LEFT JOIN projects proj ON oc.project_id = proj.id
+            """)
+
+            contracts = order_cursor.fetchall()
+
+            for contract in contracts:
+                # 単発案件の処理
+                if contract['order_category'] and contract['order_category'].startswith('単発'):
+                    if contract['implementation_date']:
+                        impl_date = datetime.strptime(contract['implementation_date'], '%Y-%m-%d')
+                        year_month = impl_date.strftime('%Y-%m')
+
+                        # target_monthが指定されている場合はフィルタ
+                        if target_month and year_month != target_month:
+                            continue
+
+                        amount = contract['spot_amount'] if contract['spot_amount'] else 0
+
+                        schedule.append({
+                            'item_name': contract['item_name'] or '',
+                            'partner_id': contract['partner_id'],
+                            'partner_name': contract['partner_name'] or '',
+                            'year_month': year_month,
+                            'amount': amount,
+                            'order_contract_id': contract['order_contract_id'],
+                            'order_category': contract['order_category'],
+                            'order_type': contract['order_type'],
+                            'pdf_status': contract['pdf_status'],
+                            'pdf_distributed_date': contract['pdf_distributed_date'],
+                            'email_sent_date': contract['email_sent_date'],
+                            'program_name': contract['program_name'] or contract['custom_project_name'] or contract['project_name'] or '',
+                            'contract_start_date': contract['implementation_date'],
+                            'contract_end_date': contract['implementation_date']
+                        })
+
+                # レギュラー案件の処理
+                else:
+                    if not contract['contract_start_date'] or not contract['contract_end_date']:
+                        continue
+
+                    start_date = datetime.strptime(contract['contract_start_date'], '%Y-%m-%d')
+                    end_date = datetime.strptime(contract['contract_end_date'], '%Y-%m-%d')
+
+                    # 月ごとに展開
+                    current_date = start_date.replace(day=1)  # 月初に設定
+                    end_month = end_date.replace(day=1)
+
+                    while current_date <= end_month:
+                        year_month = current_date.strftime('%Y-%m')
+
+                        # target_monthが指定されている場合はフィルタ
+                        if target_month and year_month != target_month:
+                            current_date = current_date + relativedelta(months=1)
+                            continue
+
+                        # 金額計算
+                        if contract['payment_type'] == '回数ベース':
+                            # 回数ベース: 単価 × 回数（暫定的に4回とする）
+                            # TODO: 実際の放送回数を取得する仕組みが必要
+                            unit_price = contract['unit_price'] if contract['unit_price'] else 0
+                            amount = unit_price * 4
+                        else:
+                            # 月額固定
+                            amount = contract['unit_price'] if contract['unit_price'] else 0
+
+                        schedule.append({
+                            'item_name': contract['item_name'] or '',
+                            'partner_id': contract['partner_id'],
+                            'partner_name': contract['partner_name'] or '',
+                            'year_month': year_month,
+                            'amount': amount,
+                            'order_contract_id': contract['order_contract_id'],
+                            'order_category': contract['order_category'],
+                            'order_type': contract['order_type'],
+                            'pdf_status': contract['pdf_status'],
+                            'pdf_distributed_date': contract['pdf_distributed_date'],
+                            'email_sent_date': contract['email_sent_date'],
+                            'program_name': contract['program_name'] or contract['custom_project_name'] or contract['project_name'] or '',
+                            'contract_start_date': contract['contract_start_date'],
+                            'contract_end_date': contract['contract_end_date']
+                        })
+
+                        current_date = current_date + relativedelta(months=1)
+
+            log_message(f"月次支払予定生成完了: {len(schedule)}件")
+            return schedule
+
+        except Exception as e:
+            log_message(f"月次支払予定生成エラー: {e}")
+            import traceback
+            log_message(f"エラー詳細: {traceback.format_exc()}")
+            return []
+        finally:
+            order_conn.close()
+
+    def check_payments_against_schedule(self, target_month):
+        """月次支払予定と実績を照合
+
+        Args:
+            target_month: 対象月 "YYYY-MM" 形式
+
+        Returns:
+            List[dict]: 照合結果
+        """
+        from datetime import datetime
+
+        # 月次支払予定を生成
+        schedule = self.generate_monthly_payment_schedule(target_month)
+
+        # expensesテーブルから該当月の実績を取得
+        conn = sqlite3.connect(self.db_name)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        results = []
+
+        try:
+            # 対象月の支払実績を取得
+            year, month = target_month.split('-')
+            cursor.execute("""
+                SELECT
+                    id,
+                    project_name,
+                    payee,
+                    amount,
+                    payment_date,
+                    status
+                FROM expenses
+                WHERE strftime('%Y-%m', payment_date) = ?
+            """, (target_month,))
+
+            expenses = {(row['payee'], row['amount']): dict(row) for row in cursor.fetchall()}
+
+            # 各支払予定について照合
+            for sched in schedule:
+                partner_name = sched['partner_name']
+                scheduled_amount = sched['amount']
+
+                # 実績を検索（取引先名と金額で照合、±5%以内を許容）
+                actual_expense = None
+                actual_amount = None
+
+                for (payee, exp_amount), expense in expenses.items():
+                    if payee == partner_name:
+                        # 金額が±5%以内なら一致とみなす
+                        if abs(exp_amount - scheduled_amount) / scheduled_amount <= 0.05 if scheduled_amount > 0 else exp_amount == scheduled_amount:
+                            actual_expense = expense
+                            actual_amount = exp_amount
+                            break
+
+                # ステータス判定
+                missing_items = []
+                status_color = "green"  # デフォルトは完了
+
+                # 1. 発注チェック
+                has_order = sched['order_contract_id'] is not None
+                if not has_order:
+                    missing_items.append("発注なし")
+                    status_color = "red"
+                else:
+                    # 2. 受領確認チェック
+                    order_type = sched['order_type']
+                    if order_type in ['契約書', '発注書']:
+                        if sched['pdf_status'] != '配布済':
+                            missing_items.append("PDF未配布")
+                            if status_color != "red":
+                                status_color = "yellow"
+                    elif order_type == 'メール発注':
+                        if not sched['email_sent_date']:
+                            missing_items.append("メール未送信")
+                            if status_color != "red":
+                                status_color = "yellow"
+
+                # 3. 支払実績チェック
+                if not actual_expense:
+                    missing_items.append("支払実績なし")
+                    if status_color == "green":
+                        status_color = "yellow"
+
+                # 受領ステータスの判定
+                if has_order:
+                    if order_type in ['契約書', '発注書']:
+                        receipt_status = "✓" if sched['pdf_status'] == '配布済' else "✗"
+                    elif order_type == 'メール発注':
+                        receipt_status = "✓" if sched['email_sent_date'] else "✗"
+                    else:
+                        receipt_status = "-"
+                else:
+                    receipt_status = "-"
+
+                # 支払ステータス
+                payment_status = "✓" if actual_expense else "✗"
+
+                results.append({
+                    'item_name': sched['item_name'],
+                    'partner_name': partner_name,
+                    'program_name': sched['program_name'],
+                    'year_month': sched['year_month'],
+                    'scheduled_amount': scheduled_amount,
+                    'actual_amount': actual_amount,
+                    'has_order': has_order,
+                    'order_contract_id': sched['order_contract_id'],
+                    'order_category': sched['order_category'],
+                    'order_type': sched['order_type'],
+                    'receipt_status': receipt_status,
+                    'payment_status': payment_status,
+                    'missing_items': missing_items,
+                    'status_color': status_color,
+                    'contract_start_date': sched['contract_start_date'],
+                    'contract_end_date': sched['contract_end_date']
+                })
+
+            log_message(f"支払照合完了: {len(results)}件")
+            return results
+
+        except Exception as e:
+            log_message(f"支払照合エラー: {e}")
+            import traceback
+            log_message(f"エラー詳細: {traceback.format_exc()}")
+            return []
+        finally:
+            conn.close()
 
 
 # ファイル終了確認用のコメント - database.py完了

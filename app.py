@@ -28,6 +28,7 @@ from master_tab import MasterTab
 from order_management_tab import OrderManagementTab
 from order_payment_reconciliation_tab import OrderPaymentReconciliationTab
 from order_check_tab import OrderCheckTab
+from payment_order_check_tab import PaymentOrderCheckTab
 from utils import get_latest_csv_file, log_message
 
 
@@ -152,6 +153,10 @@ class RadioBillingApp(QMainWindow):
         self.order_check_tab.order_added.connect(
             self.order_management_tab.order_contract_widget.load_contracts
         )
+
+        # 支払い・発注チェックタブ
+        self.payment_order_check_tab = PaymentOrderCheckTab()
+        tab_control.addTab(self.payment_order_check_tab, "支払い・発注チェック")
 
         # 発注・支払照合タブ
         self.reconciliation_tab = OrderPaymentReconciliationTab()
