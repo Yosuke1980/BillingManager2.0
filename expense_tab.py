@@ -1704,36 +1704,35 @@ class ExpenseTab(QWidget):
                 clear_existing = False
                 operation_text = "追記"
 
-            # CSVファイルを読み込む
+            # CSVファイルを読み込む（ヘッダー名ベース）
             imported_rows = []
             with open(file_path, "r", encoding="shift_jis", errors="replace") as file:
-                csv_reader = csv.reader(file)
-                headers = next(csv_reader)  # ヘッダー行をスキップ
+                csv_reader = csv.DictReader(file)
 
-                for row in csv_reader:
+                for row_num, row in enumerate(csv_reader, start=2):
                     if not row:  # 空行はスキップ
                         continue
 
-                    # 最低限のデータチェック
-                    if len(row) < 6:
-                        continue
-
                     try:
-                        # ID列は無視し、データベースで自動生成する場合
-                        project_name = row[1]
-                        payee = row[2]
-                        payee_code = row[3]
+                        # ヘッダー名で取得
+                        project_name = row.get('費用項目', '').strip()
+                        payee = row.get('支払い先', '').strip()
+                        payee_code = row.get('支払い先コード', '').strip()
+                        amount_str = row.get('金額', '').replace(",", "").replace("円", "").strip()
+                        payment_date = row.get('支払日', '').strip()
+                        status = row.get('状態', '未処理').strip()
 
-                        # 【追加】支払い先コードの0埋め処理
+                        # 必須項目チェック
+                        if not project_name or not payee:
+                            log_message(f"{row_num}行目: 費用項目または支払い先が空です")
+                            continue
+
+                        # 支払い先コードの0埋め処理
                         if payee_code:
                             payee_code = format_payee_code(payee_code)
 
                         # 金額の変換
-                        amount_str = row[4].replace(",", "").replace("円", "").strip()
                         amount = float(amount_str) if amount_str else 0
-
-                        payment_date = row[5]
-                        status = row[6] if len(row) > 6 else "未処理"
 
                         imported_rows.append(
                             (
@@ -1745,8 +1744,8 @@ class ExpenseTab(QWidget):
                                 status,
                             )
                         )
-                    except (ValueError, IndexError) as e:
-                        log_message(f"行の解析中にエラー: {e} - {row}")
+                    except (ValueError, KeyError) as e:
+                        log_message(f"{row_num}行目の解析中にエラー: {e}")
 
             if not imported_rows:
                 QMessageBox.information(
