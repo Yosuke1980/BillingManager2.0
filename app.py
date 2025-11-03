@@ -169,18 +169,23 @@ class RadioBillingApp(QMainWindow):
         self.data_management_tab.expense_tab.refresh_data()
         self.data_management_tab.master_tab.refresh_data()
 
-        # Phase 4.1: 起動時に緊急アラートをチェック
-        self._check_urgent_items_on_startup()
+        # 起動時アラートとバッジ更新を統合（パフォーマンス最適化）
+        self._check_and_update_urgent_status()
 
-        # Phase 4.2: タブバッジを初期化
-        self.update_tab_badges()
+    def _check_and_update_urgent_status(self):
+        """起動時アラートとバッジ更新を統合（パフォーマンス最適化版）
 
-    def update_tab_badges(self):
-        """Phase 4.2: タブタイトルに問題件数のバッジを表示"""
+        データ取得を1回だけ行い、アラート表示とバッジ更新の両方で使用することで
+        起動時のパフォーマンスを向上させる。
+        """
         try:
-            # 発注管理タブの緊急件数を計算
-            urgent_contracts = 0
+            # データを一度だけ取得
             contracts = self.order_db.get_order_contracts()
+            current_month = datetime.now().strftime("%Y-%m")
+            payment_check_data = self.db_manager.check_payments_against_schedule(current_month)
+
+            # 発注契約の緊急件数を計算
+            urgent_contracts = 0
             for contract in contracts:
                 end_date_str = contract[7] if len(contract) > 7 else None
                 if end_date_str:
@@ -192,65 +197,10 @@ class RadioBillingApp(QMainWindow):
                     except:
                         pass
 
-            # 支払いチェックタブの問題件数を計算
-            current_month = datetime.now().strftime("%Y-%m")
-            payment_check_data = self.db_manager.check_payments_against_schedule(current_month)
+            # 支払いチェックの問題件数を計算
             unpaid_count = sum(1 for item in payment_check_data if item['payment_status'] != "✓")
 
-            # タブタイトルを更新
-            base_payment_check_title = self.config.TAB_NAMES['payment_order_check']
-            base_order_management_title = self.config.TAB_NAMES['order_management']
-
-            if unpaid_count > 0:
-                self.tab_control.setTabText(
-                    self.payment_check_tab_index,
-                    f"{base_payment_check_title} 🚨 {unpaid_count}"
-                )
-            else:
-                self.tab_control.setTabText(self.payment_check_tab_index, base_payment_check_title)
-
-            if urgent_contracts > 0:
-                self.tab_control.setTabText(
-                    self.order_management_tab_index,
-                    f"{base_order_management_title} ⚠️ {urgent_contracts}"
-                )
-            else:
-                self.tab_control.setTabText(self.order_management_tab_index, base_order_management_title)
-
-        except Exception as e:
-            log_message(f"タブバッジ更新でエラー: {e}")
-
-    def _check_urgent_items_on_startup(self):
-        """Phase 4.1: 起動時に緊急対応が必要な項目をチェック"""
-        try:
-            # 発注契約の緊急アイテムをチェック
-            urgent_contracts = 0
-            contracts = self.order_db.get_order_contracts()
-            for contract in contracts:
-                # contract構造: (id, name, date, type, budget, parent_id,
-                #                start_date, end_date, order_status, pdf_status, ...)
-                end_date_str = contract[7] if len(contract) > 7 else None
-
-                if end_date_str:
-                    try:
-                        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-                        days_until_expiry = (end_date - datetime.now()).days
-
-                        # 期限切れまたは7日以内が緊急
-                        is_expired = days_until_expiry < 0
-                        is_urgent = days_until_expiry <= 7
-
-                        if is_expired or is_urgent:
-                            urgent_contracts += 1
-                    except:
-                        pass
-
-            # 支払いチェックの緊急アイテムをチェック
-            current_month = datetime.now().strftime("%Y-%m")
-            payment_check_data = self.db_manager.check_payments_against_schedule(current_month)
-            unpaid_count = sum(1 for item in payment_check_data if item['payment_status'] != "✓")
-
-            # 緊急アラート表示
+            # 1. 緊急アラート表示
             if urgent_contracts > 0 or unpaid_count > 0:
                 alert_message = "🚨 <b>緊急対応が必要な項目があります</b><br><br>"
 
@@ -269,9 +219,73 @@ class RadioBillingApp(QMainWindow):
                 msg_box.setStandardButtons(QMessageBox.Ok)
                 msg_box.exec_()
 
+            # 2. タブバッジを更新
+            self._update_tab_badges_with_counts(urgent_contracts, unpaid_count)
+
         except Exception as e:
-            # エラーが発生してもアプリ起動は継続
-            log_message(f"起動時アラートチェックでエラー: {e}")
+            log_message(f"起動時チェックでエラー: {e}")
+
+    def _update_tab_badges_with_counts(self, urgent_contracts: int, unpaid_count: int):
+        """タブタイトルのバッジを更新（計算済みの件数を使用）
+
+        Args:
+            urgent_contracts: 緊急対応が必要な発注契約の件数
+            unpaid_count: 支払未完了の件数
+        """
+        try:
+            base_payment_check_title = self.config.TAB_NAMES['payment_order_check']
+            base_order_management_title = self.config.TAB_NAMES['order_management']
+
+            # 支払いチェックタブのバッジ
+            if unpaid_count > 0:
+                self.tab_control.setTabText(
+                    self.payment_check_tab_index,
+                    f"{base_payment_check_title} 🚨 {unpaid_count}"
+                )
+            else:
+                self.tab_control.setTabText(self.payment_check_tab_index, base_payment_check_title)
+
+            # 発注管理タブのバッジ
+            if urgent_contracts > 0:
+                self.tab_control.setTabText(
+                    self.order_management_tab_index,
+                    f"{base_order_management_title} ⚠️ {urgent_contracts}"
+                )
+            else:
+                self.tab_control.setTabText(self.order_management_tab_index, base_order_management_title)
+
+        except Exception as e:
+            log_message(f"タブバッジ更新でエラー: {e}")
+
+    def update_tab_badges(self):
+        """タブバッジを更新（外部から呼ばれる用）
+
+        データ更新時などに呼ばれる。起動時は _check_and_update_urgent_status() を使用。
+        """
+        try:
+            # データを取得して件数を計算
+            contracts = self.order_db.get_order_contracts()
+            urgent_contracts = 0
+            for contract in contracts:
+                end_date_str = contract[7] if len(contract) > 7 else None
+                if end_date_str:
+                    try:
+                        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                        days_until_expiry = (end_date - datetime.now()).days
+                        if days_until_expiry <= 7 or days_until_expiry < 0:
+                            urgent_contracts += 1
+                    except:
+                        pass
+
+            current_month = datetime.now().strftime("%Y-%m")
+            payment_check_data = self.db_manager.check_payments_against_schedule(current_month)
+            unpaid_count = sum(1 for item in payment_check_data if item['payment_status'] != "✓")
+
+            # バッジを更新
+            self._update_tab_badges_with_counts(urgent_contracts, unpaid_count)
+
+        except Exception as e:
+            log_message(f"タブバッジ更新でエラー: {e}")
 
     # ========================================
     # データ管理メソッド
