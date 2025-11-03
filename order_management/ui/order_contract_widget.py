@@ -425,7 +425,15 @@ class OrderContractWidget(QWidget):
             QMessageBox.warning(self, "警告", "PDFを開く発注書を選択してください。")
             return
 
-        pdf_path = self.table.item(selected_row, 9).text()
+        # テーブルからcontract_idを取得し、DBからPDFパスを取得
+        contract_id = self.table.item(selected_row, 0).data(Qt.UserRole)
+        contract = self.db.get_order_contract(contract_id)
+
+        if not contract:
+            QMessageBox.warning(self, "警告", "発注書情報が見つかりません。")
+            return
+
+        pdf_path = contract.get('pdf_file_path', '')
 
         if not pdf_path or not os.path.exists(pdf_path):
             QMessageBox.warning(self, "警告", "PDFファイルが見つかりません。")
@@ -444,7 +452,7 @@ class OrderContractWidget(QWidget):
             QMessageBox.warning(self, "警告", "ステータスを更新する発注書を選択してください。")
             return
 
-        contract_id = int(self.table.item(selected_row, 0).text())
+        contract_id = self.table.item(selected_row, 0).data(Qt.UserRole)
 
         from order_management.ui.status_update_dialog import StatusUpdateDialog
         dialog = StatusUpdateDialog(self, contract_id)
@@ -458,10 +466,12 @@ class OrderContractWidget(QWidget):
             QMessageBox.warning(self, "警告", "同期する発注書を選択してください。")
             return
 
-        contract_id = int(self.table.item(selected_row, 0).text())
-        program_name = self.table.item(selected_row, 1).text()
-        start_date = self.table.item(selected_row, 3).text()
-        end_date = self.table.item(selected_row, 4).text()
+        # テーブルの列: 発注ステータス(0), 発注種別(1), 番組名(2), 費用項目(3), 金額(4),
+        #              支払タイプ(5), 取引先名(6), 開始日(7), 終了日(8), 備考(9)
+        contract_id = self.table.item(selected_row, 0).data(Qt.UserRole)
+        program_name = self.table.item(selected_row, 2).text()
+        start_date = self.table.item(selected_row, 7).text()
+        end_date = self.table.item(selected_row, 8).text()
 
         reply = QMessageBox.question(
             self, "確認",
