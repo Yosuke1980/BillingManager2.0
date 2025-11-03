@@ -2436,8 +2436,8 @@ class DatabaseManager:
         # 月次支払予定を生成
         schedule = self.generate_monthly_payment_schedule(target_month)
 
-        # expensesテーブルから該当月の実績を取得
-        conn = sqlite3.connect(self.expenses_db)
+        # paymentsテーブルから該当月の実績を取得
+        conn = sqlite3.connect(self.billing_db)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -2455,11 +2455,11 @@ class DatabaseManager:
                     amount,
                     payment_date,
                     status
-                FROM expenses
+                FROM payments
                 WHERE strftime('%Y-%m', payment_date) = ?
             """, (target_month,))
 
-            expenses = {(row['payee_code'], row['amount']): dict(row) for row in cursor.fetchall()}
+            payments = {(row['payee_code'], row['amount']): dict(row) for row in cursor.fetchall()}
 
             # 各支払予定について照合
             for sched in schedule:
@@ -2467,13 +2467,13 @@ class DatabaseManager:
                 scheduled_amount = sched['amount']
 
                 # 実績を検索（支払先コードと金額で完全一致）
-                actual_expense = None
+                actual_payment = None
                 actual_amount = None
 
                 # 支払先コードと金額が完全一致するものを検索
                 key = (partner_code, scheduled_amount)
-                if key in expenses:
-                    actual_expense = expenses[key]
+                if key in payments:
+                    actual_payment = payments[key]
                     actual_amount = scheduled_amount
 
                 # ステータス判定
@@ -2500,7 +2500,7 @@ class DatabaseManager:
                                 status_color = "yellow"
 
                 # 3. 支払実績チェック
-                if not actual_expense:
+                if not actual_payment:
                     missing_items.append("支払実績なし")
                     if status_color == "green":
                         status_color = "yellow"
@@ -2517,7 +2517,7 @@ class DatabaseManager:
                     receipt_status = "-"
 
                 # 支払ステータス
-                payment_status = "✓" if actual_expense else "✗"
+                payment_status = "✓" if actual_payment else "✗"
 
                 results.append({
                     'item_name': sched['item_name'],
