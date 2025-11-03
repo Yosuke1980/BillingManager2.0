@@ -892,9 +892,9 @@ class OrderManagementDB:
         Returns:
             List[Tuple]: (id, program_id, program_name, partner_id, partner_name,
                          contract_start_date, contract_end_date, contract_period_type,
-                         pdf_status, pdf_distributed_date, confirmed_by,
+                         pdf_status, pdf_distributed_date,
                          pdf_file_path, notes, order_type, order_status,
-                         email_subject, email_body, email_sent_date, email_to)
+                         email_sent_date)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -905,11 +905,11 @@ class OrderManagementDB:
                        oc.partner_id, p.name as partner_name,
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
-                       oc.pdf_distributed_date, oc.confirmed_by,
+                       oc.pdf_distributed_date,
                        oc.pdf_file_path, oc.notes,
                        COALESCE(oc.order_type, '発注書') as order_type,
                        COALESCE(oc.order_status, '未') as order_status,
-                       oc.email_subject, oc.email_body, oc.email_sent_date, oc.email_to
+                       oc.email_sent_date
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -951,12 +951,12 @@ class OrderManagementDB:
                        oc.partner_id, p.name as partner_name,
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
-                       oc.pdf_distributed_date, oc.confirmed_by,
+                       oc.pdf_distributed_date,
                        oc.pdf_file_path, oc.notes,
                        oc.created_at, oc.updated_at,
                        COALESCE(oc.order_type, '発注書') as order_type,
                        COALESCE(oc.order_status, '未完了') as order_status,
-                       oc.email_subject, oc.email_body, oc.email_sent_date, oc.email_to,
+                       oc.email_sent_date,
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
                        COALESCE(oc.payment_timing, '翌月末払い') as payment_timing,
@@ -964,7 +964,6 @@ class OrderManagementDB:
                        oc.item_name,
                        COALESCE(oc.contract_type, 'regular_fixed') as contract_type,
                        COALESCE(oc.project_name_type, 'program') as project_name_type,
-                       oc.custom_project_name,
                        oc.implementation_date,
                        oc.spot_amount,
                        COALESCE(oc.order_category, 'レギュラー制作発注書') as order_category
@@ -989,7 +988,7 @@ class OrderManagementDB:
                        oc.partner_id, p.name as partner_name,
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
-                       oc.pdf_distributed_date, oc.confirmed_by,
+                       oc.pdf_distributed_date,
                        oc.pdf_file_path, oc.notes
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
@@ -1017,11 +1016,7 @@ class OrderManagementDB:
                 - pdf_status: PDFステータス
                 - pdf_file_path: PDFファイルパス
                 - pdf_distributed_date: PDF配布日
-                - confirmed_by: 確認者
-                - email_subject: メール件名
-                - email_body: メール本文
                 - email_sent_date: メール送信日
-                - email_to: メール送信先
                 - notes: 備考
 
         Returns:
@@ -1050,18 +1045,13 @@ class OrderManagementDB:
                         pdf_status = ?,
                         pdf_file_path = ?,
                         pdf_distributed_date = ?,
-                        confirmed_by = ?,
-                        email_subject = ?,
-                        email_body = ?,
                         email_sent_date = ?,
-                        email_to = ?,
                         notes = ?,
                         payment_type = ?,
                         unit_price = ?,
                         payment_timing = ?,
                         contract_type = ?,
                         project_name_type = ?,
-                        custom_project_name = ?,
                         implementation_date = ?,
                         spot_amount = ?,
                         order_category = ?,
@@ -1080,18 +1070,13 @@ class OrderManagementDB:
                     contract_data.get('pdf_status', '未配布'),
                     contract_data.get('pdf_file_path', ''),
                     contract_data.get('pdf_distributed_date', ''),
-                    contract_data.get('confirmed_by', ''),
-                    contract_data.get('email_subject', ''),
-                    contract_data.get('email_body', ''),
                     contract_data.get('email_sent_date', ''),
-                    contract_data.get('email_to', ''),
                     contract_data.get('notes', ''),
                     contract_data.get('payment_type', '月額固定'),
                     contract_data.get('unit_price'),
                     contract_data.get('payment_timing', '翌月末払い'),
                     contract_data.get('contract_type', 'regular_fixed'),
                     contract_data.get('project_name_type', 'program'),
-                    contract_data.get('custom_project_name', ''),
                     contract_data.get('implementation_date', ''),
                     contract_data.get('spot_amount'),
                     contract_data.get('order_category', 'レギュラー制作発注書'),
@@ -1106,13 +1091,13 @@ class OrderManagementDB:
                         contract_start_date, contract_end_date,
                         contract_period_type, order_type, order_status,
                         pdf_status, pdf_file_path,
-                        pdf_distributed_date, confirmed_by,
-                        email_subject, email_body, email_sent_date, email_to,
+                        pdf_distributed_date,
+                        email_sent_date,
                         notes, payment_type, unit_price, payment_timing,
-                        contract_type, project_name_type, custom_project_name,
+                        contract_type, project_name_type,
                         implementation_date, spot_amount, order_category,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     contract_data.get('project_id'),
                     contract_data.get('item_name'),
@@ -1126,18 +1111,13 @@ class OrderManagementDB:
                     contract_data.get('pdf_status', '未配布'),
                     contract_data.get('pdf_file_path', ''),
                     contract_data.get('pdf_distributed_date', ''),
-                    contract_data.get('confirmed_by', ''),
-                    contract_data.get('email_subject', ''),
-                    contract_data.get('email_body', ''),
                     contract_data.get('email_sent_date', ''),
-                    contract_data.get('email_to', ''),
                     contract_data.get('notes', ''),
                     contract_data.get('payment_type', '月額固定'),
                     contract_data.get('unit_price'),
                     contract_data.get('payment_timing', '翌月末払い'),
                     contract_data.get('contract_type', 'regular_fixed'),
                     contract_data.get('project_name_type', 'program'),
-                    contract_data.get('custom_project_name', ''),
                     contract_data.get('implementation_date', ''),
                     contract_data.get('spot_amount'),
                     contract_data.get('order_category', 'レギュラー制作発注書'),
@@ -1170,7 +1150,7 @@ class OrderManagementDB:
             conn.close()
 
     def update_pdf_status(self, contract_id: int, pdf_status: str,
-                         distributed_date: str = None, confirmed_by: str = None):
+                         distributed_date: str = None):
         """PDF配布ステータスを更新"""
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -1181,10 +1161,9 @@ class OrderManagementDB:
                 UPDATE order_contracts SET
                     pdf_status = ?,
                     pdf_distributed_date = ?,
-                    confirmed_by = ?,
                     updated_at = ?
                 WHERE id = ?
-            """, (pdf_status, distributed_date or '', confirmed_by or '', now, contract_id))
+            """, (pdf_status, distributed_date or '', now, contract_id))
             conn.commit()
         except Exception as e:
             conn.rollback()
@@ -1240,7 +1219,7 @@ class OrderManagementDB:
                        oc.partner_id, p.name as partner_name,
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
-                       oc.pdf_distributed_date, oc.confirmed_by
+                       oc.pdf_distributed_date
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
