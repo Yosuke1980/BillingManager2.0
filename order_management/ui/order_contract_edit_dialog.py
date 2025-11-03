@@ -419,7 +419,8 @@ class OrderContractEditDialog(QDialog):
     def on_program_changed(self):
         """番組が変更されたときの処理"""
         # 特定案件モードの場合、案件一覧を更新
-        if self.rb_project.isChecked():
+        # rb_projectが初期化済みの場合のみチェック（初期化中のシグナル発火を防ぐ）
+        if hasattr(self, 'rb_project') and self.rb_project.isChecked():
             self.load_projects_for_program()
 
     def load_projects_for_program(self):
