@@ -8,6 +8,44 @@ from datetime import datetime
 from utils import log_message
 
 
+def parse_flexible_date(date_str: str) -> Optional[str]:
+    """柔軟な日付フォーマットをYYYY-MM-DD形式に変換
+
+    対応フォーマット:
+    - YYYY-MM-DD (例: 2025-01-01)
+    - YYYY/MM/DD (例: 2025/01/01)
+    - YYYY/M/D (例: 2025/1/1)
+    - YYYY-M-D (例: 2025-1-1)
+
+    Args:
+        date_str: 日付文字列
+
+    Returns:
+        YYYY-MM-DD形式の日付文字列、変換失敗時はNone
+    """
+    if not date_str:
+        return None
+
+    date_str = date_str.strip()
+
+    # 試行する日付フォーマット
+    formats = [
+        '%Y-%m-%d',  # 2025-01-01
+        '%Y/%m/%d',  # 2025/01/01
+        '%Y/%m/%d',  # 2025/1/1 (strptimeは0埋めなしでも対応)
+        '%Y-%m-%d',  # 2025-1-1 (strptimeは0埋めなしでも対応)
+    ]
+
+    for fmt in formats:
+        try:
+            dt = datetime.strptime(date_str, fmt)
+            return dt.strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+
+    return None
+
+
 class OrderManagementDB:
     """発注管理データベースマネージャー"""
 
@@ -1881,28 +1919,28 @@ class OrderManagementDB:
 
                     # データ取得
                     description = row_data.get('説明', '').strip()
-                    start_date = row_data.get('開始日', '').strip()
-                    end_date = row_data.get('終了日', '').strip()
+                    start_date_raw = row_data.get('開始日', '').strip()
+                    end_date_raw = row_data.get('終了日', '').strip()
                     broadcast_time = row_data.get('放送時間', '').strip()
                     broadcast_days = row_data.get('放送曜日', '').strip()
                     status = row_data.get('ステータス', '放送中').strip()
                     program_type = row_data.get('番組種別', 'レギュラー').strip()
                     parent_program_id_str = row_data.get('親番組ID', '').strip()
 
-                    # 日付フォーマットチェック
-                    if start_date:
-                        try:
-                            datetime.strptime(start_date, '%Y-%m-%d')
-                        except ValueError:
-                            result['errors'].append({'row': row_num, 'reason': f'開始日のフォーマットが不正です: {start_date}'})
+                    # 日付フォーマット変換（柔軟に対応）
+                    start_date = None
+                    if start_date_raw:
+                        start_date = parse_flexible_date(start_date_raw)
+                        if start_date is None:
+                            result['errors'].append({'row': row_num, 'reason': f'開始日のフォーマットが不正です: {start_date_raw}'})
                             result['skipped'] += 1
                             continue
 
-                    if end_date:
-                        try:
-                            datetime.strptime(end_date, '%Y-%m-%d')
-                        except ValueError:
-                            result['errors'].append({'row': row_num, 'reason': f'終了日のフォーマットが不正です: {end_date}'})
+                    end_date = None
+                    if end_date_raw:
+                        end_date = parse_flexible_date(end_date_raw)
+                        if end_date is None:
+                            result['errors'].append({'row': row_num, 'reason': f'終了日のフォーマットが不正です: {end_date_raw}'})
                             result['skipped'] += 1
                             continue
 
@@ -2006,8 +2044,8 @@ class OrderManagementDB:
                     # 必須項目チェック
                     program_name = row_data.get('番組名', '').strip()
                     partner_name = row_data.get('取引先名', '').strip()
-                    start_date = row_data.get('委託開始日', '').strip()
-                    end_date = row_data.get('委託終了日', '').strip()
+                    start_date_raw = row_data.get('委託開始日', '').strip()
+                    end_date_raw = row_data.get('委託終了日', '').strip()
 
                     if not program_name:
                         result['errors'].append({'row': row_num, 'reason': '番組名が空です'})
@@ -2019,28 +2057,26 @@ class OrderManagementDB:
                         result['skipped'] += 1
                         continue
 
-                    if not start_date:
+                    if not start_date_raw:
                         result['errors'].append({'row': row_num, 'reason': '委託開始日が空です'})
                         result['skipped'] += 1
                         continue
 
-                    if not end_date:
+                    if not end_date_raw:
                         result['errors'].append({'row': row_num, 'reason': '委託終了日が空です'})
                         result['skipped'] += 1
                         continue
 
-                    # 日付フォーマットチェック
-                    try:
-                        datetime.strptime(start_date, '%Y-%m-%d')
-                    except ValueError:
-                        result['errors'].append({'row': row_num, 'reason': f'委託開始日のフォーマットが不正です: {start_date}'})
+                    # 日付フォーマット変換（柔軟に対応）
+                    start_date = parse_flexible_date(start_date_raw)
+                    if start_date is None:
+                        result['errors'].append({'row': row_num, 'reason': f'委託開始日のフォーマットが不正です: {start_date_raw}'})
                         result['skipped'] += 1
                         continue
 
-                    try:
-                        datetime.strptime(end_date, '%Y-%m-%d')
-                    except ValueError:
-                        result['errors'].append({'row': row_num, 'reason': f'委託終了日のフォーマットが不正です: {end_date}'})
+                    end_date = parse_flexible_date(end_date_raw)
+                    if end_date is None:
+                        result['errors'].append({'row': row_num, 'reason': f'委託終了日のフォーマットが不正です: {end_date_raw}'})
                         result['skipped'] += 1
                         continue
 
