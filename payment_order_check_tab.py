@@ -138,10 +138,9 @@ class PaymentOrderCheckTab(QWidget):
 
         # === 中央: テーブル ===
         self.table = QTableWidget()
-        self.table.setColumnCount(12)
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "費用項目", "取引先", "番組名", "年月", "予定金額", "実績金額",
-            "①発注", "②書面", "③受領", "④予定", "⑤支払", "状態"
+            "費用項目", "取引先", "番組名", "年月", "予定金額", "実績金額", "状態"
         ])
 
         # カラム幅の設定
@@ -152,12 +151,7 @@ class PaymentOrderCheckTab(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 年月
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 予定金額
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 実績金額
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # ①発注
-        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # ②書面
-        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # ③受領
-        header.setSectionResizeMode(9, QHeaderView.ResizeToContents)  # ④予定
-        header.setSectionResizeMode(10, QHeaderView.ResizeToContents)  # ⑤支払
-        header.setSectionResizeMode(11, QHeaderView.ResizeToContents)  # 状態
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 状態
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)  # 編集不可
@@ -301,50 +295,11 @@ class PaymentOrderCheckTab(QWidget):
             actual_widget.setBackground(row_color)
             self.table.setItem(row, 5, actual_widget)
 
-            # ①発注
-            if has_order and order_status == '完了':
-                order_text = "✓"  # 発注完了（正常）
-            else:
-                order_text = "✗"  # 発注なし or 発注未完了（問題あり）
-            order_item = QTableWidgetItem(order_text)
-            order_item.setTextAlignment(Qt.AlignCenter)
-            order_item.setBackground(row_color)
-            order_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
-            self.table.setItem(row, 6, order_item)
-
-            # ②書面（PDF配布済/メール送信済）
-            document_item = QTableWidgetItem("✓" if receipt_ok else "✗")
-            document_item.setTextAlignment(Qt.AlignCenter)
-            document_item.setBackground(row_color)
-            document_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
-            self.table.setItem(row, 7, document_item)
-
-            # ③受領（現在は②と同じ）
-            receipt_item = QTableWidgetItem("✓" if receipt_ok else "✗")
-            receipt_item.setTextAlignment(Qt.AlignCenter)
-            receipt_item.setBackground(row_color)
-            receipt_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
-            self.table.setItem(row, 8, receipt_item)
-
-            # ④予定（発注あり=予定入）
-            schedule_item = QTableWidgetItem("✓" if has_order else "✗")
-            schedule_item.setTextAlignment(Qt.AlignCenter)
-            schedule_item.setBackground(row_color)
-            schedule_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
-            self.table.setItem(row, 9, schedule_item)
-
-            # ⑤支払
-            payment_item = QTableWidgetItem("✓" if payment_ok else "✗")
-            payment_item.setTextAlignment(Qt.AlignCenter)
-            payment_item.setBackground(row_color)
-            payment_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
-            self.table.setItem(row, 10, payment_item)
-
-            # Phase 3.2: 状態列を詳細化（問題の内容を表示）
+            # 状態列（問題の内容を表示）
             status_item = QTableWidgetItem(status_text)
             status_item.setTextAlignment(Qt.AlignCenter)
             status_item.setBackground(row_color)
-            self.table.setItem(row, 11, status_item)
+            self.table.setItem(row, 6, status_item)
 
         # Phase 3.3: ダッシュボードを更新
         self._update_payment_dashboard(critical_count, warning_count, completed_count, len(data))
