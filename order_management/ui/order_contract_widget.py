@@ -124,17 +124,17 @@ class OrderContractWidget(QWidget):
 
         # テーブル
         self.table = QTableWidget()
-        self.table.setColumnCount(14)
+        self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
-            "ID", "発注種別", "発注ステータス", "番組名", "案件名", "取引先名", "委託開始日", "委託終了日",
-            "契約期間", "PDFステータス", "配布日", "確認者", "PDFパス", "備考"
+            "発注ステータス", "発注種別", "番組名", "費用項目", "金額",
+            "支払タイプ", "取引先名", "開始日", "終了日", "備考"
         ])
 
         # カラム幅の設定
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(3, QHeaderView.Stretch)  # 番組名
-        header.setSectionResizeMode(4, QHeaderView.Stretch)  # 案件名
-        header.setSectionResizeMode(5, QHeaderView.Stretch)  # 取引先名
+        header.setSectionResizeMode(2, QHeaderView.Stretch)  # 番組名
+        header.setSectionResizeMode(3, QHeaderView.Stretch)  # 費用項目
+        header.setSectionResizeMode(6, QHeaderView.Stretch)  # 取引先名
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.doubleClicked.connect(self.edit_contract)
@@ -224,10 +224,9 @@ class OrderContractWidget(QWidget):
             # contract: (id, program_id, program_name, project_id, project_name,
             #            partner_id, partner_name, item_name, contract_start_date,
             #            contract_end_date, order_type, order_status, pdf_status,
-            #            notes, created_at, updated_at)
+            #            notes, created_at, updated_at, payment_type, unit_price...)
 
             order_status = contract[11] or "未"
-            pdf_status = contract[12] or "未配布"
             end_date_str = contract[9]
 
             # Phase 1.3: 期限チェック
@@ -251,7 +250,7 @@ class OrderContractWidget(QWidget):
                 # 🟡 黄: 8-30日以内
                 row_color = QColor(255, 255, 200)
                 warning_count += 1
-            elif order_status in ["完了", "済"] and pdf_status in ["配布済", "受領確認済"]:
+            elif order_status in ["完了", "済"]:
                 # 🟢 緑: 完了
                 row_color = QColor(220, 255, 220)
                 completed_count += 1
@@ -262,28 +261,31 @@ class OrderContractWidget(QWidget):
             else:
                 row_color = QColor(245, 245, 245)
 
-            self.table.setItem(row, 0, QTableWidgetItem(str(contract[0])))  # ID
+            # データを取得
+            item_name = contract[7] if len(contract) > 7 else ""
+            payment_type = contract[16] if len(contract) > 16 else ""
+            unit_price = contract[17] if len(contract) > 17 else 0
+
+            # 金額のフォーマット
+            amount_text = f"¥{int(unit_price):,}" if unit_price else ""
+
+            # 新しい列構成に合わせてデータを設定
+            status_item = QTableWidgetItem(order_status)
+            status_item.setData(Qt.UserRole, contract[0])  # IDを保存
+            self.table.setItem(row, 0, status_item)  # 発注ステータス
             self.table.setItem(row, 1, QTableWidgetItem(contract[10] or "発注書"))  # 発注種別
+            self.table.setItem(row, 2, QTableWidgetItem(contract[2] or ""))  # 番組名
+            self.table.setItem(row, 3, QTableWidgetItem(item_name))  # 費用項目
+            self.table.setItem(row, 4, QTableWidgetItem(amount_text))  # 金額
+            self.table.setItem(row, 5, QTableWidgetItem(payment_type or ""))  # 支払タイプ
+            self.table.setItem(row, 6, QTableWidgetItem(contract[6] or ""))  # 取引先名
+            self.table.setItem(row, 7, QTableWidgetItem(contract[8] or ""))  # 開始日
 
-            # Phase 1.2: ステータス列を詳細化
-            status_text = self._get_detailed_status(order_status, pdf_status)
-            self.table.setItem(row, 2, QTableWidgetItem(status_text))  # 発注ステータス
-
-            self.table.setItem(row, 3, QTableWidgetItem(contract[2] or ""))  # 番組名
-            self.table.setItem(row, 4, QTableWidgetItem(contract[4] or "-"))  # 案件名
-            self.table.setItem(row, 5, QTableWidgetItem(contract[6] or ""))  # 取引先名
-            self.table.setItem(row, 6, QTableWidgetItem(contract[8] or ""))  # 委託開始日
-
-            # Phase 1.3: 期限情報を追加
+            # 終了日に期限情報を追加
             deadline_text = self._format_deadline(end_date_str, days_until_expiry, is_expired)
-            self.table.setItem(row, 7, QTableWidgetItem(deadline_text))  # 委託終了日
+            self.table.setItem(row, 8, QTableWidgetItem(deadline_text))  # 終了日
 
-            self.table.setItem(row, 8, QTableWidgetItem("-"))  # 契約期間（簡略化）
-            self.table.setItem(row, 9, QTableWidgetItem(pdf_status))  # PDFステータス
-            self.table.setItem(row, 10, QTableWidgetItem("-"))  # 配布日（簡略化）
-            self.table.setItem(row, 11, QTableWidgetItem("-"))  # 確認者（簡略化）
-            self.table.setItem(row, 12, QTableWidgetItem("-"))  # PDFパス（簡略化）
-            self.table.setItem(row, 13, QTableWidgetItem(contract[13] or ""))  # 備考
+            self.table.setItem(row, 9, QTableWidgetItem(contract[13] or ""))  # 備考
 
             # Phase 1.1: 行全体に背景色を適用
             if row_color:
@@ -292,9 +294,7 @@ class OrderContractWidget(QWidget):
                     if item:
                         item.setBackground(row_color)
 
-        # IDカラムとPDFパスカラムを非表示
-        self.table.setColumnHidden(0, True)
-        self.table.setColumnHidden(12, True)  # PDFパスも非表示
+        # 全ての列を表示（非表示なし）
 
         # Phase 2: ダッシュボードを更新
         self._update_dashboard(urgent_count, warning_count, pending_count, completed_count, len(contracts))
@@ -387,7 +387,8 @@ class OrderContractWidget(QWidget):
             QMessageBox.warning(self, "警告", "編集する発注書を選択してください。")
             return
 
-        contract_id = int(self.table.item(selected_row, 0).text())
+        # UserRoleからIDを取得
+        contract_id = self.table.item(selected_row, 0).data(Qt.UserRole)
 
         # 発注書の種類を取得して適切なダイアログを開く
         contract = self.db.get_order_contract_by_id(contract_id)
@@ -408,8 +409,9 @@ class OrderContractWidget(QWidget):
             QMessageBox.warning(self, "警告", "削除する発注書を選択してください。")
             return
 
-        contract_id = int(self.table.item(selected_row, 0).text())
-        program_name = self.table.item(selected_row, 1).text()
+        # UserRoleからIDを取得
+        contract_id = self.table.item(selected_row, 0).data(Qt.UserRole)
+        program_name = self.table.item(selected_row, 2).text()  # 番組名は2列目
 
         reply = QMessageBox.question(
             self, "確認",
