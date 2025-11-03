@@ -576,22 +576,26 @@ class OrderContractWidget(QWidget):
                 QMessageBox.warning(self, "警告", "CSVファイルにデータがありません")
                 return
 
-            # 確認ダイアログ
+            # 上書き/追記の選択ダイアログを表示
             reply = QMessageBox.question(
                 self,
-                "確認",
-                f"{len(csv_data)}件のデータを読み込みます。\n\n"
-                "既存のIDがある場合は更新、ない場合は新規追加されます。\n"
-                "番組名と取引先名が存在する必要があります。\n"
-                "よろしいですか?",
-                QMessageBox.Yes | QMessageBox.No
+                'インポート方法の選択',
+                f'{len(csv_data)}件のデータを読み込みます。\n\n'
+                '既存のデータをどうしますか？\n\n'
+                '「はい」: 上書き（既存データを削除して新規データのみ）\n'
+                '「いいえ」: 追記（既存データを保持してIDがあれば更新、なければ追加）\n\n'
+                '※番組名と取引先名が存在する必要があります',
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                QMessageBox.No
             )
 
-            if reply != QMessageBox.Yes:
+            if reply == QMessageBox.Cancel:
                 return
 
+            overwrite = (reply == QMessageBox.Yes)
+
             # データベースにインポート
-            result = self.db.import_order_contracts_from_csv(csv_data)
+            result = self.db.import_order_contracts_from_csv(csv_data, overwrite)
 
             # 結果を表示
             message = f"CSV読み込み完了\n\n"

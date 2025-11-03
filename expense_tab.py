@@ -1681,41 +1681,28 @@ class ExpenseTab(QWidget):
             if not file_path:
                 return  # キャンセルされた場合
 
-            # 確認ダイアログを表示 - デフォルトでは「追加」を選択
-            message_box = QMessageBox()
-            message_box.setIcon(QMessageBox.Question)
-            message_box.setText(
-                "データを追加しますか？\n「いいえ」を選択すると、既存のデータを上書きします。"
+            # 上書き/追記の選択ダイアログを表示
+            reply = QMessageBox.question(
+                self,
+                'インポート方法の選択',
+                '既存のデータをどうしますか？\n\n'
+                '「はい」: 上書き（既存データを削除して新規データのみ）\n'
+                '「いいえ」: 追記（既存データを保持して追加）',
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                QMessageBox.Yes
             )
-            message_box.setStandardButtons(
-                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
-            )
-            message_box.setDefaultButton(QMessageBox.Yes)
 
-            result = message_box.exec_()
-
-            if result == QMessageBox.Cancel:
+            if reply == QMessageBox.Cancel:
                 return
 
-            # 追加モード (既存データを保持)
-            if result == QMessageBox.Yes:
-                clear_existing = False
-                operation_text = "追加"
-            else:
-                # 上書きモード (既存データを削除) - 再確認
-                warning_box = QMessageBox()
-                warning_box.setIcon(QMessageBox.Warning)
-                warning_box.setText(
-                    "既存のデータがすべて削除されます。本当に上書きしますか？"
-                )
-                warning_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                warning_box.setDefaultButton(QMessageBox.No)
-
-                if warning_box.exec_() != QMessageBox.Yes:
-                    return  # キャンセル
-
+            # 上書きモードの場合
+            if reply == QMessageBox.Yes:
                 clear_existing = True
                 operation_text = "上書き"
+            else:
+                # 追記モード
+                clear_existing = False
+                operation_text = "追記"
 
             # CSVファイルを読み込む
             imported_rows = []

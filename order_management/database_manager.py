@@ -1734,12 +1734,13 @@ class OrderManagementDB:
     # CSV一括インポート機能
     # ========================================
 
-    def import_casts_from_csv(self, csv_data: List[dict]) -> dict:
+    def import_casts_from_csv(self, csv_data: List[dict], overwrite: bool = False) -> dict:
         """出演者データをCSVから一括インポート
 
         Args:
             csv_data: CSVから読み込んだ辞書のリスト
                      期待されるキー: ID, 出演者名, 所属事務所, 所属コード, 備考
+            overwrite: True=上書き（既存データ削除）、False=追記/更新
 
         Returns:
             dict: {
@@ -1762,6 +1763,10 @@ class OrderManagementDB:
         cursor = conn.cursor()
 
         try:
+            # 上書きモードの場合は既存データを削除
+            if overwrite:
+                cursor.execute("DELETE FROM cast")
+                conn.commit()
             for row_num, row_data in enumerate(csv_data, start=2):  # ヘッダー行は1行目なので2から開始
                 try:
                     # 必須項目チェック
@@ -1836,13 +1841,14 @@ class OrderManagementDB:
 
         return result
 
-    def import_programs_from_csv(self, csv_data: List[dict]) -> dict:
+    def import_programs_from_csv(self, csv_data: List[dict], overwrite: bool = False) -> dict:
         """番組データをCSVから一括インポート
 
         Args:
             csv_data: CSVから読み込んだ辞書のリスト
                      期待されるキー: ID, 番組名, 説明, 開始日, 終了日,
                                     放送時間, 放送曜日, ステータス, 番組種別, 親番組ID
+            overwrite: True=上書き（既存データ削除）、False=追記/更新
 
         Returns:
             dict: 処理結果サマリー
@@ -1859,6 +1865,10 @@ class OrderManagementDB:
         cursor = conn.cursor()
 
         try:
+            # 上書きモードの場合は既存データを削除
+            if overwrite:
+                cursor.execute("DELETE FROM programs")
+                conn.commit()
             for row_num, row_data in enumerate(csv_data, start=2):
                 try:
                     # 必須項目チェック
@@ -1963,13 +1973,14 @@ class OrderManagementDB:
 
         return result
 
-    def import_order_contracts_from_csv(self, csv_data: List[dict]) -> dict:
+    def import_order_contracts_from_csv(self, csv_data: List[dict], overwrite: bool = False) -> dict:
         """発注データをCSVから一括インポート
 
         Args:
             csv_data: CSVから読み込んだ辞書のリスト
                      期待されるキー: ID, 番組名, 取引先名, 委託開始日, 委託終了日,
                                     発注種別, 発注ステータス, PDFステータス, 備考
+            overwrite: True=上書き（既存データ削除）、False=追記/更新
 
         Returns:
             dict: 処理結果サマリー
@@ -1986,6 +1997,10 @@ class OrderManagementDB:
         cursor = conn.cursor()
 
         try:
+            # 上書きモードの場合は既存データを削除
+            if overwrite:
+                cursor.execute("DELETE FROM order_contracts")
+                conn.commit()
             for row_num, row_data in enumerate(csv_data, start=2):
                 try:
                     # 必須項目チェック

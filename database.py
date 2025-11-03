@@ -581,16 +581,23 @@ class DatabaseManager:
         log_message(f"支払い先マスター同期完了: {count}件")
         return count
 
-    def import_csv_data(self, csv_file, header_mapping):
-        """CSVファイルからデータをインポート（支払いコード0埋め対応）"""
+    def import_csv_data(self, csv_file, header_mapping, overwrite=True):
+        """CSVファイルからデータをインポート（支払いコード0埋め対応）
+
+        Args:
+            csv_file: CSVファイルのパス
+            header_mapping: ヘッダーマッピング辞書
+            overwrite: True=上書き（既存データ削除）、False=追記
+        """
         from utils import format_payee_code  # 追加
 
         # データベース接続
         conn = sqlite3.connect(self.billing_db)
         cursor = conn.cursor()
 
-        # 既存のデータを削除
-        cursor.execute("DELETE FROM payments")
+        # 上書きモードの場合は既存のデータを削除
+        if overwrite:
+            cursor.execute("DELETE FROM payments")
 
         # CSVファイルを読み込む
         row_count = 0

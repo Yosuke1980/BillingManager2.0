@@ -300,18 +300,35 @@ class RadioBillingApp(QMainWindow):
             return False
 
         try:
+            # 上書き/追記の選択ダイアログを表示
+            reply = QMessageBox.question(
+                self,
+                'インポート方法の選択',
+                '既存のデータをどうしますか？\n\n'
+                '「はい」: 上書き（既存データを削除して新規データのみ）\n'
+                '「いいえ」: 追記（既存データを保持して追加）',
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                QMessageBox.Yes
+            )
+
+            if reply == QMessageBox.Cancel:
+                return False
+
+            overwrite = (reply == QMessageBox.Yes)
+
             # CSVファイルの情報を更新
             file_size = os.path.getsize(csv_file) // 1024
             file_name = os.path.basename(csv_file)
             self.payment_tab.csv_info_label.setText(f"CSV: {file_name} ({file_size}KB)")
 
             # データをインポート
-            row_count = self.db_manager.import_csv_data(csv_file, self.header_mapping)
-            log_message(f"{row_count}件のデータをCSVからインポートしました: {file_name}")
+            row_count = self.db_manager.import_csv_data(csv_file, self.header_mapping, overwrite)
+            mode_text = "上書きで" if overwrite else "追記で"
+            log_message(f"{row_count}件のデータをCSVから{mode_text}インポートしました: {file_name}")
 
             # データを表示
             self.payment_tab.refresh_data()
-            self.status_label.setText(f"{row_count}件のデータをCSVからインポートしました")
+            self.status_label.setText(f"{row_count}件のデータをCSVから{mode_text}インポートしました")
 
             return True
 
@@ -461,7 +478,7 @@ def main():
         try:
             if os.path.exists(args.import_csv):
                 log_message(f"コマンドライン引数で指定されたCSVファイルをインポート: {args.import_csv}")
-                row_count = window.db_manager.import_csv_data(args.import_csv, window.header_mapping)
+                row_count = window.db_manager.import_csv_data(args.import_csv, window.header_mapping, overwrite=True)
                 window.payment_tab.refresh_data()
                 window.status_label.setText(f"{row_count}件のデータをCSVからインポートしました")
 
