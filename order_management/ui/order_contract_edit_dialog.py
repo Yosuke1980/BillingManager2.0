@@ -753,7 +753,7 @@ class OrderContractEditDialog(QDialog):
 
         try:
             self.db.save_order_contract(contract_data)
-            QMessageBox.information(self, "成功", "発注書を保存しました。")
+            # 成功ダイアログを表示せず、直接閉じる
             self.accept()
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"発注書の保存に失敗しました:\n{str(e)}")

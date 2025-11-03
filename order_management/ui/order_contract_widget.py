@@ -14,7 +14,7 @@ import csv
 import codecs
 
 from order_management.database_manager import OrderManagementDB
-from order_management.ui.unified_order_dialog import UnifiedOrderDialog
+from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
 from order_management.ui.ui_helpers import create_button
 
 
@@ -371,9 +371,10 @@ class OrderContractWidget(QWidget):
         """新規発注書追加
 
         Args:
-            category: 発注種別（レギュラー出演契約書/レギュラー制作発注書/単発出演発注書/単発制作発注書）
+            category: 発注種別（互換性のため残す）
         """
-        dialog = UnifiedOrderDialog(self, category=category)
+        # 新しい発注書編集ダイアログを使用
+        dialog = OrderContractEditDialog(self)
         if dialog.exec_():
             self.load_contracts()
 
@@ -387,15 +388,8 @@ class OrderContractWidget(QWidget):
         # UserRoleからIDを取得
         contract_id = self.table.item(selected_row, 0).data(Qt.UserRole)
 
-        # 発注書の種類を取得して適切なダイアログを開く
-        contract = self.db.get_order_contract_by_id(contract_id)
-        if contract and len(contract) > 32:
-            # order_categoryはインデックス32（最後から2番目）
-            order_category = contract[32] if contract[32] else "レギュラー制作発注書"
-        else:
-            order_category = "レギュラー制作発注書"
-
-        dialog = UnifiedOrderDialog(self, contract_id=contract_id, category=order_category)
+        # 新しい発注書編集ダイアログを使用
+        dialog = OrderContractEditDialog(self, contract_id=contract_id)
         if dialog.exec_():
             self.load_contracts()
 
