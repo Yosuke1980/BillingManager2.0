@@ -22,6 +22,7 @@ from config import AppConfig
 from styles import ApplicationStyleManager
 from ui import MenuBuilder, ToolbarBuilder, StatusBarManager
 from database import DatabaseManager
+from order_management.database_manager import OrderManagementDB
 from payment_tab import PaymentTab
 from payment_order_check_tab import PaymentOrderCheckTab
 from order_management.ui.order_contract_widget import OrderContractWidget
@@ -55,6 +56,9 @@ class RadioBillingApp(QMainWindow):
         # データベースマネージャーの初期化
         self.db_manager = DatabaseManager()
         self.db_manager.init_db()
+
+        # 発注管理データベースの初期化
+        self.order_db = OrderManagementDB()
 
         # UIの構築
         self._setup_ui()
@@ -133,11 +137,11 @@ class RadioBillingApp(QMainWindow):
 
         # メインタブ2: 支払い・発注チェック（毎日使う）
         self.payment_order_check_tab = PaymentOrderCheckTab()
-        tab_control.addTab(self.payment_order_check_tab, self.config.TAB_NAMES['payment_order_check'])
+        self.payment_check_tab_index = tab_control.addTab(self.payment_order_check_tab, self.config.TAB_NAMES['payment_order_check'])
 
         # メインタブ3: 発注管理（旧「発注書マスタ」を独立）
         self.order_contract_widget = OrderContractWidget()
-        tab_control.addTab(self.order_contract_widget, self.config.TAB_NAMES['order_management'])
+        self.order_management_tab_index = tab_control.addTab(self.order_contract_widget, self.config.TAB_NAMES['order_management'])
 
         # メインタブ4: マスター管理（新設）
         self.master_management_tab = MasterManagementTab(tab_control, self)
@@ -152,6 +156,11 @@ class RadioBillingApp(QMainWindow):
             self.order_contract_widget.load_contracts
         )
 
+        # Phase 4.2: データ更新時にバッジを更新するシグナル接続
+        self.data_management_tab.order_check_tab.order_added.connect(
+            self.update_tab_badges
+        )
+
     def _load_initial_data(self):
         """初期データの読み込み"""
         self.import_latest_csv()
@@ -159,6 +168,110 @@ class RadioBillingApp(QMainWindow):
         # データ管理タブ内のサブタブのデータを更新
         self.data_management_tab.expense_tab.refresh_data()
         self.data_management_tab.master_tab.refresh_data()
+
+        # Phase 4.1: 起動時に緊急アラートをチェック
+        self._check_urgent_items_on_startup()
+
+        # Phase 4.2: タブバッジを初期化
+        self.update_tab_badges()
+
+    def update_tab_badges(self):
+        """Phase 4.2: タブタイトルに問題件数のバッジを表示"""
+        try:
+            # 発注管理タブの緊急件数を計算
+            urgent_contracts = 0
+            contracts = self.order_db.get_order_contracts()
+            for contract in contracts:
+                end_date_str = contract[7] if len(contract) > 7 else None
+                if end_date_str:
+                    try:
+                        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                        days_until_expiry = (end_date - datetime.now()).days
+                        if days_until_expiry <= 7 or days_until_expiry < 0:
+                            urgent_contracts += 1
+                    except:
+                        pass
+
+            # 支払いチェックタブの問題件数を計算
+            current_month = datetime.now().strftime("%Y-%m")
+            payment_check_data = self.db_manager.check_payments_against_schedule(current_month)
+            unpaid_count = sum(1 for item in payment_check_data if item['payment_status'] != "✓")
+
+            # タブタイトルを更新
+            base_payment_check_title = self.config.TAB_NAMES['payment_order_check']
+            base_order_management_title = self.config.TAB_NAMES['order_management']
+
+            if unpaid_count > 0:
+                self.tab_control.setTabText(
+                    self.payment_check_tab_index,
+                    f"{base_payment_check_title} 🚨 {unpaid_count}"
+                )
+            else:
+                self.tab_control.setTabText(self.payment_check_tab_index, base_payment_check_title)
+
+            if urgent_contracts > 0:
+                self.tab_control.setTabText(
+                    self.order_management_tab_index,
+                    f"{base_order_management_title} ⚠️ {urgent_contracts}"
+                )
+            else:
+                self.tab_control.setTabText(self.order_management_tab_index, base_order_management_title)
+
+        except Exception as e:
+            log_message(f"タブバッジ更新でエラー: {e}")
+
+    def _check_urgent_items_on_startup(self):
+        """Phase 4.1: 起動時に緊急対応が必要な項目をチェック"""
+        try:
+            # 発注契約の緊急アイテムをチェック
+            urgent_contracts = 0
+            contracts = self.order_db.get_order_contracts()
+            for contract in contracts:
+                # contract構造: (id, name, date, type, budget, parent_id,
+                #                start_date, end_date, order_status, pdf_status, ...)
+                end_date_str = contract[7] if len(contract) > 7 else None
+
+                if end_date_str:
+                    try:
+                        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                        days_until_expiry = (end_date - datetime.now()).days
+
+                        # 期限切れまたは7日以内が緊急
+                        is_expired = days_until_expiry < 0
+                        is_urgent = days_until_expiry <= 7
+
+                        if is_expired or is_urgent:
+                            urgent_contracts += 1
+                    except:
+                        pass
+
+            # 支払いチェックの緊急アイテムをチェック
+            current_month = datetime.now().strftime("%Y-%m")
+            payment_check_data = self.db_manager.check_payments_against_schedule(current_month)
+            unpaid_count = sum(1 for item in payment_check_data if item['payment_status'] != "✓")
+
+            # 緊急アラート表示
+            if urgent_contracts > 0 or unpaid_count > 0:
+                alert_message = "🚨 <b>緊急対応が必要な項目があります</b><br><br>"
+
+                if urgent_contracts > 0:
+                    alert_message += f"📝 <b>発注契約:</b> {urgent_contracts}件（期限切れ・間近）<br>"
+
+                if unpaid_count > 0:
+                    alert_message += f"💰 <b>支払未完了:</b> {unpaid_count}件<br>"
+
+                alert_message += "<br>詳細は各タブで確認してください。"
+
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Warning)
+                msg_box.setWindowTitle("起動時アラート")
+                msg_box.setText(alert_message)
+                msg_box.setStandardButtons(QMessageBox.Ok)
+                msg_box.exec_()
+
+        except Exception as e:
+            # エラーが発生してもアプリ起動は継続
+            log_message(f"起動時アラートチェックでエラー: {e}")
 
     # ========================================
     # データ管理メソッド

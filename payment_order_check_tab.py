@@ -6,7 +6,7 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLabel,
                              QRadioButton, QButtonGroup, QLineEdit, QHeaderView,
-                             QMessageBox, QComboBox)
+                             QMessageBox, QComboBox, QGroupBox, QGridLayout)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QBrush
 from datetime import datetime
@@ -93,6 +93,48 @@ class PaymentOrderCheckTab(QWidget):
         filter_layout.addWidget(reload_btn)
 
         layout.addLayout(filter_layout)
+
+        # === Phase 3: ダッシュボード統計パネル ===
+        dashboard_group = QGroupBox("📊 支払い手続きステータス")
+        dashboard_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 12pt; }")
+        dashboard_layout = QGridLayout()
+
+        # 統計ラベル
+        self.critical_label = QLabel("🚨 支払未完了: 0件")
+        self.critical_label.setStyleSheet("font-size: 13px; color: #d32f2f; font-weight: bold;")
+        dashboard_layout.addWidget(self.critical_label, 0, 0)
+
+        self.warning_label = QLabel("⚠️ 書類不備: 0件")
+        self.warning_label.setStyleSheet("font-size: 13px; color: #f57c00;")
+        dashboard_layout.addWidget(self.warning_label, 0, 1)
+
+        self.completed_label = QLabel("✅ 完了: 0件")
+        self.completed_label.setStyleSheet("font-size: 13px; color: #388e3c;")
+        dashboard_layout.addWidget(self.completed_label, 0, 2)
+
+        self.completion_label = QLabel("完了率: 0%")
+        self.completion_label.setStyleSheet("font-size: 13px; font-weight: bold;")
+        dashboard_layout.addWidget(self.completion_label, 1, 0, 1, 3)
+
+        # カラー凡例
+        legend_layout = QHBoxLayout()
+        red_label = QLabel("■ 赤=支払未完了")
+        red_label.setStyleSheet("color: #d32f2f; font-size: 11px;")
+        yellow_label = QLabel("■ 黄=書類不備")
+        yellow_label.setStyleSheet("color: #f57c00; font-size: 11px;")
+        green_label = QLabel("■ 緑=完了")
+        green_label.setStyleSheet("color: #388e3c; font-size: 11px;")
+
+        legend_layout.addWidget(red_label)
+        legend_layout.addSpacing(10)
+        legend_layout.addWidget(yellow_label)
+        legend_layout.addSpacing(10)
+        legend_layout.addWidget(green_label)
+        legend_layout.addStretch()
+
+        dashboard_layout.addLayout(legend_layout, 2, 0, 1, 3)
+        dashboard_group.setLayout(dashboard_layout)
+        layout.addWidget(dashboard_group)
 
         # === 中央: テーブル ===
         self.table = QTableWidget()
@@ -190,95 +232,114 @@ class PaymentOrderCheckTab(QWidget):
         self.populate_table(filtered_data)
 
     def populate_table(self, data):
-        """テーブルにデータを表示"""
+        """テーブルにデータを表示（Phase 3: 行全体の色分け強化）"""
         self.table.setRowCount(len(data))
 
+        # 統計カウンター
+        critical_count = 0  # 🚨 支払未完了
+        warning_count = 0   # ⚠️ 書類不備
+        completed_count = 0 # ✅ 完了
+
         for row, item in enumerate(data):
+            has_order = item['has_order']
+            receipt_ok = item['receipt_status'] == "✓"
+            payment_ok = item['payment_status'] == "✓"
+
+            # Phase 3.1: 行全体の背景色を決定
+            if not payment_ok:
+                # 支払未完了 → 赤背景（最優先）
+                row_color = QColor(255, 220, 220)  # 🔴 赤
+                critical_count += 1
+                status_text = "🚨 支払未"
+            elif not has_order or not receipt_ok:
+                # 発注なしor書類不備 → 黄背景
+                row_color = QColor(255, 255, 200)  # 🟡 黄
+                warning_count += 1
+                if not has_order:
+                    status_text = "⚠️ 発注なし"
+                else:
+                    status_text = "⚠️ 書類不備"
+            else:
+                # すべてOK → 緑背景
+                row_color = QColor(220, 255, 220)  # 🟢 緑
+                completed_count += 1
+                status_text = "✅ 完了"
+
             # 費用項目
-            self.table.setItem(row, 0, QTableWidgetItem(item['item_name']))
+            item_widget = QTableWidgetItem(item['item_name'])
+            item_widget.setBackground(row_color)
+            self.table.setItem(row, 0, item_widget)
 
             # 取引先
-            self.table.setItem(row, 1, QTableWidgetItem(item['partner_name']))
+            partner_widget = QTableWidgetItem(item['partner_name'])
+            partner_widget.setBackground(row_color)
+            self.table.setItem(row, 1, partner_widget)
 
             # 番組名
-            self.table.setItem(row, 2, QTableWidgetItem(item['program_name']))
+            program_widget = QTableWidgetItem(item['program_name'])
+            program_widget.setBackground(row_color)
+            self.table.setItem(row, 2, program_widget)
 
             # 年月
-            self.table.setItem(row, 3, QTableWidgetItem(item['year_month']))
+            month_widget = QTableWidgetItem(item['year_month'])
+            month_widget.setBackground(row_color)
+            self.table.setItem(row, 3, month_widget)
 
             # 予定金額
             scheduled_amount = f"{int(item['scheduled_amount']):,}円" if item['scheduled_amount'] else "-"
-            self.table.setItem(row, 4, QTableWidgetItem(scheduled_amount))
+            scheduled_widget = QTableWidgetItem(scheduled_amount)
+            scheduled_widget.setBackground(row_color)
+            self.table.setItem(row, 4, scheduled_widget)
 
             # 実績金額
             actual_amount = f"{int(item['actual_amount']):,}円" if item['actual_amount'] else "-"
-            self.table.setItem(row, 5, QTableWidgetItem(actual_amount))
+            actual_widget = QTableWidgetItem(actual_amount)
+            actual_widget.setBackground(row_color)
+            self.table.setItem(row, 5, actual_widget)
 
             # ①発注
-            has_order = item['has_order']
             order_item = QTableWidgetItem("✓" if has_order else "✗")
             order_item.setTextAlignment(Qt.AlignCenter)
-            if has_order:
-                order_item.setBackground(QColor(200, 255, 200))  # 薄い緑
-            else:
-                order_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            order_item.setBackground(row_color)
             order_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
             self.table.setItem(row, 6, order_item)
 
             # ②書面（PDF配布済/メール送信済）
-            receipt_ok = item['receipt_status'] == "✓"
             document_item = QTableWidgetItem("✓" if receipt_ok else "✗")
             document_item.setTextAlignment(Qt.AlignCenter)
-            if receipt_ok:
-                document_item.setBackground(QColor(200, 255, 200))  # 薄い緑
-            else:
-                document_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            document_item.setBackground(row_color)
             document_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
             self.table.setItem(row, 7, document_item)
 
             # ③受領（現在は②と同じ）
             receipt_item = QTableWidgetItem("✓" if receipt_ok else "✗")
             receipt_item.setTextAlignment(Qt.AlignCenter)
-            if receipt_ok:
-                receipt_item.setBackground(QColor(200, 255, 200))  # 薄い緑
-            else:
-                receipt_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            receipt_item.setBackground(row_color)
             receipt_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
             self.table.setItem(row, 8, receipt_item)
 
             # ④予定（発注あり=予定入）
             schedule_item = QTableWidgetItem("✓" if has_order else "✗")
             schedule_item.setTextAlignment(Qt.AlignCenter)
-            if has_order:
-                schedule_item.setBackground(QColor(200, 255, 200))  # 薄い緑
-            else:
-                schedule_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            schedule_item.setBackground(row_color)
             schedule_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
             self.table.setItem(row, 9, schedule_item)
 
             # ⑤支払
-            payment_ok = item['payment_status'] == "✓"
             payment_item = QTableWidgetItem("✓" if payment_ok else "✗")
             payment_item.setTextAlignment(Qt.AlignCenter)
-            if payment_ok:
-                payment_item.setBackground(QColor(200, 255, 200))  # 薄い緑
-            else:
-                payment_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            payment_item.setBackground(row_color)
             payment_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
             self.table.setItem(row, 10, payment_item)
 
-            # 状態（色で表示）
-            status_color = item['status_color']
-            if status_color == "red":
-                status_text = "🔴"
-            elif status_color == "yellow":
-                status_text = "🟡"
-            else:
-                status_text = "🟢"
-
+            # Phase 3.2: 状態列を詳細化（問題の内容を表示）
             status_item = QTableWidgetItem(status_text)
             status_item.setTextAlignment(Qt.AlignCenter)
+            status_item.setBackground(row_color)
             self.table.setItem(row, 11, status_item)
+
+        # Phase 3.3: ダッシュボードを更新
+        self._update_payment_dashboard(critical_count, warning_count, completed_count, len(data))
 
     def update_statistics(self):
         """統計情報を更新"""
@@ -289,3 +350,20 @@ class PaymentOrderCheckTab(QWidget):
         self.stats_label.setText(
             f"全体: {total}件 | 完了: {completed}件 | 問題あり: {problem}件"
         )
+
+    def _update_payment_dashboard(self, critical_count, warning_count, completed_count, total):
+        """Phase 3.3: ダッシュボードを更新"""
+        # 各ステータスの更新
+        self.critical_label.setText(f"🚨 支払未完了: {critical_count}件")
+        self.warning_label.setText(f"⚠️ 書類不備: {warning_count}件")
+        self.completed_label.setText(f"✅ 完了: {completed_count}件")
+
+        # 完了率とプログレスバー
+        if total > 0:
+            completion_rate = int((completed_count / total) * 100)
+            bar_length = 20
+            filled = int((completion_rate / 100) * bar_length)
+            bar = "█" * filled + "░" * (bar_length - filled)
+            self.completion_label.setText(f"完了率: [{bar}] {completion_rate}% ({completed_count}/{total}件)")
+        else:
+            self.completion_label.setText("完了率: 0% (0/0件)")

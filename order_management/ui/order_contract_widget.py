@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
-                             QComboBox, QMessageBox, QFileDialog, QHeaderView, QMenu)
+                             QComboBox, QMessageBox, QFileDialog, QHeaderView, QMenu, QGroupBox, QGridLayout)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from datetime import datetime, timedelta
@@ -34,6 +34,58 @@ class OrderContractWidget(QWidget):
     def init_ui(self):
         """UIの初期化"""
         layout = QVBoxLayout()
+
+        # ===== Phase 2: ダッシュボード統計パネル =====
+        dashboard_group = QGroupBox("📊 発注状況サマリー")
+        dashboard_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 14px; }")
+        dashboard_layout = QGridLayout()
+
+        self.urgent_label = QLabel("🚨 緊急対応必要: 0件")
+        self.urgent_label.setStyleSheet("font-size: 13px; color: #d32f2f;")
+        dashboard_layout.addWidget(self.urgent_label, 0, 0)
+
+        self.warning_label = QLabel("⚠️ 注意が必要: 0件")
+        self.warning_label.setStyleSheet("font-size: 13px; color: #f57c00;")
+        dashboard_layout.addWidget(self.warning_label, 0, 1)
+
+        self.pending_label = QLabel("📝 発注未完了: 0件")
+        self.pending_label.setStyleSheet("font-size: 13px;")
+        dashboard_layout.addWidget(self.pending_label, 1, 0)
+
+        self.completed_label = QLabel("✅ 正常稼働中: 0件")
+        self.completed_label.setStyleSheet("font-size: 13px; color: #388e3c;")
+        dashboard_layout.addWidget(self.completed_label, 1, 1)
+
+        self.completion_label = QLabel("完了率: 0%")
+        self.completion_label.setStyleSheet("font-size: 13px; font-weight: bold;")
+        dashboard_layout.addWidget(self.completion_label, 2, 0, 1, 2)
+
+        dashboard_group.setLayout(dashboard_layout)
+        layout.addWidget(dashboard_group)
+
+        # ===== Phase 2.2: カラー凡例 =====
+        legend_layout = QHBoxLayout()
+        legend_label = QLabel("色の意味: ")
+        legend_layout.addWidget(legend_label)
+
+        red_label = QLabel("■ 赤=緊急対応")
+        red_label.setStyleSheet("color: #d32f2f; font-weight: bold;")
+        legend_layout.addWidget(red_label)
+
+        yellow_label = QLabel("■ 黄=注意")
+        yellow_label.setStyleSheet("color: #f57c00; font-weight: bold;")
+        legend_layout.addWidget(yellow_label)
+
+        green_label = QLabel("■ 緑=完了")
+        green_label.setStyleSheet("color: #388e3c; font-weight: bold;")
+        legend_layout.addWidget(green_label)
+
+        gray_label = QLabel("■ グレー=通常")
+        gray_label.setStyleSheet("color: #757575; font-weight: bold;")
+        legend_layout.addWidget(gray_label)
+
+        legend_layout.addStretch()
+        layout.addLayout(legend_layout)
 
         # フィルタエリア
         filter_layout = QHBoxLayout()
@@ -128,7 +180,7 @@ class OrderContractWidget(QWidget):
         self.setLayout(layout)
 
     def load_contracts(self):
-        """発注書一覧を読み込み"""
+        """発注書一覧を読み込み（Phase 1: 色分けとステータス詳細化）"""
         search_term = self.search_input.text()
         status_filter = self.status_filter.currentText()
         order_type_filter = self.order_type_filter.currentText()
@@ -150,6 +202,12 @@ class OrderContractWidget(QWidget):
 
         self.table.setRowCount(len(contracts))
 
+        # 統計用カウンタ
+        urgent_count = 0    # 🚨 期限切れまたは期限間近
+        warning_count = 0   # ⚠️ 30日以内
+        pending_count = 0   # 📝 未完了
+        completed_count = 0 # ✅ 完了
+
         for row, contract in enumerate(contracts):
             # 新しいフォーマット:
             # contract: (id, program_id, program_name, project_id, project_name,
@@ -157,38 +215,118 @@ class OrderContractWidget(QWidget):
             #            contract_end_date, order_type, order_status, pdf_status,
             #            notes, created_at, updated_at)
 
+            order_status = contract[11] or "未"
+            pdf_status = contract[12] or "未配布"
+            end_date_str = contract[9]
+
+            # Phase 1.3: 期限チェック
+            days_until_expiry = None
+            is_expired = False
+            if end_date_str:
+                try:
+                    end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+                    days_until_expiry = (end_date - datetime.now()).days
+                    is_expired = days_until_expiry < 0
+                except:
+                    pass
+
+            # Phase 1.1: 行の背景色を決定
+            row_color = None
+            if is_expired or (days_until_expiry is not None and 0 <= days_until_expiry <= 7):
+                # 🔴 赤: 期限切れまたは7日以内
+                row_color = QColor(255, 220, 220)
+                urgent_count += 1
+            elif days_until_expiry is not None and 8 <= days_until_expiry <= 30:
+                # 🟡 黄: 8-30日以内
+                row_color = QColor(255, 255, 200)
+                warning_count += 1
+            elif order_status in ["完了", "済"] and pdf_status in ["配布済", "受領確認済"]:
+                # 🟢 緑: 完了
+                row_color = QColor(220, 255, 220)
+                completed_count += 1
+            elif order_status in ["未", "未完了"]:
+                # 📝 未完了
+                row_color = QColor(245, 245, 245)
+                pending_count += 1
+            else:
+                row_color = QColor(245, 245, 245)
+
             self.table.setItem(row, 0, QTableWidgetItem(str(contract[0])))  # ID
             self.table.setItem(row, 1, QTableWidgetItem(contract[10] or "発注書"))  # 発注種別
-            self.table.setItem(row, 2, QTableWidgetItem(contract[11] or "未"))  # 発注ステータス
+
+            # Phase 1.2: ステータス列を詳細化
+            status_text = self._get_detailed_status(order_status, pdf_status)
+            self.table.setItem(row, 2, QTableWidgetItem(status_text))  # 発注ステータス
+
             self.table.setItem(row, 3, QTableWidgetItem(contract[2] or ""))  # 番組名
             self.table.setItem(row, 4, QTableWidgetItem(contract[4] or "-"))  # 案件名
             self.table.setItem(row, 5, QTableWidgetItem(contract[6] or ""))  # 取引先名
             self.table.setItem(row, 6, QTableWidgetItem(contract[8] or ""))  # 委託開始日
-            self.table.setItem(row, 7, QTableWidgetItem(contract[9] or ""))  # 委託終了日
+
+            # Phase 1.3: 期限情報を追加
+            deadline_text = self._format_deadline(end_date_str, days_until_expiry, is_expired)
+            self.table.setItem(row, 7, QTableWidgetItem(deadline_text))  # 委託終了日
+
             self.table.setItem(row, 8, QTableWidgetItem("-"))  # 契約期間（簡略化）
-            self.table.setItem(row, 9, QTableWidgetItem(contract[12] or ""))  # PDFステータス
+            self.table.setItem(row, 9, QTableWidgetItem(pdf_status))  # PDFステータス
             self.table.setItem(row, 10, QTableWidgetItem("-"))  # 配布日（簡略化）
             self.table.setItem(row, 11, QTableWidgetItem("-"))  # 確認者（簡略化）
             self.table.setItem(row, 12, QTableWidgetItem("-"))  # PDFパス（簡略化）
             self.table.setItem(row, 13, QTableWidgetItem(contract[13] or ""))  # 備考
 
-            # 期限切れ間近の行を赤色でハイライト
-            if contract[9]:  # contract_end_date (新しいインデックス)
-                try:
-                    end_date = datetime.strptime(contract[9], '%Y-%m-%d')
-                    days_until_expiry = (end_date - datetime.now()).days
-
-                    if 0 <= days_until_expiry <= 30:
-                        for col in range(self.table.columnCount()):
-                            item = self.table.item(row, col)
-                            if item:
-                                item.setBackground(QColor(255, 204, 204))  # 薄い赤
-                except:
-                    pass
+            # Phase 1.1: 行全体に背景色を適用
+            if row_color:
+                for col in range(self.table.columnCount()):
+                    item = self.table.item(row, col)
+                    if item:
+                        item.setBackground(row_color)
 
         # IDカラムとPDFパスカラムを非表示
         self.table.setColumnHidden(0, True)
         self.table.setColumnHidden(12, True)  # PDFパスも非表示
+
+        # Phase 2: ダッシュボードを更新
+        self._update_dashboard(urgent_count, warning_count, pending_count, completed_count, len(contracts))
+
+    def _get_detailed_status(self, order_status, pdf_status):
+        """Phase 1.2: ステータスを詳細化"""
+        if order_status in ["完了", "済"]:
+            if pdf_status == "受領確認済":
+                return "✅ 完了"
+            elif pdf_status == "配布済":
+                return "📄 配布済"
+            else:
+                return "⚠️ 発注済・未配布"
+        else:
+            return "❌ 未発注"
+
+    def _format_deadline(self, date_str, days_until, is_expired):
+        """Phase 1.3: 期限情報をフォーマット"""
+        if not date_str:
+            return "-"
+
+        if is_expired:
+            return f"🚨 {date_str} (期限切れ)"
+        elif days_until is not None and days_until <= 30:
+            return f"⚠️ {date_str} (あと{days_until}日)"
+        else:
+            return date_str
+
+    def _update_dashboard(self, urgent, warning, pending, completed, total):
+        """Phase 2: ダッシュボードを更新"""
+        self.urgent_label.setText(f"🚨 緊急対応必要: {urgent}件 (期限切れ・赤表示)")
+        self.warning_label.setText(f"⚠️ 注意が必要: {warning}件 (30日以内・黄表示)")
+        self.pending_label.setText(f"📝 発注未完了: {pending}件")
+        self.completed_label.setText(f"✅ 正常稼働中: {completed}件 (緑表示)")
+
+        if total > 0:
+            completion_rate = int((completed / total) * 100)
+            bar_length = 20
+            filled = int((completion_rate / 100) * bar_length)
+            bar = "█" * filled + "░" * (bar_length - filled)
+            self.completion_label.setText(f"完了率: [{bar}] {completion_rate}% ({completed}/{total}件)")
+        else:
+            self.completion_label.setText("完了率: データなし")
 
     def show_expiring_contracts(self):
         """期限切れ間近の発注書を表示"""
