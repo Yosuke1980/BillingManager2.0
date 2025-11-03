@@ -41,6 +41,10 @@ class ProgramEditDialog(QDialog):
         form_layout = QFormLayout()
         # フィールドが必要に応じて拡大するように設定
         form_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        # 行間のスペーシングを調整
+        form_layout.setVerticalSpacing(12)
+        # ラベルとフィールドの配置を調整
+        form_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         # 番組名
         self.name_edit = QLineEdit()
@@ -108,6 +112,7 @@ class ProgramEditDialog(QDialog):
 
         # 放送曜日
         broadcast_days_layout = QHBoxLayout()
+        broadcast_days_layout.setContentsMargins(0, 0, 0, 0)
         self.day_checkboxes = {}
         for day in ["月", "火", "水", "木", "金", "土", "日"]:
             checkbox = QCheckBox(day)
@@ -118,6 +123,8 @@ class ProgramEditDialog(QDialog):
 
         broadcast_days_widget = QWidget()
         broadcast_days_widget.setLayout(broadcast_days_layout)
+        broadcast_days_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        broadcast_days_widget.setMinimumHeight(40)
         form_layout.addRow("放送曜日:", broadcast_days_widget)
 
         # ステータス
