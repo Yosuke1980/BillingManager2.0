@@ -40,7 +40,7 @@ class AppConfig:
         "おもて情報.支払先コード": "payee_code",
         "明細情報.金額": "amount",
         "おもて情報.自社支払期限": "payment_date",
-        "状態": "status",
+        "全体情報.状態": "status",
     }
 
     # タブ名称
