@@ -130,8 +130,12 @@ class OrderContractEditDialog(QDialog):
         # 番組選択
         program_layout = QHBoxLayout()
         self.program_combo = QComboBox()
-        self.program_combo.setEditable(False)  # 編集不可に設定（リストから選択のみ）
+        self.program_combo.setEditable(True)  # 編集可能に設定（入力時に候補を表示）
+        self.program_combo.setInsertPolicy(QComboBox.NoInsert)  # 新規項目は追加しない
         self.program_combo.setMinimumWidth(300)
+        # オートコンプリート設定
+        self.program_combo.completer().setCompletionMode(self.program_combo.completer().PopupCompletion)
+        self.program_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致で候補を表示
         self.program_combo.currentIndexChanged.connect(self.on_program_changed)
         self.load_programs()
         program_layout.addWidget(self.program_combo, 1)
@@ -720,8 +724,19 @@ class OrderContractEditDialog(QDialog):
         # 番組と案件の設定
         program_id = self.program_combo.currentData()
         if program_id is None:
+            # currentData()がNoneの場合は、入力されたテキストで辞書検索
             program_key = self.program_combo.currentText()
             program_id = self.program_dict.get(program_key)
+
+            # それでもNoneの場合は、番組がリストに存在しない
+            if program_id is None:
+                QMessageBox.warning(
+                    self,
+                    "警告",
+                    f"番組「{program_key}」がリストに存在しません。\n"
+                    "リストから既存の番組を選択するか、「新規番組追加」ボタンで番組を追加してください。"
+                )
+                return
 
         contract_data['program_id'] = program_id
 
