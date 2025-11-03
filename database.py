@@ -2306,6 +2306,7 @@ class DatabaseManager:
                     prog.name as program_name,
                     oc.partner_id,
                     p.name as partner_name,
+                    p.code as partner_code,
                     oc.item_name,
                     oc.contract_start_date,
                     oc.contract_end_date,
@@ -2346,6 +2347,7 @@ class DatabaseManager:
                             'item_name': contract['item_name'] or '',
                             'partner_id': contract['partner_id'],
                             'partner_name': contract['partner_name'] or '',
+                            'partner_code': contract['partner_code'] or '',
                             'year_month': year_month,
                             'amount': amount,
                             'order_contract_id': contract['order_contract_id'],
@@ -2393,6 +2395,7 @@ class DatabaseManager:
                             'item_name': contract['item_name'] or '',
                             'partner_id': contract['partner_id'],
                             'partner_name': contract['partner_name'] or '',
+                            'partner_code': contract['partner_code'] or '',
                             'year_month': year_month,
                             'amount': amount,
                             'order_contract_id': contract['order_contract_id'],
@@ -2448,6 +2451,7 @@ class DatabaseManager:
                     id,
                     project_name,
                     payee,
+                    payee_code,
                     amount,
                     payment_date,
                     status
@@ -2455,24 +2459,22 @@ class DatabaseManager:
                 WHERE strftime('%Y-%m', payment_date) = ?
             """, (target_month,))
 
-            expenses = {(row['payee'], row['amount']): dict(row) for row in cursor.fetchall()}
+            expenses = {(row['payee_code'], row['amount']): dict(row) for row in cursor.fetchall()}
 
             # 各支払予定について照合
             for sched in schedule:
-                partner_name = sched['partner_name']
+                partner_code = sched['partner_code']
                 scheduled_amount = sched['amount']
 
-                # 実績を検索（取引先名と金額で照合、±5%以内を許容）
+                # 実績を検索（支払先コードと金額で完全一致）
                 actual_expense = None
                 actual_amount = None
 
-                for (payee, exp_amount), expense in expenses.items():
-                    if payee == partner_name:
-                        # 金額が±5%以内なら一致とみなす
-                        if abs(exp_amount - scheduled_amount) / scheduled_amount <= 0.05 if scheduled_amount > 0 else exp_amount == scheduled_amount:
-                            actual_expense = expense
-                            actual_amount = exp_amount
-                            break
+                # 支払先コードと金額が完全一致するものを検索
+                key = (partner_code, scheduled_amount)
+                if key in expenses:
+                    actual_expense = expenses[key]
+                    actual_amount = scheduled_amount
 
                 # ステータス判定
                 missing_items = []
