@@ -599,78 +599,100 @@ class DatabaseManager:
         if overwrite:
             cursor.execute("DELETE FROM payments")
 
-        # CSVファイルを読み込む
+        # CSVファイルを読み込む（エンコーディング自動検出）
         row_count = 0
-        with open(csv_file, "r", encoding="shift_jis", errors="replace") as file:
-            csv_reader = csv.reader(file)
-            headers = next(csv_reader)  # ヘッダー行を読み込み
+        # エンコーディングを試行
+        encodings = ['utf-8', 'shift_jis', 'cp932']
+        file_content = None
+        used_encoding = None
 
-            # ヘッダーマッピングの作成
-            header_indices = {}
-            for header_name, db_field in header_mapping.items():
-                try:
-                    index = headers.index(header_name)
-                    header_indices[db_field] = index
-                except ValueError:
-                    log_message(
-                        f"ヘッダー '{header_name}' がCSVファイルに見つかりません"
-                    )
+        for encoding in encodings:
+            try:
+                with open(csv_file, "r", encoding=encoding) as f:
+                    file_content = f.read()
+                    used_encoding = encoding
+                    break
+            except (UnicodeDecodeError, LookupError):
+                continue
 
-            # 必須フィールドのチェック
-            required_fields = ["project_name", "payee", "amount", "payment_date"]
-            missing_fields = [
-                field for field in required_fields if field not in header_indices
-            ]
+        if file_content is None:
+            log_message(f"CSVファイルのエンコーディングを検出できませんでした: {csv_file}")
+            conn.close()
+            return 0
 
-            if missing_fields:
-                missing_headers = [
-                    header
-                    for header, field in header_mapping.items()
-                    if field in missing_fields
-                ]
+        log_message(f"CSVファイルのエンコーディング: {used_encoding}")
+
+        # 読み込んだ内容をCSVとしてパース
+        import io
+        csv_reader = csv.reader(io.StringIO(file_content))
+        headers = next(csv_reader)  # ヘッダー行を読み込み
+
+        # ヘッダーマッピングの作成
+        header_indices = {}
+        for header_name, db_field in header_mapping.items():
+            try:
+                index = headers.index(header_name)
+                header_indices[db_field] = index
+            except ValueError:
                 log_message(
-                    f"CSVファイルのヘッダーが不正です: {', '.join(missing_headers)}"
+                    f"ヘッダー '{header_name}' がCSVファイルに見つかりません"
                 )
-                conn.close()
-                return 0
 
-            # データの挿入
-            for row in csv_reader:
-                if not row:  # 空行はスキップ
-                    continue
+        # 必須フィールドのチェック
+        required_fields = ["project_name", "payee", "amount", "payment_date"]
+        missing_fields = [
+            field for field in required_fields if field not in header_indices
+        ]
 
-                # 各フィールドの値を取得
-                values = {}
-                for db_field, index in header_indices.items():
-                    values[db_field] = row[index] if index < len(row) else ""
+        if missing_fields:
+            missing_headers = [
+                header
+                for header, field in header_mapping.items()
+                if field in missing_fields
+            ]
+            log_message(
+                f"CSVファイルのヘッダーが不正です: {', '.join(missing_headers)}"
+            )
+            conn.close()
+            return 0
 
-                # 【追加】支払い先コードの0埋め処理
-                if "payee_code" in values and values["payee_code"]:
-                    values["payee_code"] = format_payee_code(values["payee_code"])
+        # データの挿入
+        for row in csv_reader:
+            if not row:  # 空行はスキップ
+                continue
 
-                # 金額を数値に変換
-                try:
-                    if "amount" in values:
-                        amount_str = (
-                            values["amount"].replace(",", "").replace("円", "").strip()
-                        )
-                        values["amount"] = float(amount_str)
-                except ValueError:
-                    log_message(f"金額の変換エラー: {values.get('amount')}")
-                    values["amount"] = 0
+            # 各フィールドの値を取得
+            values = {}
+            for db_field, index in header_indices.items():
+                values[db_field] = row[index] if index < len(row) else ""
 
-                # ステータスのデフォルト値
-                if "status" not in values or not values["status"]:
-                    values["status"] = "未処理"
+            # 【追加】支払い先コードの0埋め処理
+            if "payee_code" in values and values["payee_code"]:
+                values["payee_code"] = format_payee_code(values["payee_code"])
 
-                # データをデータベースに挿入
-                fields = list(values.keys())
-                placeholders = ", ".join(["?"] * len(fields))
+            # 金額を数値に変換
+            try:
+                if "amount" in values:
+                    amount_str = (
+                        values["amount"].replace(",", "").replace("円", "").strip()
+                    )
+                    values["amount"] = float(amount_str)
+            except ValueError:
+                log_message(f"金額の変換エラー: {values.get('amount')}")
+                values["amount"] = 0
 
-                query = f"INSERT INTO payments ({', '.join(fields)}) VALUES ({placeholders})"
-                cursor.execute(query, [values[field] for field in fields])
+            # ステータスのデフォルト値
+            if "status" not in values or not values["status"]:
+                values["status"] = "未処理"
 
-                row_count += 1
+            # データをデータベースに挿入
+            fields = list(values.keys())
+            placeholders = ", ".join(["?"] * len(fields))
+
+            query = f"INSERT INTO payments ({', '.join(fields)}) VALUES ({placeholders})"
+            cursor.execute(query, [values[field] for field in fields])
+
+            row_count += 1
 
         conn.commit()
         conn.close()
