@@ -5,7 +5,7 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
                              QDateEdit, QTextEdit, QFileDialog, QMessageBox, QWidget,
-                             QRadioButton, QButtonGroup, QScrollArea, QApplication)
+                             QRadioButton, QButtonGroup, QScrollArea, QApplication, QGroupBox)
 from PyQt5.QtCore import QDate, Qt
 from datetime import datetime, timedelta
 import os
@@ -43,105 +43,138 @@ class OrderContractEditDialog(QDialog):
             self.load_contract_data()
 
     def init_ui(self):
-        """UIの初期化"""
-        layout = QVBoxLayout()
-        layout.setContentsMargins(10, 10, 10, 10)  # ダイアログ全体の余白を10pxに設定
-        layout.setSpacing(5)  # ウィジェット間のスペースを5pxに設定
+        """UIの初期化（グループボックスでセクション分け）"""
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
 
-        form_layout = QFormLayout()
-        form_layout.setVerticalSpacing(5)  # 縦のスペースを5pxに設定（さらにコンパクト）
-        form_layout.setContentsMargins(10, 10, 10, 10)  # 余白を調整
+        # ===== セクション1: 基本情報 =====
+        basic_group = QGroupBox("基本情報")
+        basic_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        basic_layout = QFormLayout()
+        basic_layout.setVerticalSpacing(8)
 
         # 発注種別選択
         self.order_type_combo = QComboBox()
         self.order_type_combo.addItems(["契約書", "発注書", "メール発注"])
         self.order_type_combo.setCurrentText("発注書")
         self.order_type_combo.currentTextChanged.connect(self.on_order_type_changed)
-        form_layout.addRow("発注種別:", self.order_type_combo)
+        basic_layout.addRow("発注種別:", self.order_type_combo)
 
         # 発注ステータス
         self.order_status_combo = QComboBox()
         self.order_status_combo.addItems(["未完了", "完了"])
-        form_layout.addRow("発注ステータス:", self.order_status_combo)
+        basic_layout.addRow("発注ステータス:", self.order_status_combo)
 
-        # === 番組選択（必須） ===
+        basic_group.setLayout(basic_layout)
+
+        # ===== セクション2: 番組・案件情報 =====
+        program_group = QGroupBox("番組・案件情報 *")
+        program_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        program_layout_main = QFormLayout()
+        program_layout_main.setVerticalSpacing(8)
+
+        # 番組選択
         program_layout = QHBoxLayout()
         self.program_combo = QComboBox()
-        self.program_combo.setEditable(True)  # 編集可能に
-        self.program_combo.setInsertPolicy(QComboBox.NoInsert)  # 入力しても追加しない
-        self.program_combo.setMinimumWidth(300)  # 最小幅を設定
+        self.program_combo.setEditable(True)
+        self.program_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.program_combo.setMinimumWidth(300)
         self.program_combo.completer().setCompletionMode(self.program_combo.completer().PopupCompletion)
-        self.program_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致
+        self.program_combo.completer().setFilterMode(Qt.MatchContains)
         self.program_combo.currentIndexChanged.connect(self.on_program_changed)
         self.load_programs()
-        program_layout.addWidget(self.program_combo, 1)  # ストレッチファクター1で伸縮可能に
+        program_layout.addWidget(self.program_combo, 1)
 
         add_program_btn = create_button("新規番組追加", self.add_new_program)
-        add_program_btn.setMinimumWidth(120)  # ボタンの最小幅を設定
-        program_layout.addWidget(add_program_btn, 0)  # ストレッチファクター0で固定サイズ
+        add_program_btn.setMinimumWidth(120)
+        program_layout.addWidget(add_program_btn, 0)
 
-        form_layout.addRow("番組名 *:", program_layout)
+        program_name_label = QLabel("<b>番組名 *:</b>")
+        program_layout_main.addRow(program_name_label, program_layout)
 
-        # === 案件選択（オプション） ===
+        # 案件指定（ラジオボタン）
         project_type_layout = QHBoxLayout()
-        self.rb_normal = QRadioButton("通常放送")
-        self.rb_project = QRadioButton("特定案件")
-        self.rb_normal.setChecked(True)  # デフォルトは通常放送
+        self.rb_normal = QRadioButton("通常放送（レギュラー放送用）")
+        self.rb_project = QRadioButton("特定案件（イベント・特番用）")
+        self.rb_normal.setChecked(True)
 
         self.project_type_group = QButtonGroup()
         self.project_type_group.addButton(self.rb_normal)
         self.project_type_group.addButton(self.rb_project)
-
         self.rb_project.toggled.connect(self.on_project_type_changed)
 
         project_type_layout.addWidget(self.rb_normal)
         project_type_layout.addWidget(self.rb_project)
         project_type_layout.addStretch()
-        form_layout.addRow("案件区分:", project_type_layout)
+        program_layout_main.addRow("案件指定:", project_type_layout)
 
-        # 案件選択コンボボックス
+        # 案件選択コンボボックス（インデントして階層表示）
+        project_select_widget = QWidget()
         project_select_layout = QHBoxLayout()
+        project_select_layout.setContentsMargins(20, 0, 0, 0)  # 左に20pxインデント
+
         self.project_combo = QComboBox()
-        self.project_combo.setMinimumWidth(300)
-        self.project_combo.setEnabled(False)  # 初期状態は無効
+        self.project_combo.setMinimumWidth(280)
+        self.project_combo.setEnabled(False)
         project_select_layout.addWidget(self.project_combo, 1)
 
         add_project_btn = create_button("新規案件追加", self.add_new_project)
         add_project_btn.setMinimumWidth(120)
-        add_project_btn.setEnabled(False)  # 初期状態は無効
+        add_project_btn.setEnabled(False)
         self.add_project_btn = add_project_btn
         project_select_layout.addWidget(add_project_btn, 0)
 
-        form_layout.addRow("案件名:", project_select_layout)
-        self.project_combo_label = form_layout.labelForField(project_select_layout.itemAt(0).widget())
-        # 初期状態では非表示
-        self.project_combo.setVisible(False)
-        self.add_project_btn.setVisible(False)
-        self.project_combo_label.setVisible(False)
+        project_select_widget.setLayout(project_select_layout)
+        program_layout_main.addRow("", project_select_widget)
+        self.project_select_widget = project_select_widget
+        self.project_select_widget.setVisible(False)
 
-        # 費用項目（自由入力）
+        # ヘルプテキスト
+        help_label = QLabel("<i><font color='#666'>ヒント: 通常放送はレギュラー番組の定期発注、特定案件はイベントや特番などの単発発注です</font></i>")
+        help_label.setWordWrap(True)
+        program_layout_main.addRow("", help_label)
+
+        # 費用項目
         self.item_name = QLineEdit()
         self.item_name.setPlaceholderText("例: 山田太郎出演料、制作費")
-        form_layout.addRow("費用項目:", self.item_name)
+        item_name_label = QLabel("<b>費用項目 *:</b>")
+        program_layout_main.addRow(item_name_label, self.item_name)
 
-        # 取引先選択（検索可能）
+        program_group.setLayout(program_layout_main)
+
+        # ===== セクション3: 取引先情報 =====
+        partner_group = QGroupBox("取引先情報 *")
+        partner_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        partner_layout_main = QFormLayout()
+        partner_layout_main.setVerticalSpacing(8)
+
         partner_layout = QHBoxLayout()
         self.partner_combo = QComboBox()
-        self.partner_combo.setEditable(True)  # 編集可能に
-        self.partner_combo.setInsertPolicy(QComboBox.NoInsert)  # 入力しても追加しない
-        self.partner_combo.setMinimumWidth(300)  # 最小幅を設定
+        self.partner_combo.setEditable(True)
+        self.partner_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.partner_combo.setMinimumWidth(300)
         self.partner_combo.completer().setCompletionMode(self.partner_combo.completer().PopupCompletion)
-        self.partner_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致
+        self.partner_combo.completer().setFilterMode(Qt.MatchContains)
         self.load_partners()
-        partner_layout.addWidget(self.partner_combo, 1)  # ストレッチファクター1で伸縮可能に
+        partner_layout.addWidget(self.partner_combo, 1)
 
         add_partner_btn = create_button("新規取引先追加", self.add_new_partner)
-        add_partner_btn.setMinimumWidth(140)  # ボタンの最小幅を設定
-        partner_layout.addWidget(add_partner_btn, 0)  # ストレッチファクター0で固定サイズ
+        add_partner_btn.setMinimumWidth(140)
+        partner_layout.addWidget(add_partner_btn, 0)
 
-        form_layout.addRow("取引先名:", partner_layout)
+        partner_name_label = QLabel("<b>取引先名 *:</b>")
+        partner_layout_main.addRow(partner_name_label, partner_layout)
 
-        # 委託期間（開始日と終了日を横並び）
+        partner_group.setLayout(partner_layout_main)
+
+        # ===== セクション4: 契約条件 =====
+        contract_group = QGroupBox("契約条件")
+        contract_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        contract_layout = QFormLayout()
+        contract_layout.setVerticalSpacing(8)
+
+        # 契約期間
         date_layout = QHBoxLayout()
         date_layout.addWidget(QLabel("開始日:"))
         self.start_date = QDateEdit()
@@ -157,19 +190,18 @@ class OrderContractEditDialog(QDialog):
         date_layout.addWidget(self.end_date)
         date_layout.addStretch()
 
-        form_layout.addRow("委託期間:", date_layout)
+        contract_layout.addRow("契約期間:", date_layout)
 
-        # 契約期間種別
+        # 期間タイプ
         self.period_type = QComboBox()
         self.period_type.addItems(["3ヶ月", "半年", "1年"])
         self.period_type.setCurrentText("半年")
         self.period_type.currentTextChanged.connect(self.on_period_type_changed)
-        form_layout.addRow("契約期間:", self.period_type)
+        contract_layout.addRow("期間タイプ:", self.period_type)
 
-        # === レギュラー番組契約条件 ===
-        # 支払タイプと単価を横並び
+        # 支払い方法と金額
         payment_layout = QHBoxLayout()
-        payment_layout.addWidget(QLabel("支払タイプ:"))
+        payment_layout.addWidget(QLabel("支払い方法:"))
         self.payment_type = QComboBox()
         self.payment_type.addItems(["月額固定", "回数ベース"])
         self.payment_type.setCurrentText("月額固定")
@@ -177,103 +209,126 @@ class OrderContractEditDialog(QDialog):
         payment_layout.addWidget(self.payment_type)
 
         payment_layout.addWidget(QLabel("  金額:"))
-        self.unit_price_label = QLabel("")  # ラベルは非表示にして、QHBoxLayoutで管理
+        self.unit_price_label = QLabel("")
         self.unit_price = QLineEdit()
         self.unit_price.setPlaceholderText("例: 50000")
         self.unit_price.setMaximumWidth(150)
         payment_layout.addWidget(self.unit_price)
         payment_layout.addStretch()
 
-        form_layout.addRow("支払条件:", payment_layout)
+        contract_layout.addRow("", payment_layout)
 
-        # 支払タイミングと契約期間を横並び
-        timing_layout = QHBoxLayout()
-        timing_layout.addWidget(QLabel("支払タイミング:"))
+        # ヘルプテキスト
+        payment_help = QLabel("<i><font color='#666'>ヒント: 月額固定は毎月同じ金額、回数ベースは放送回数×単価で計算</font></i>")
+        payment_help.setWordWrap(True)
+        contract_layout.addRow("", payment_help)
+
+        # 支払いタイミング
         self.payment_timing = QComboBox()
         self.payment_timing.addItems(["翌月末払い", "当月末払い"])
         self.payment_timing.setCurrentText("翌月末払い")
-        timing_layout.addWidget(self.payment_timing)
-        timing_layout.addStretch()
+        contract_layout.addRow("支払いタイミング:", self.payment_timing)
 
-        form_layout.addRow("", timing_layout)
+        contract_group.setLayout(contract_layout)
 
-        # === PDF関連フィールド（契約書・発注書用） ===
+        # ===== セクション5: PDF管理（契約書・発注書の場合） =====
+        self.pdf_group = QGroupBox("PDF管理（契約書・発注書用）")
+        self.pdf_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        pdf_layout = QFormLayout()
+        pdf_layout.setVerticalSpacing(8)
+
         # PDFステータス
-        self.pdf_status_label = QLabel("PDFステータス:")
         self.pdf_status = QComboBox()
         self.pdf_status.addItems(["未配布", "配布済", "受領確認済"])
-        form_layout.addRow(self.pdf_status_label, self.pdf_status)
+        pdf_layout.addRow("配布ステータス:", self.pdf_status)
 
         # PDFファイル
-        self.pdf_file_label = QLabel("PDFファイル:")
-        pdf_layout = QHBoxLayout()
+        pdf_file_layout = QHBoxLayout()
         self.pdf_label = QLabel("(未選択)")
-        pdf_layout.addWidget(self.pdf_label)
+        pdf_file_layout.addWidget(self.pdf_label)
         pdf_btn = create_button("ファイル選択", self.select_pdf)
-        pdf_layout.addWidget(pdf_btn)
-        self.pdf_widget = QWidget()
-        self.pdf_widget.setLayout(pdf_layout)
-        form_layout.addRow(self.pdf_file_label, self.pdf_widget)
+        pdf_file_layout.addWidget(pdf_btn)
+        pdf_file_layout.addStretch()
+        pdf_layout.addRow("PDFファイル:", pdf_file_layout)
 
         # PDF配布日
-        self.distributed_date_label = QLabel("PDF配布日:")
         self.distributed_date = QDateEdit()
         self.distributed_date.setCalendarPopup(True)
         self.distributed_date.setDate(QDate.currentDate())
-        form_layout.addRow(self.distributed_date_label, self.distributed_date)
+        pdf_layout.addRow("配布日:", self.distributed_date)
 
         # 確認者
-        self.confirmed_by_label = QLabel("配布確認者:")
         self.confirmed_by = QLineEdit()
-        form_layout.addRow(self.confirmed_by_label, self.confirmed_by)
+        pdf_layout.addRow("確認者:", self.confirmed_by)
 
-        # === メール関連フィールド（メール発注用） ===
+        self.pdf_group.setLayout(pdf_layout)
+
+        # ===== セクション6: メール送信情報（メール発注の場合） =====
+        self.email_group = QGroupBox("メール送信情報（メール発注用）")
+        self.email_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        email_layout = QFormLayout()
+        email_layout.setVerticalSpacing(8)
+
         # メール件名
-        self.email_subject_label = QLabel("メール件名:")
         self.email_subject = QLineEdit()
         self.email_subject.setPlaceholderText("例: 2025年度上期 番組制作委託のお願い")
-        form_layout.addRow(self.email_subject_label, self.email_subject)
+        email_layout.addRow("件名:", self.email_subject)
 
         # メール送信先
-        self.email_to_label = QLabel("送信先アドレス:")
         self.email_to = QLineEdit()
         self.email_to.setPlaceholderText("例: partner@example.com")
-        form_layout.addRow(self.email_to_label, self.email_to)
+        email_layout.addRow("送信先:", self.email_to)
 
         # メール送信日
-        self.email_sent_date_label = QLabel("送信日:")
         self.email_sent_date = QDateEdit()
         self.email_sent_date.setCalendarPopup(True)
         self.email_sent_date.setDate(QDate.currentDate())
-        form_layout.addRow(self.email_sent_date_label, self.email_sent_date)
+        email_layout.addRow("送信日:", self.email_sent_date)
 
         # メール本文
-        self.email_body_label = QLabel("メール本文:")
         self.email_body = QTextEdit()
         self.email_body.setMaximumHeight(150)
         self.email_body.setPlaceholderText("メール本文を入力...")
-        form_layout.addRow(self.email_body_label, self.email_body)
+        email_layout.addRow("本文:", self.email_body)
+
+        self.email_group.setLayout(email_layout)
+
+        # ===== セクション7: その他 =====
+        other_group = QGroupBox("その他")
+        other_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        other_layout = QFormLayout()
+        other_layout.setVerticalSpacing(8)
 
         # 備考
         self.notes = QTextEdit()
         self.notes.setMaximumHeight(80)
-        form_layout.addRow("備考:", self.notes)
+        other_layout.addRow("備考:", self.notes)
 
-        # フォームレイアウトを保存（後で行を表示/非表示にするため）
-        self.form_layout = form_layout
+        other_group.setLayout(other_layout)
 
-        # フォームエリアをスクロール可能にする
+        # ===== すべてのグループをメインレイアウトに追加 =====
         form_widget = QWidget()
-        form_widget.setLayout(form_layout)
         form_widget.setStyleSheet("background-color: white;")
+        form_main_layout = QVBoxLayout()
+        form_main_layout.setContentsMargins(10, 10, 10, 10)
+        form_main_layout.setSpacing(10)
 
+        form_main_layout.addWidget(basic_group)
+        form_main_layout.addWidget(program_group)
+        form_main_layout.addWidget(partner_group)
+        form_main_layout.addWidget(contract_group)
+        form_main_layout.addWidget(self.pdf_group)
+        form_main_layout.addWidget(self.email_group)
+        form_main_layout.addWidget(other_group)
+
+        form_widget.setLayout(form_main_layout)
+
+        # スクロールエリアに配置
         scroll_area = QScrollArea()
         scroll_area.setWidget(form_widget)
         scroll_area.setWidgetResizable(True)
-        # 固定高さではなく、ボタンエリアの高さを確保しつつ最大限使用
-        # （レイアウトが自動的に調整する）
 
-        layout.addWidget(scroll_area, 1)  # ストレッチファクター1で伸縮可能
+        main_layout.addWidget(scroll_area, 1)
 
         # ボタン（スクロールエリアの外に配置）
         button_layout = QHBoxLayout()
@@ -284,32 +339,39 @@ class OrderContractEditDialog(QDialog):
         button_layout.addWidget(cancel_btn)
 
         button_layout.addStretch()
-        layout.addLayout(button_layout, 0)  # ストレッチファクター0で固定サイズ
+        main_layout.addLayout(button_layout, 0)
 
-        self.setLayout(layout)
+        self.setLayout(main_layout)
 
         # 初期表示：発注書モードでメールフィールドを非表示
         self.on_order_type_changed("発注書")
-        # 初期表示：月額固定モードで単価フィールドを非表示
-        self.on_payment_type_changed("月額固定")
 
     def on_payment_type_changed(self, payment_type):
-        """支払タイプが変更されたときの処理（横並びレイアウトなので常に表示）"""
-        # 金額フィールドは常に表示されているので、特に処理は不要
+        """支払タイプが変更されたときの処理"""
+        # 既存の処理を維持
         pass
 
     def on_project_type_changed(self):
         """案件区分が変更されたときの処理"""
         is_project = self.rb_project.isChecked()
-        self.project_combo.setVisible(is_project)
-        self.add_project_btn.setVisible(is_project)
-        self.project_combo_label.setVisible(is_project)
+        self.project_select_widget.setVisible(is_project)
         self.project_combo.setEnabled(is_project)
         self.add_project_btn.setEnabled(is_project)
 
         if is_project:
             # 特定案件が選択された場合、現在選択されている番組の案件一覧を読み込む
             self.load_projects_for_program()
+
+    def on_order_type_changed(self, order_type):
+        """発注種別が変更されたときにフィールドの表示を切り替える"""
+        if order_type == "メール発注":
+            # PDFグループを非表示、メールグループを表示
+            self.pdf_group.setVisible(False)
+            self.email_group.setVisible(True)
+        else:
+            # 契約書 or 発注書: PDFグループを表示、メールグループを非表示
+            self.pdf_group.setVisible(True)
+            self.email_group.setVisible(False)
 
     def on_program_changed(self):
         """番組が変更されたときの処理"""
@@ -351,47 +413,6 @@ class OrderContractEditDialog(QDialog):
             # （最後に追加された案件が最新）
             if self.project_combo.count() > 1:
                 self.project_combo.setCurrentIndex(self.project_combo.count() - 1)
-
-    def on_order_type_changed(self, order_type):
-        """発注種別が変更されたときにフィールドの表示を切り替える"""
-        if order_type == "メール発注":
-            # PDFフィールドを非表示、メールフィールドを表示
-            self.pdf_status_label.setVisible(False)
-            self.pdf_status.setVisible(False)
-            self.pdf_file_label.setVisible(False)
-            self.pdf_widget.setVisible(False)
-            self.distributed_date_label.setVisible(False)
-            self.distributed_date.setVisible(False)
-            self.confirmed_by_label.setVisible(False)
-            self.confirmed_by.setVisible(False)
-
-            self.email_subject_label.setVisible(True)
-            self.email_subject.setVisible(True)
-            self.email_to_label.setVisible(True)
-            self.email_to.setVisible(True)
-            self.email_sent_date_label.setVisible(True)
-            self.email_sent_date.setVisible(True)
-            self.email_body_label.setVisible(True)
-            self.email_body.setVisible(True)
-        else:
-            # 契約書 or 発注書: PDFフィールドを表示、メールフィールドを非表示
-            self.pdf_status_label.setVisible(True)
-            self.pdf_status.setVisible(True)
-            self.pdf_file_label.setVisible(True)
-            self.pdf_widget.setVisible(True)
-            self.distributed_date_label.setVisible(True)
-            self.distributed_date.setVisible(True)
-            self.confirmed_by_label.setVisible(True)
-            self.confirmed_by.setVisible(True)
-
-            self.email_subject_label.setVisible(False)
-            self.email_subject.setVisible(False)
-            self.email_to_label.setVisible(False)
-            self.email_to.setVisible(False)
-            self.email_sent_date_label.setVisible(False)
-            self.email_sent_date.setVisible(False)
-            self.email_body_label.setVisible(False)
-            self.email_body.setVisible(False)
 
     def load_programs(self):
         """番組一覧を読み込み"""
