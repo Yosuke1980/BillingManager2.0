@@ -506,12 +506,11 @@ class OrderContractWidget(QWidget):
 
             # 現在のフィルタ条件で発注データを取得
             search_term = self.search_input.text()
-            status_filter = self.status_filter.currentText()
             order_type_filter = self.order_type_filter.currentText()
             order_status_filter = self.order_status_filter.currentText()
 
             # フィルタ条件に応じた値を設定
-            pdf_status = None if status_filter == "すべて" else status_filter
+            pdf_status = None  # PDFステータスフィルタは存在しないのでNone
             order_type = None if order_type_filter == "すべて" else order_type_filter
             order_status = None if order_status_filter == "すべて" else order_status_filter
 
