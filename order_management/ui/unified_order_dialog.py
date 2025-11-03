@@ -106,12 +106,6 @@ class UnifiedOrderDialog(QDialog):
 
         form_layout.addRow("番組名:", program_layout)
 
-        # 自由入力案件名
-        self.custom_project_name = QLineEdit()
-        self.custom_project_name.setPlaceholderText("案件名を入力（例: 特別企画イベント）")
-        self.custom_project_name.setEnabled(False)  # 初期状態は無効
-        form_layout.addRow("案件名（自由入力）:", self.custom_project_name)
-
         # 案件選択（検索可能）- 後方互換性のため残す（非表示）
         self.project_combo = QComboBox()
         self.project_combo.setEditable(True)
@@ -228,37 +222,13 @@ class UnifiedOrderDialog(QDialog):
         self.distributed_date.setDate(QDate.currentDate())
         form_layout.addRow(self.distributed_date_label, self.distributed_date)
 
-        # 確認者
-        self.confirmed_by_label = QLabel("配布確認者:")
-        self.confirmed_by = QLineEdit()
-        form_layout.addRow(self.confirmed_by_label, self.confirmed_by)
-
         # === メール関連フィールド（メール発注用） ===
-        # メール件名
-        self.email_subject_label = QLabel("メール件名:")
-        self.email_subject = QLineEdit()
-        self.email_subject.setPlaceholderText("例: 2025年度上期 番組制作委託のお願い")
-        form_layout.addRow(self.email_subject_label, self.email_subject)
-
-        # メール送信先
-        self.email_to_label = QLabel("送信先アドレス:")
-        self.email_to = QLineEdit()
-        self.email_to.setPlaceholderText("例: partner@example.com")
-        form_layout.addRow(self.email_to_label, self.email_to)
-
         # メール送信日
         self.email_sent_date_label = QLabel("送信日:")
         self.email_sent_date = QDateEdit()
         self.email_sent_date.setCalendarPopup(True)
         self.email_sent_date.setDate(QDate.currentDate())
         form_layout.addRow(self.email_sent_date_label, self.email_sent_date)
-
-        # メール本文
-        self.email_body_label = QLabel("メール本文:")
-        self.email_body = QTextEdit()
-        self.email_body.setMaximumHeight(150)
-        self.email_body.setPlaceholderText("メール本文を入力...")
-        form_layout.addRow(self.email_body_label, self.email_body)
 
         # 備考
         self.notes = QTextEdit()
@@ -348,7 +318,6 @@ class UnifiedOrderDialog(QDialog):
         """案件名の選択方式が変更されたときの処理"""
         is_program = self.rb_program.isChecked()
         self.program_combo.setEnabled(is_program)
-        self.custom_project_name.setEnabled(not is_program)
 
     def on_order_type_changed(self, order_type):
         """発注種別が変更されたときにフィールドの表示を切り替える"""
@@ -360,17 +329,9 @@ class UnifiedOrderDialog(QDialog):
             self.pdf_widget.setVisible(False)
             self.distributed_date_label.setVisible(False)
             self.distributed_date.setVisible(False)
-            self.confirmed_by_label.setVisible(False)
-            self.confirmed_by.setVisible(False)
 
-            self.email_subject_label.setVisible(True)
-            self.email_subject.setVisible(True)
-            self.email_to_label.setVisible(True)
-            self.email_to.setVisible(True)
             self.email_sent_date_label.setVisible(True)
             self.email_sent_date.setVisible(True)
-            self.email_body_label.setVisible(True)
-            self.email_body.setVisible(True)
         else:
             # 契約書 or 発注書: PDFフィールドを表示、メールフィールドを非表示
             self.pdf_status_label.setVisible(True)
@@ -379,17 +340,9 @@ class UnifiedOrderDialog(QDialog):
             self.pdf_widget.setVisible(True)
             self.distributed_date_label.setVisible(True)
             self.distributed_date.setVisible(True)
-            self.confirmed_by_label.setVisible(True)
-            self.confirmed_by.setVisible(True)
 
-            self.email_subject_label.setVisible(False)
-            self.email_subject.setVisible(False)
-            self.email_to_label.setVisible(False)
-            self.email_to.setVisible(False)
             self.email_sent_date_label.setVisible(False)
             self.email_sent_date.setVisible(False)
-            self.email_body_label.setVisible(False)
-            self.email_body.setVisible(False)
 
     def load_programs(self):
         """番組一覧を読み込み"""
@@ -431,22 +384,22 @@ class UnifiedOrderDialog(QDialog):
         contract = self.db.get_order_contract_by_id(self.contract_id)
 
         if contract:
-            # contract フィールド順序:
+            # contract フィールド順序（5個削除後の新しい順序）:
             # 0:id, 1:program_id, 2:program_name, 3:partner_id, 4:partner_name,
             # 5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
-            # 8:pdf_status, 9:pdf_distributed_date, 10:confirmed_by,
-            # 11:pdf_file_path, 12:notes, 13:created_at, 14:updated_at,
-            # 15:order_type, 16:order_status,
-            # 17:email_subject, 18:email_body, 19:email_sent_date, 20:email_to,
-            # 21:payment_type, 22:unit_price, 23:payment_timing,
-            # 24:project_id, 25:project_name, 26:item_name
-            # 27:contract_type, 28:project_name_type, 29:custom_project_name,
-            # 30:implementation_date, 31:spot_amount, 32:order_category
+            # 8:pdf_status, 9:pdf_distributed_date,
+            # 10:pdf_file_path, 11:notes, 12:created_at, 13:updated_at,
+            # 14:order_type, 15:order_status,
+            # 16:email_sent_date,
+            # 17:payment_type, 18:unit_price, 19:payment_timing,
+            # 20:project_id, 21:project_name, 22:item_name,
+            # 23:contract_type, 24:project_name_type,
+            # 25:implementation_date, 26:spot_amount, 27:order_category
 
-            # 発注カテゴリ（インデックス32）
-            if len(contract) > 32 and contract[32]:
-                self.order_category_combo.setCurrentText(contract[32])
-                self.on_category_changed(contract[32])
+            # 発注カテゴリ（インデックス27）
+            if len(contract) > 27 and contract[27]:
+                self.order_category_combo.setCurrentText(contract[27])
+                self.on_category_changed(contract[27])
 
             # 番組選択
             if contract[1]:
@@ -482,75 +435,56 @@ class UnifiedOrderDialog(QDialog):
             if contract[9]:
                 self.distributed_date.setDate(QDate.fromString(contract[9], "yyyy-MM-dd"))
 
-            # 確認者
-            if contract[10]:
-                self.confirmed_by.setText(contract[10])
-
             # PDFファイルパス
-            if contract[11]:
-                self.pdf_file_path = contract[11]
+            if contract[10]:
+                self.pdf_file_path = contract[10]
                 self.pdf_label.setText(os.path.basename(self.pdf_file_path))
 
             # 備考
-            if contract[12]:
-                self.notes.setPlainText(contract[12])
+            if contract[11]:
+                self.notes.setPlainText(contract[11])
 
-            # 発注種別（インデックス15）
+            # 発注種別（インデックス14）
+            if contract[14]:
+                self.order_type_combo.setCurrentText(contract[14])
+                self.on_order_type_changed(contract[14])  # フィールド表示を更新
+
+            # 発注ステータス（インデックス15）
             if contract[15]:
-                self.order_type_combo.setCurrentText(contract[15])
-                self.on_order_type_changed(contract[15])  # フィールド表示を更新
+                self.order_status_combo.setCurrentText(contract[15])
 
-            # 発注ステータス（インデックス16）
+            # メール送信日（インデックス16）
             if contract[16]:
-                self.order_status_combo.setCurrentText(contract[16])
+                self.email_sent_date.setDate(QDate.fromString(contract[16], "yyyy-MM-dd"))
 
-            # メール件名（インデックス17）
+            # 支払タイプ（インデックス17）
             if contract[17]:
-                self.email_subject.setText(contract[17])
+                self.payment_type.setCurrentText(contract[17])
+                self.on_payment_type_changed(contract[17])  # フィールド表示を更新
 
-            # メール本文（インデックス18）
-            if contract[18]:
-                self.email_body.setPlainText(contract[18])
+            # 単価（インデックス18）
+            if contract[18] is not None:
+                self.unit_price.setText(str(int(contract[18])))
 
-            # メール送信日（インデックス19）
+            # 支払タイミング（インデックス19）
             if contract[19]:
-                self.email_sent_date.setDate(QDate.fromString(contract[19], "yyyy-MM-dd"))
+                self.payment_timing.setCurrentText(contract[19])
 
-            # メール送信先（インデックス20）
+            # 案件選択（インデックス20）
             if contract[20]:
-                self.email_to.setText(contract[20])
-
-            # 支払タイプ（インデックス21）
-            if contract[21]:
-                self.payment_type.setCurrentText(contract[21])
-                self.on_payment_type_changed(contract[21])  # フィールド表示を更新
-
-            # 単価（インデックス22）
-            if contract[22] is not None:
-                self.unit_price.setText(str(int(contract[22])))
-
-            # 支払タイミング（インデックス23）
-            if contract[23]:
-                self.payment_timing.setCurrentText(contract[23])
-
-            # 案件選択（インデックス24）
-            if contract[24]:
                 for i in range(self.project_combo.count()):
-                    if self.project_dict.get(self.project_combo.itemText(i)) == contract[24]:
+                    if self.project_dict.get(self.project_combo.itemText(i)) == contract[20]:
                         self.project_combo.setCurrentIndex(i)
                         break
 
-            # 費用項目（インデックス26）
-            if contract[26]:
-                self.item_name.setText(contract[26])
+            # 費用項目（インデックス22）
+            if contract[22]:
+                self.item_name.setText(contract[22])
 
-            # 案件名種別（インデックス28: project_name_type）
-            project_name_type = contract[28] if len(contract) > 28 else 'program'
+            # 案件名種別（インデックス24: project_name_type）
+            project_name_type = contract[24] if len(contract) > 24 else 'program'
             if project_name_type == 'custom':
                 self.rb_custom.setChecked(True)
-                # 自由入力案件名（インデックス29）
-                if len(contract) > 29 and contract[29]:
-                    self.custom_project_name.setText(contract[29])
             else:
                 self.rb_program.setChecked(True)
                 # 番組選択
@@ -560,13 +494,13 @@ class UnifiedOrderDialog(QDialog):
                             self.program_combo.setCurrentIndex(i)
                             break
 
-            # 実施日（インデックス30）
-            if len(contract) > 30 and contract[30]:
-                self.implementation_date.setDate(QDate.fromString(contract[30], "yyyy-MM-dd"))
+            # 実施日（インデックス25）
+            if len(contract) > 25 and contract[25]:
+                self.implementation_date.setDate(QDate.fromString(contract[25], "yyyy-MM-dd"))
 
-            # 単発金額（インデックス31）
-            if len(contract) > 31 and contract[31]:
-                self.spot_amount.setText(str(int(contract[31])))
+            # 単発金額（インデックス26）
+            if len(contract) > 26 and contract[26]:
+                self.spot_amount.setText(str(int(contract[26])))
 
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
@@ -606,10 +540,6 @@ class UnifiedOrderDialog(QDialog):
             if self.program_combo.currentIndex() < 0:
                 QMessageBox.warning(self, "警告", "番組を選択してください。")
                 return
-        else:
-            if not self.custom_project_name.text().strip():
-                QMessageBox.warning(self, "警告", "案件名を入力してください。")
-                return
 
         if not self.item_name.text().strip():
             QMessageBox.warning(self, "警告", "費用項目を入力してください。")
@@ -638,7 +568,7 @@ class UnifiedOrderDialog(QDialog):
         saved_pdf_path = ""
         if self.pdf_file_path and os.path.exists(self.pdf_file_path):
             # ファイル名を生成
-            program_text = self.program_combo.currentText().split(" (ID:")[0] if self.rb_program.isChecked() else self.custom_project_name.text()
+            program_text = self.program_combo.currentText().split(" (ID:")[0] if self.rb_program.isChecked() else "案件"
             partner_text = self.partner_combo.currentText().split(" (")[0]
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"発注書_{partner_text}_{program_text}_{timestamp}.pdf"
@@ -679,11 +609,7 @@ class UnifiedOrderDialog(QDialog):
                 self.pdf_file_path if self.contract_id else ""
             ),
             'pdf_distributed_date': self.distributed_date.date().toString("yyyy-MM-dd"),
-            'confirmed_by': self.confirmed_by.text(),
-            'email_subject': self.email_subject.text(),
-            'email_body': self.email_body.toPlainText(),
             'email_sent_date': self.email_sent_date.date().toString("yyyy-MM-dd"),
-            'email_to': self.email_to.text(),
             'notes': self.notes.toPlainText(),
         }
 
@@ -713,8 +639,8 @@ class UnifiedOrderDialog(QDialog):
             contract_data['project_name_type'] = 'program'
             contract_data['project_id'] = None  # 番組選択時はproject_idはNULL
         else:
+            # Custom option no longer supported (custom_project_name field deleted)
             contract_data['project_name_type'] = 'custom'
-            contract_data['custom_project_name'] = self.custom_project_name.text().strip()
             contract_data['program_id'] = None
             contract_data['project_id'] = None
 
