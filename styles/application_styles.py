@@ -338,8 +338,9 @@ class ApplicationStyleManager:
             /* チェックボックス */
             QCheckBox {{
                 font-size: {font_size}px;
-                color: #495057;
+                color: #2c3e50;
                 spacing: 6px;
+                background-color: transparent;
             }}
             QCheckBox::indicator {{
                 width: {int(font_size * 1.2)}px;
@@ -351,6 +352,30 @@ class ApplicationStyleManager:
             QCheckBox::indicator:checked {{
                 background-color: #007bff;
                 border-color: #007bff;
+            }}
+
+            /* ラジオボタン */
+            QRadioButton {{
+                font-size: {font_size}px;
+                color: #2c3e50;
+                spacing: 6px;
+                background-color: transparent;
+                min-height: {int(font_size * 1.8)}px;
+                padding: 2px;
+            }}
+            QRadioButton::indicator {{
+                width: {int(font_size * 1.2)}px;
+                height: {int(font_size * 1.2)}px;
+                border: 2px solid #ced4da;
+                border-radius: {int(font_size * 0.6)}px;
+                background-color: white;
+            }}
+            QRadioButton::indicator:checked {{
+                background-color: #007bff;
+                border-color: #007bff;
+            }}
+            QRadioButton::indicator:hover {{
+                border-color: #80bdff;
             }}
 
             /* スクロールエリア */
