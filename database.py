@@ -2487,10 +2487,12 @@ class DatabaseManager:
                     payment_date,
                     status
                 FROM payments
-                WHERE strftime('%Y-%m', payment_date) = ?
+                WHERE substr(replace(payment_date, '/', '-'), 1, 7) = ?
             """, (target_month,))
 
-            payments = {(row['payee_code'], row['amount']): dict(row) for row in cursor.fetchall()}
+            all_payments = [dict(row) for row in cursor.fetchall()]
+            payments = {(row['payee_code'], row['amount']): row for row in all_payments}
+            matched_payment_keys = set()  # マッチングした支払実績を記録
 
             # 各支払予定について照合
             for sched in schedule:
@@ -2506,6 +2508,7 @@ class DatabaseManager:
                 if key in payments:
                     actual_payment = payments[key]
                     actual_amount = scheduled_amount
+                    matched_payment_keys.add(key)  # マッチング記録
 
                 # ステータス判定
                 missing_items = []
@@ -2573,6 +2576,31 @@ class DatabaseManager:
                     'contract_start_date': sched['contract_start_date'],
                     'contract_end_date': sched['contract_end_date']
                 })
+
+            # マッチングしなかった支払実績を追加（発注なしの支払い）
+            for payment in all_payments:
+                key = (payment['payee_code'], payment['amount'])
+                if key not in matched_payment_keys:
+                    # 発注契約がない支払い
+                    results.append({
+                        'item_name': payment.get('project_name', ''),
+                        'partner_name': payment.get('payee', ''),
+                        'program_name': payment.get('project_name', ''),
+                        'year_month': target_month,
+                        'scheduled_amount': None,
+                        'actual_amount': payment['amount'],
+                        'has_order': False,
+                        'order_contract_id': None,
+                        'order_category': '',
+                        'order_type': '',
+                        'order_status': '未完了',
+                        'receipt_status': '-',
+                        'payment_status': '✓',
+                        'missing_items': ['発注なし'],
+                        'status_color': 'red',
+                        'contract_start_date': None,
+                        'contract_end_date': None
+                    })
 
             log_message(f"支払照合完了: {len(results)}件")
             return results
