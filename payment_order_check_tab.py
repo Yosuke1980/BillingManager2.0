@@ -246,17 +246,21 @@ class PaymentOrderCheckTab(QWidget):
             payment_ok = item['payment_status'] == "✓"
 
             # Phase 3.1: 行全体の背景色を決定
+            order_status = item.get('order_status', '未完了')
+
             if not payment_ok:
                 # 支払未完了 → 赤背景（最優先）
                 row_color = QColor(255, 220, 220)  # 🔴 赤
                 critical_count += 1
                 status_text = "🚨 支払未"
-            elif not has_order or not receipt_ok:
-                # 発注なしor書類不備 → 黄背景
+            elif not has_order or not receipt_ok or order_status == '未完了':
+                # 発注なし or 書類不備 or 発注未完了 → 黄背景
                 row_color = QColor(255, 255, 200)  # 🟡 黄
                 warning_count += 1
                 if not has_order:
                     status_text = "⚠️ 発注なし"
+                elif order_status == '未完了':
+                    status_text = "⚠️ 発注未完了"
                 else:
                     status_text = "⚠️ 書類不備"
             else:
@@ -298,7 +302,14 @@ class PaymentOrderCheckTab(QWidget):
             self.table.setItem(row, 5, actual_widget)
 
             # ①発注
-            order_item = QTableWidgetItem("✓" if has_order else "✗")
+            if has_order:
+                if order_status == '完了':
+                    order_text = "✓完了"
+                else:
+                    order_text = "✓未完了"  # 問題のある取引
+            else:
+                order_text = "✗"
+            order_item = QTableWidgetItem(order_text)
             order_item.setTextAlignment(Qt.AlignCenter)
             order_item.setBackground(row_color)
             order_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
