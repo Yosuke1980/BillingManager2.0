@@ -994,9 +994,6 @@ class OrderManagementDB:
                        oc.created_at, oc.updated_at,
                        COALESCE(oc.order_type, '発注書') as order_type,
                        COALESCE(oc.order_status, '未完了') as order_status,
-                       oc.email_subject,
-                       oc.email_body,
-                       oc.email_to,
                        oc.email_sent_date,
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
@@ -1007,7 +1004,10 @@ class OrderManagementDB:
                        COALESCE(oc.project_name_type, 'program') as project_name_type,
                        oc.implementation_date,
                        oc.spot_amount,
-                       COALESCE(oc.order_category, 'レギュラー制作発注書') as order_category
+                       COALESCE(oc.order_category, 'レギュラー制作発注書') as order_category,
+                       oc.email_subject,
+                       oc.email_body,
+                       oc.email_to
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id

@@ -503,11 +503,11 @@ class OrderContractEditDialog(QDialog):
             # 5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
             # 8:pdf_status, 9:pdf_distributed_date, 10:pdf_file_path, 11:notes,
             # 12:created_at, 13:updated_at, 14:order_type, 15:order_status,
-            # 16:email_subject, 17:email_body, 18:email_to, 19:email_sent_date,
-            # 20:payment_type, 21:unit_price, 22:payment_timing,
-            # 23:project_id, 24:project_name, 25:item_name,
-            # 26:contract_type, 27:project_name_type, 28:implementation_date,
-            # 29:spot_amount, 30:order_category
+            # 16:email_sent_date, 17:payment_type, 18:unit_price, 19:payment_timing,
+            # 20:project_id, 21:project_name, 22:item_name,
+            # 23:contract_type, 24:project_name_type, 25:implementation_date,
+            # 26:spot_amount, 27:order_category,
+            # 28:email_subject, 29:email_body, 30:email_to
 
             # 番組選択
             for i in range(self.program_combo.count()):
@@ -557,51 +557,51 @@ class OrderContractEditDialog(QDialog):
             if contract[15]:
                 self.order_status_combo.setCurrentText(contract[15])
 
-            # メール件名（インデックス17）
+            # メール送信日（インデックス16）
+            if contract[16]:
+                self.email_sent_date.setDate(QDate.fromString(str(contract[16]), "yyyy-MM-dd"))
+
+            # 支払タイプ（インデックス17）
             if contract[17]:
-                self.email_subject.setText(str(contract[17]))
+                self.payment_type.setCurrentText(contract[17])
+                self.on_payment_type_changed(contract[17])  # フィールド表示を更新
 
-            # メール本文（インデックス18）
-            if contract[18]:
-                self.email_body.setPlainText(str(contract[18]))
+            # 単価（インデックス18）
+            if contract[18] is not None:
+                self.unit_price.setText(str(int(contract[18])))
 
-            # メール送信日（インデックス19）
+            # 支払タイミング（インデックス19）
             if contract[19]:
-                self.email_sent_date.setDate(QDate.fromString(str(contract[19]), "yyyy-MM-dd"))
+                self.payment_timing.setCurrentText(contract[19])
 
-            # メール送信先（インデックス18）
-            if contract[18]:
-                self.email_to.setText(str(contract[18]))
-
-            # 支払タイプ（インデックス20）
+            # 案件ID（インデックス20: project_id）
             if contract[20]:
-                self.payment_type.setCurrentText(contract[20])
-                self.on_payment_type_changed(contract[20])  # フィールド表示を更新
-
-            # 単価（インデックス21）
-            if contract[21] is not None:
-                self.unit_price.setText(str(int(contract[21])))
-
-            # 支払タイミング（インデックス22）
-            if contract[22]:
-                self.payment_timing.setCurrentText(contract[22])
-
-            # 案件ID（インデックス23: project_id）
-            if contract[23]:
                 # project_idが存在する場合は特定案件モード
                 self.rb_project.setChecked(True)
                 # 案件一覧を読み込んで選択
                 self.load_projects_for_program()
                 for i in range(self.project_combo.count()):
-                    if self.project_combo.itemData(i) == contract[23]:
+                    if self.project_combo.itemData(i) == contract[20]:
                         self.project_combo.setCurrentIndex(i)
                         break
             else:
                 self.rb_normal.setChecked(True)
 
-            # 費用項目（インデックス25）
-            if contract[25]:
-                self.item_name.setText(contract[25])
+            # 費用項目（インデックス22）
+            if contract[22]:
+                self.item_name.setText(contract[22])
+
+            # メール件名（インデックス28）
+            if contract[28]:
+                self.email_subject.setText(str(contract[28]))
+
+            # メール本文（インデックス29）
+            if contract[29]:
+                self.email_body.setPlainText(str(contract[29]))
+
+            # メール送信先（インデックス30）
+            if contract[30]:
+                self.email_to.setText(str(contract[30]))
 
             # 番組選択（contract[1]: program_id）
             if contract[1]:
