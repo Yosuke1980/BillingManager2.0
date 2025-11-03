@@ -1922,10 +1922,21 @@ class OrderManagementDB:
                     start_date_raw = row_data.get('開始日', '').strip()
                     end_date_raw = row_data.get('終了日', '').strip()
                     broadcast_time = row_data.get('放送時間', '').strip()
-                    broadcast_days = row_data.get('放送曜日', '').strip()
+                    broadcast_days_raw = row_data.get('放送曜日', '').strip()
                     status = row_data.get('ステータス', '放送中').strip()
                     program_type = row_data.get('番組種別', 'レギュラー').strip()
                     parent_program_id_str = row_data.get('親番組ID', '').strip()
+
+                    # 放送曜日に日付が入っていないかチェック（データ整合性）
+                    if broadcast_days_raw and parse_flexible_date(broadcast_days_raw):
+                        result['errors'].append({
+                            'row': row_num,
+                            'reason': f'放送曜日列に日付が入っています: {broadcast_days_raw}。CSVファイルの列順序を確認してください'
+                        })
+                        result['skipped'] += 1
+                        continue
+
+                    broadcast_days = broadcast_days_raw
 
                     # 日付フォーマット変換（柔軟に対応）
                     start_date = None
