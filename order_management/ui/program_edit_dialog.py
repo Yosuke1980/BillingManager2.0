@@ -2,7 +2,8 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QTextEdit, QDateEdit, QPushButton, QMessageBox, QLabel,
-    QRadioButton, QButtonGroup, QCheckBox, QListWidget, QComboBox, QWidget
+    QRadioButton, QButtonGroup, QCheckBox, QListWidget, QComboBox, QWidget,
+    QSizePolicy
 )
 from PyQt5.QtCore import Qt, QDate
 from order_management.database_manager import OrderManagementDB
@@ -38,6 +39,8 @@ class ProgramEditDialog(QDialog):
 
         # フォーム
         form_layout = QFormLayout()
+        # フィールドが必要に応じて拡大するように設定
+        form_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         # 番組名
         self.name_edit = QLineEdit()
@@ -45,6 +48,7 @@ class ProgramEditDialog(QDialog):
 
         # 番組種別
         program_type_layout = QHBoxLayout()
+        program_type_layout.setContentsMargins(0, 0, 0, 0)
         self.program_type_group = QButtonGroup()
         self.type_regular = QRadioButton("レギュラー番組")
         self.type_special = QRadioButton("単発番組")
@@ -64,6 +68,8 @@ class ProgramEditDialog(QDialog):
 
         program_type_widget = QWidget()
         program_type_widget.setLayout(program_type_layout)
+        program_type_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        program_type_widget.setMinimumHeight(40)
         form_layout.addRow("番組種別:", program_type_widget)
 
         # 親番組（コーナーの場合のみ表示）
@@ -116,6 +122,7 @@ class ProgramEditDialog(QDialog):
 
         # ステータス
         status_layout = QHBoxLayout()
+        status_layout.setContentsMargins(0, 0, 0, 0)
         self.status_group = QButtonGroup()
         self.status_broadcasting = QRadioButton("放送中")
         self.status_ended = QRadioButton("終了")
@@ -130,6 +137,8 @@ class ProgramEditDialog(QDialog):
 
         status_widget = QWidget()
         status_widget.setLayout(status_layout)
+        status_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        status_widget.setMinimumHeight(40)
         form_layout.addRow("ステータス:", status_widget)
 
         layout.addLayout(form_layout)
