@@ -498,15 +498,16 @@ class OrderContractEditDialog(QDialog):
         contract = self.db.get_order_contract_by_id(self.contract_id)
 
         if contract:
-            # contract フィールド順序:
+            # contract フィールド順序（database_manager.py get_order_contract_by_id参照）:
             # 0:id, 1:program_id, 2:program_name, 3:partner_id, 4:partner_name,
             # 5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
-            # 8:pdf_status, 9:pdf_distributed_date, 10:confirmed_by,
-            # 11:pdf_file_path, 12:notes, 13:created_at, 14:updated_at,
-            # 15:order_type, 16:order_status,
-            # 17:email_subject, 18:email_body, 19:email_sent_date, 20:email_to,
-            # 21:payment_type, 22:unit_price, 23:payment_timing,
-            # 24:project_id, 25:project_name, 26:item_name
+            # 8:pdf_status, 9:pdf_distributed_date, 10:pdf_file_path, 11:notes,
+            # 12:created_at, 13:updated_at, 14:order_type, 15:order_status,
+            # 16:email_subject, 17:email_body, 18:email_to, 19:email_sent_date,
+            # 20:payment_type, 21:unit_price, 22:payment_timing,
+            # 23:project_id, 24:project_name, 25:item_name,
+            # 26:contract_type, 27:project_name_type, 28:implementation_date,
+            # 29:spot_amount, 30:order_category
 
             # 番組選択
             for i in range(self.program_combo.count()):
@@ -532,33 +533,29 @@ class OrderContractEditDialog(QDialog):
             if contract[7]:
                 self.period_type.setCurrentText(contract[7])
 
-            # 確認者
+            # ファイルパス（インデックス10）
             if contract[10]:
-                self.confirmed_by.setText(contract[10])
-
-            # ファイルパス
-            if contract[11]:
-                self.pdf_file_path = contract[11]
+                self.pdf_file_path = contract[10]
                 self.file_label.setText(os.path.basename(self.pdf_file_path))
 
-            # 備考
-            if contract[12]:
-                self.notes.setPlainText(contract[12])
+            # 備考（インデックス11）
+            if contract[11]:
+                self.notes.setPlainText(contract[11])
 
-            # 発注種別と書類タイプ（インデックス15）
-            if contract[15]:
+            # 発注種別と書類タイプ（インデックス14）
+            if contract[14]:
                 # 旧データとの互換性のため、「契約書」「発注書」「メール発注」を変換
-                if contract[15] == "契約書":
+                if contract[14] == "契約書":
                     self.doc_type_contract.setChecked(True)
-                elif contract[15] == "発注書":
+                elif contract[14] == "発注書":
                     self.doc_type_order.setChecked(True)
-                elif contract[15] == "メール発注":
+                elif contract[14] == "メール発注":
                     self.doc_type_email.setChecked(True)
                 self.on_doc_type_changed()  # フィールド表示を更新
 
-            # 発注ステータス（インデックス16）
-            if contract[16]:
-                self.order_status_combo.setCurrentText(contract[16])
+            # 発注ステータス（インデックス15）
+            if contract[15]:
+                self.order_status_combo.setCurrentText(contract[15])
 
             # メール件名（インデックス17）
             if contract[17]:
@@ -572,33 +569,39 @@ class OrderContractEditDialog(QDialog):
             if contract[19]:
                 self.email_sent_date.setDate(QDate.fromString(str(contract[19]), "yyyy-MM-dd"))
 
-            # メール送信先（インデックス20）
+            # メール送信先（インデックス18）
+            if contract[18]:
+                self.email_to.setText(str(contract[18]))
+
+            # 支払タイプ（インデックス20）
             if contract[20]:
-                self.email_to.setText(str(contract[20]))
+                self.payment_type.setCurrentText(contract[20])
+                self.on_payment_type_changed(contract[20])  # フィールド表示を更新
 
-            # 支払タイプ（インデックス21）
-            if contract[21]:
-                self.payment_type.setCurrentText(contract[21])
-                self.on_payment_type_changed(contract[21])  # フィールド表示を更新
+            # 単価（インデックス21）
+            if contract[21] is not None:
+                self.unit_price.setText(str(int(contract[21])))
 
-            # 単価（インデックス22）
-            if contract[22] is not None:
-                self.unit_price.setText(str(int(contract[22])))
+            # 支払タイミング（インデックス22）
+            if contract[22]:
+                self.payment_timing.setCurrentText(contract[22])
 
-            # 支払タイミング（インデックス23）
+            # 案件ID（インデックス23: project_id）
             if contract[23]:
-                self.payment_timing.setCurrentText(contract[23])
-
-            # 案件選択（インデックス24）
-            if contract[24]:
+                # project_idが存在する場合は特定案件モード
+                self.rb_project.setChecked(True)
+                # 案件一覧を読み込んで選択
+                self.load_projects_for_program()
                 for i in range(self.project_combo.count()):
-                    if self.project_dict.get(self.project_combo.itemText(i)) == contract[24]:
+                    if self.project_combo.itemData(i) == contract[23]:
                         self.project_combo.setCurrentIndex(i)
                         break
+            else:
+                self.rb_normal.setChecked(True)
 
-            # 費用項目（インデックス26）
-            if contract[26]:
-                self.item_name.setText(contract[26])
+            # 費用項目（インデックス25）
+            if contract[25]:
+                self.item_name.setText(contract[25])
 
             # 番組選択（contract[1]: program_id）
             if contract[1]:
@@ -606,19 +609,6 @@ class OrderContractEditDialog(QDialog):
                     if self.program_combo.itemData(i) == contract[1]:
                         self.program_combo.setCurrentIndex(i)
                         break
-
-            # 案件選択（contract[27]: project_id）
-            project_id = contract[27] if len(contract) > 27 else None
-            if project_id:
-                self.rb_project.setChecked(True)
-                # 案件一覧を読み込んで選択
-                self.load_projects_for_program()
-                for i in range(self.project_combo.count()):
-                    if self.project_combo.itemData(i) == project_id:
-                        self.project_combo.setCurrentIndex(i)
-                        break
-            else:
-                self.rb_normal.setChecked(True)
 
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
