@@ -140,14 +140,14 @@ class PaymentOrderCheckTab(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "費用項目", "取引先", "番組名", "年月", "予定金額", "実績金額", "状態"
+            "番組名", "費用項目", "取引先", "年月", "予定金額", "実績金額", "状態"
         ])
 
         # カラム幅の設定
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 費用項目
-        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 取引先
-        header.setSectionResizeMode(2, QHeaderView.Stretch)  # 番組名
+        header.setSectionResizeMode(0, QHeaderView.Stretch)  # 番組名
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 費用項目
+        header.setSectionResizeMode(2, QHeaderView.Stretch)  # 取引先
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 年月
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 予定金額
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 実績金額
@@ -247,13 +247,16 @@ class PaymentOrderCheckTab(QWidget):
                 row_color = QColor(255, 220, 220)  # 🔴 赤
                 critical_count += 1
                 status_text = "🚨 支払未"
-            elif not has_order or not receipt_ok or order_status == '未完了':
-                # 発注なし or 書類不備 or 発注未完了 → 黄背景
+            elif not has_order:
+                # 発注なし → 黄背景
                 row_color = QColor(255, 255, 200)  # 🟡 黄
                 warning_count += 1
-                if not has_order:
-                    status_text = "⚠️ 発注なし"
-                elif order_status == '未完了':
+                status_text = "未発注"
+            elif not receipt_ok or order_status == '未完了':
+                # 書類不備 or 発注未完了 → 黄背景
+                row_color = QColor(255, 255, 200)  # 🟡 黄
+                warning_count += 1
+                if order_status == '未完了':
                     status_text = "⚠️ 発注未完了"
                 else:
                     status_text = "⚠️ 書類不備"
@@ -263,20 +266,20 @@ class PaymentOrderCheckTab(QWidget):
                 completed_count += 1
                 status_text = "✅ 完了"
 
+            # 番組名
+            program_widget = QTableWidgetItem(item['program_name'])
+            program_widget.setBackground(row_color)
+            self.table.setItem(row, 0, program_widget)
+
             # 費用項目
             item_widget = QTableWidgetItem(item['item_name'])
             item_widget.setBackground(row_color)
-            self.table.setItem(row, 0, item_widget)
+            self.table.setItem(row, 1, item_widget)
 
             # 取引先
             partner_widget = QTableWidgetItem(item['partner_name'])
             partner_widget.setBackground(row_color)
-            self.table.setItem(row, 1, partner_widget)
-
-            # 番組名
-            program_widget = QTableWidgetItem(item['program_name'])
-            program_widget.setBackground(row_color)
-            self.table.setItem(row, 2, program_widget)
+            self.table.setItem(row, 2, partner_widget)
 
             # 年月
             month_widget = QTableWidgetItem(item['year_month'])
