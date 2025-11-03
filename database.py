@@ -2517,18 +2517,21 @@ class DatabaseManager:
                     missing_items.append("発注なし")
                     status_color = "red"
                 else:
-                    # 2. 受領確認チェック（PDFまたはメールのいずれかがあればOK）
-                    order_type = sched['order_type']
-                    has_pdf = sched['pdf_status'] == '配布済'
-                    has_email = bool(sched['email_sent_date'])
+                    # 2. 受領確認チェック（発注ステータスが「完了」なら受領確認不要）
+                    order_status = sched.get('order_status', '未完了')
+                    if order_status != '完了':
+                        # 発注ステータスが未完了の場合のみ、PDFまたはメールをチェック
+                        order_type = sched['order_type']
+                        has_pdf = sched['pdf_status'] == '配布済'
+                        has_email = bool(sched['email_sent_date'])
 
-                    if not has_pdf and not has_email:
-                        if order_type == 'メール発注':
-                            missing_items.append("メール未送信")
-                        else:
-                            missing_items.append("PDF未配布")
-                        if status_color != "red":
-                            status_color = "yellow"
+                        if not has_pdf and not has_email:
+                            if order_type == 'メール発注':
+                                missing_items.append("メール未送信")
+                            else:
+                                missing_items.append("PDF未配布")
+                            if status_color != "red":
+                                status_color = "yellow"
 
                 # 3. 支払実績チェック
                 if not actual_payment:
@@ -2536,11 +2539,15 @@ class DatabaseManager:
                     if status_color == "green":
                         status_color = "yellow"
 
-                # 受領ステータスの判定（PDFまたはメールのいずれかがあればOK）
+                # 受領ステータスの判定（発注ステータスが「完了」ならOK）
                 if has_order:
-                    has_pdf = sched['pdf_status'] == '配布済'
-                    has_email = bool(sched['email_sent_date'])
-                    receipt_status = "✓" if (has_pdf or has_email) else "✗"
+                    order_status = sched.get('order_status', '未完了')
+                    if order_status == '完了':
+                        receipt_status = "✓"
+                    else:
+                        has_pdf = sched['pdf_status'] == '配布済'
+                        has_email = bool(sched['email_sent_date'])
+                        receipt_status = "✓" if (has_pdf or has_email) else "✗"
                 else:
                     receipt_status = "-"
 
