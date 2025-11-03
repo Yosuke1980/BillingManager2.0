@@ -302,13 +302,10 @@ class PaymentOrderCheckTab(QWidget):
             self.table.setItem(row, 5, actual_widget)
 
             # ①発注
-            if has_order:
-                if order_status == '完了':
-                    order_text = "✓完了"
-                else:
-                    order_text = "✓未完了"  # 問題のある取引
+            if has_order and order_status == '完了':
+                order_text = "✓"  # 発注完了（正常）
             else:
-                order_text = "✗"
+                order_text = "✗"  # 発注なし or 発注未完了（問題あり）
             order_item = QTableWidgetItem(order_text)
             order_item.setTextAlignment(Qt.AlignCenter)
             order_item.setBackground(row_color)
