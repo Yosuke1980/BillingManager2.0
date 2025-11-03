@@ -64,24 +64,7 @@ class OrderContractEditDialog(QDialog):
         self.order_status_combo.addItems(["未完了", "完了"])
         form_layout.addRow("発注ステータス:", self.order_status_combo)
 
-        # === 案件名の選択方式（ラジオボタン） ===
-        project_name_type_layout = QHBoxLayout()
-        self.rb_program = QRadioButton("番組から選択:")
-        self.rb_custom = QRadioButton("自由入力:")
-        self.rb_program.setChecked(True)  # デフォルトは番組選択
-
-        self.project_name_type_group = QButtonGroup()
-        self.project_name_type_group.addButton(self.rb_program)
-        self.project_name_type_group.addButton(self.rb_custom)
-
-        self.rb_program.toggled.connect(self.on_project_name_type_changed)
-
-        project_name_type_layout.addWidget(self.rb_program)
-        project_name_type_layout.addWidget(self.rb_custom)
-        project_name_type_layout.addStretch()
-        form_layout.addRow("案件名種別:", project_name_type_layout)
-
-        # 番組選択（検索可能）
+        # === 番組選択（必須） ===
         program_layout = QHBoxLayout()
         self.program_combo = QComboBox()
         self.program_combo.setEditable(True)  # 編集可能に
@@ -89,6 +72,7 @@ class OrderContractEditDialog(QDialog):
         self.program_combo.setMinimumWidth(300)  # 最小幅を設定
         self.program_combo.completer().setCompletionMode(self.program_combo.completer().PopupCompletion)
         self.program_combo.completer().setFilterMode(Qt.MatchContains)  # 部分一致
+        self.program_combo.currentIndexChanged.connect(self.on_program_changed)
         self.load_programs()
         program_layout.addWidget(self.program_combo, 1)  # ストレッチファクター1で伸縮可能に
 
@@ -96,23 +80,44 @@ class OrderContractEditDialog(QDialog):
         add_program_btn.setMinimumWidth(120)  # ボタンの最小幅を設定
         program_layout.addWidget(add_program_btn, 0)  # ストレッチファクター0で固定サイズ
 
-        form_layout.addRow("番組名:", program_layout)
+        form_layout.addRow("番組名 *:", program_layout)
 
-        # 自由入力案件名
-        self.custom_project_name = QLineEdit()
-        self.custom_project_name.setPlaceholderText("案件名を入力（例: 特別企画イベント）")
-        self.custom_project_name.setEnabled(False)  # 初期状態は無効
-        form_layout.addRow("案件名（自由入力）:", self.custom_project_name)
+        # === 案件選択（オプション） ===
+        project_type_layout = QHBoxLayout()
+        self.rb_normal = QRadioButton("通常放送")
+        self.rb_project = QRadioButton("特定案件")
+        self.rb_normal.setChecked(True)  # デフォルトは通常放送
 
-        # 案件選択（検索可能）- 後方互換性のため残す（非表示）
+        self.project_type_group = QButtonGroup()
+        self.project_type_group.addButton(self.rb_normal)
+        self.project_type_group.addButton(self.rb_project)
+
+        self.rb_project.toggled.connect(self.on_project_type_changed)
+
+        project_type_layout.addWidget(self.rb_normal)
+        project_type_layout.addWidget(self.rb_project)
+        project_type_layout.addStretch()
+        form_layout.addRow("案件区分:", project_type_layout)
+
+        # 案件選択コンボボックス
+        project_select_layout = QHBoxLayout()
         self.project_combo = QComboBox()
-        self.project_combo.setEditable(True)
-        self.project_combo.setInsertPolicy(QComboBox.NoInsert)
         self.project_combo.setMinimumWidth(300)
-        self.project_combo.completer().setCompletionMode(self.project_combo.completer().PopupCompletion)
-        self.project_combo.completer().setFilterMode(Qt.MatchContains)
-        self.load_projects()
-        self.project_combo.setVisible(False)  # 非表示
+        self.project_combo.setEnabled(False)  # 初期状態は無効
+        project_select_layout.addWidget(self.project_combo, 1)
+
+        add_project_btn = create_button("新規案件追加", self.add_new_project)
+        add_project_btn.setMinimumWidth(120)
+        add_project_btn.setEnabled(False)  # 初期状態は無効
+        self.add_project_btn = add_project_btn
+        project_select_layout.addWidget(add_project_btn, 0)
+
+        form_layout.addRow("案件名:", project_select_layout)
+        self.project_combo_label = form_layout.labelForField(project_select_layout.itemAt(0).widget())
+        # 初期状態では非表示
+        self.project_combo.setVisible(False)
+        self.add_project_btn.setVisible(False)
+        self.project_combo_label.setVisible(False)
 
         # 費用項目（自由入力）
         self.item_name = QLineEdit()
@@ -293,11 +298,59 @@ class OrderContractEditDialog(QDialog):
         # 金額フィールドは常に表示されているので、特に処理は不要
         pass
 
-    def on_project_name_type_changed(self):
-        """案件名の選択方式が変更されたときの処理"""
-        is_program = self.rb_program.isChecked()
-        self.program_combo.setEnabled(is_program)
-        self.custom_project_name.setEnabled(not is_program)
+    def on_project_type_changed(self):
+        """案件区分が変更されたときの処理"""
+        is_project = self.rb_project.isChecked()
+        self.project_combo.setVisible(is_project)
+        self.add_project_btn.setVisible(is_project)
+        self.project_combo_label.setVisible(is_project)
+        self.project_combo.setEnabled(is_project)
+        self.add_project_btn.setEnabled(is_project)
+
+        if is_project:
+            # 特定案件が選択された場合、現在選択されている番組の案件一覧を読み込む
+            self.load_projects_for_program()
+
+    def on_program_changed(self):
+        """番組が変更されたときの処理"""
+        # 特定案件モードの場合、案件一覧を更新
+        if self.rb_project.isChecked():
+            self.load_projects_for_program()
+
+    def load_projects_for_program(self):
+        """選択中の番組に紐づく案件一覧を読み込む"""
+        program_id = self.program_combo.currentData()
+        if not program_id:
+            self.project_combo.clear()
+            return
+
+        projects = self.db.get_projects_by_program(program_id)
+        self.project_combo.clear()
+        self.project_combo.addItem("（案件を選択）", None)
+
+        for project in projects:
+            # project: (id, name, date, type, budget, parent_id,
+            #          start_date, end_date, project_type, program_id, program_name)
+            display_text = f"{project[1]}"
+            if project[8]:  # project_type
+                display_text += f" ({project[8]})"
+            if project[6]:  # start_date
+                display_text += f" [{project[6]}]"
+            self.project_combo.addItem(display_text, project[0])
+
+    def add_new_project(self):
+        """新規案件を追加"""
+        from order_management.ui.project_edit_dialog import ProjectEditDialog
+
+        program_id = self.program_combo.currentData()
+        dialog = ProjectEditDialog(self, program_id=program_id)
+        if dialog.exec_():
+            # 案件一覧を再読み込み
+            self.load_projects_for_program()
+            # 新しく追加された案件を選択
+            # （最後に追加された案件が最新）
+            if self.project_combo.count() > 1:
+                self.project_combo.setCurrentIndex(self.project_combo.count() - 1)
 
     def on_order_type_changed(self, order_type):
         """発注種別が変更されたときにフィールドの表示を切り替える"""
@@ -484,21 +537,25 @@ class OrderContractEditDialog(QDialog):
             if contract[26]:
                 self.item_name.setText(contract[26])
 
-            # 案件名種別（インデックス28: project_name_type）
-            project_name_type = contract[28] if len(contract) > 28 else 'program'
-            if project_name_type == 'custom':
-                self.rb_custom.setChecked(True)
-                # 自由入力案件名（インデックス29）
-                if len(contract) > 29 and contract[29]:
-                    self.custom_project_name.setText(contract[29])
+            # 番組選択（contract[1]: program_id）
+            if contract[1]:
+                for i in range(self.program_combo.count()):
+                    if self.program_combo.itemData(i) == contract[1]:
+                        self.program_combo.setCurrentIndex(i)
+                        break
+
+            # 案件選択（contract[27]: project_id）
+            project_id = contract[27] if len(contract) > 27 else None
+            if project_id:
+                self.rb_project.setChecked(True)
+                # 案件一覧を読み込んで選択
+                self.load_projects_for_program()
+                for i in range(self.project_combo.count()):
+                    if self.project_combo.itemData(i) == project_id:
+                        self.project_combo.setCurrentIndex(i)
+                        break
             else:
-                self.rb_program.setChecked(True)
-                # 番組選択
-                if contract[1]:
-                    for i in range(self.program_combo.count()):
-                        if self.program_combo.itemData(i) == contract[1]:
-                            self.program_combo.setCurrentIndex(i)
-                            break
+                self.rb_normal.setChecked(True)
 
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
@@ -534,13 +591,13 @@ class OrderContractEditDialog(QDialog):
     def save(self):
         """保存"""
         # バリデーション
-        if self.rb_program.isChecked():
-            if self.program_combo.currentIndex() < 0:
-                QMessageBox.warning(self, "警告", "番組を選択してください。")
-                return
-        else:
-            if not self.custom_project_name.text().strip():
-                QMessageBox.warning(self, "警告", "案件名を入力してください。")
+        if self.program_combo.currentIndex() < 0:
+            QMessageBox.warning(self, "警告", "番組を選択してください。")
+            return
+
+        if self.rb_project.isChecked():
+            if self.project_combo.currentIndex() < 0 or self.project_combo.currentData() is None:
+                QMessageBox.warning(self, "警告", "案件を選択してください。")
                 return
 
         if not self.item_name.text().strip():
@@ -611,20 +668,24 @@ class OrderContractEditDialog(QDialog):
             'contract_type': 'regular_fixed' if self.payment_type.currentText() == '月額固定' else 'regular_count'
         }
 
-        # 案件名の設定
-        if self.rb_program.isChecked():
-            program_id = self.program_combo.currentData()
-            if program_id is None:
-                program_key = self.program_combo.currentText()
-                program_id = self.program_dict.get(program_key)
-            contract_data['program_id'] = program_id
-            contract_data['project_name_type'] = 'program'
-            contract_data['project_id'] = None  # 番組選択時はproject_idはNULL
+        # 番組と案件の設定
+        program_id = self.program_combo.currentData()
+        if program_id is None:
+            program_key = self.program_combo.currentText()
+            program_id = self.program_dict.get(program_key)
+
+        contract_data['program_id'] = program_id
+
+        # 案件の設定（特定案件が選択されている場合のみ）
+        if self.rb_project.isChecked():
+            project_id = self.project_combo.currentData()
+            contract_data['project_id'] = project_id
         else:
-            contract_data['project_name_type'] = 'custom'
-            contract_data['custom_project_name'] = self.custom_project_name.text().strip()
-            contract_data['program_id'] = None
             contract_data['project_id'] = None
+
+        # 後方互換性のため、古いフィールドも設定
+        contract_data['project_name_type'] = 'program'
+        contract_data['custom_project_name'] = None
 
         if self.contract_id:
             contract_data['id'] = self.contract_id
