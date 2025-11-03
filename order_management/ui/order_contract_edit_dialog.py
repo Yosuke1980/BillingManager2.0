@@ -5,7 +5,8 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
                              QDateEdit, QTextEdit, QFileDialog, QMessageBox, QWidget,
-                             QRadioButton, QButtonGroup, QScrollArea, QApplication, QGroupBox)
+                             QRadioButton, QButtonGroup, QScrollArea, QApplication, QGroupBox,
+                             QSizePolicy)
 from PyQt5.QtCore import QDate, Qt
 from datetime import datetime, timedelta
 import os
@@ -52,14 +53,66 @@ class OrderContractEditDialog(QDialog):
         basic_group = QGroupBox("基本情報")
         basic_group.setStyleSheet("QGroupBox { font-weight: bold; }")
         basic_layout = QFormLayout()
-        basic_layout.setVerticalSpacing(8)
+        basic_layout.setVerticalSpacing(12)
+        basic_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        basic_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        # 発注種別選択
-        self.order_type_combo = QComboBox()
-        self.order_type_combo.addItems(["契約書", "発注書", "メール発注"])
-        self.order_type_combo.setCurrentText("発注書")
-        self.order_type_combo.currentTextChanged.connect(self.on_order_type_changed)
-        basic_layout.addRow("発注種別:", self.order_type_combo)
+        # 発注種別（レギュラー・単発）
+        order_type_layout = QHBoxLayout()
+        order_type_layout.setContentsMargins(0, 0, 0, 0)
+        self.order_type_group = QButtonGroup()
+        self.order_type_regular = QRadioButton("レギュラー")
+        self.order_type_spot = QRadioButton("単発")
+        self.order_type_regular.setMinimumWidth(100)
+        self.order_type_spot.setMinimumWidth(80)
+        self.order_type_group.addButton(self.order_type_regular)
+        self.order_type_group.addButton(self.order_type_spot)
+        self.order_type_regular.setChecked(True)
+        order_type_layout.addWidget(self.order_type_regular)
+        order_type_layout.addWidget(self.order_type_spot)
+        order_type_layout.addStretch()
+
+        order_type_widget = QWidget()
+        order_type_widget.setLayout(order_type_layout)
+        order_type_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        order_type_widget.setMinimumHeight(40)
+        basic_layout.addRow("発注種別:", order_type_widget)
+
+        # 書類タイプ（契約書・発注書・発注メール）
+        doc_type_layout = QHBoxLayout()
+        doc_type_layout.setContentsMargins(0, 0, 0, 0)
+        self.doc_type_group = QButtonGroup()
+        self.doc_type_contract = QRadioButton("契約書")
+        self.doc_type_order = QRadioButton("発注書")
+        self.doc_type_email = QRadioButton("発注メール")
+        self.doc_type_contract.setMinimumWidth(80)
+        self.doc_type_order.setMinimumWidth(80)
+        self.doc_type_email.setMinimumWidth(100)
+        self.doc_type_group.addButton(self.doc_type_contract)
+        self.doc_type_group.addButton(self.doc_type_order)
+        self.doc_type_group.addButton(self.doc_type_email)
+        self.doc_type_order.setChecked(True)
+        self.doc_type_email.toggled.connect(self.on_doc_type_changed)
+        doc_type_layout.addWidget(self.doc_type_contract)
+        doc_type_layout.addWidget(self.doc_type_order)
+        doc_type_layout.addWidget(self.doc_type_email)
+        doc_type_layout.addStretch()
+
+        doc_type_widget = QWidget()
+        doc_type_widget.setLayout(doc_type_layout)
+        doc_type_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        doc_type_widget.setMinimumHeight(40)
+        basic_layout.addRow("書類タイプ:", doc_type_widget)
+
+        # ファイル選択（契約書タイプの直下）
+        file_layout = QHBoxLayout()
+        self.file_label = QLabel("(未選択)")
+        file_layout.addWidget(self.file_label)
+        file_btn = create_button("ファイル選択", self.select_file)
+        file_layout.addWidget(file_btn)
+        file_layout.addStretch()
+        basic_layout.addRow("ファイル:", file_layout)
+        self.file_layout_row = basic_layout.rowCount() - 1
 
         # 発注ステータス
         self.order_status_combo = QComboBox()
@@ -176,21 +229,20 @@ class OrderContractEditDialog(QDialog):
 
         # 契約期間
         date_layout = QHBoxLayout()
-        date_layout.addWidget(QLabel("開始日:"))
         self.start_date = QDateEdit()
         self.start_date.setCalendarPopup(True)
         self.start_date.setDate(QDate.currentDate())
         self.start_date.dateChanged.connect(self.on_start_date_changed)
         date_layout.addWidget(self.start_date)
 
-        date_layout.addWidget(QLabel("  終了日:"))
+        date_layout.addWidget(QLabel("  〜  "))
         self.end_date = QDateEdit()
         self.end_date.setCalendarPopup(True)
         self.end_date.setDate(QDate.currentDate().addMonths(6))
         date_layout.addWidget(self.end_date)
         date_layout.addStretch()
 
-        contract_layout.addRow("契約期間:", date_layout)
+        contract_layout.addRow("開始日 〜 終了日:", date_layout)
 
         # 期間タイプ
         self.period_type = QComboBox()
@@ -231,37 +283,17 @@ class OrderContractEditDialog(QDialog):
 
         contract_group.setLayout(contract_layout)
 
-        # ===== セクション5: PDF管理（契約書・発注書の場合） =====
-        self.pdf_group = QGroupBox("PDF管理（契約書・発注書用）")
-        self.pdf_group.setStyleSheet("QGroupBox { font-weight: bold; }")
-        pdf_layout = QFormLayout()
-        pdf_layout.setVerticalSpacing(8)
-
-        # PDFステータス
-        self.pdf_status = QComboBox()
-        self.pdf_status.addItems(["未配布", "配布済", "受領確認済"])
-        pdf_layout.addRow("配布ステータス:", self.pdf_status)
-
-        # PDFファイル
-        pdf_file_layout = QHBoxLayout()
-        self.pdf_label = QLabel("(未選択)")
-        pdf_file_layout.addWidget(self.pdf_label)
-        pdf_btn = create_button("ファイル選択", self.select_pdf)
-        pdf_file_layout.addWidget(pdf_btn)
-        pdf_file_layout.addStretch()
-        pdf_layout.addRow("PDFファイル:", pdf_file_layout)
-
-        # PDF配布日
-        self.distributed_date = QDateEdit()
-        self.distributed_date.setCalendarPopup(True)
-        self.distributed_date.setDate(QDate.currentDate())
-        pdf_layout.addRow("配布日:", self.distributed_date)
+        # ===== セクション5: 確認情報（契約書・発注書の場合） =====
+        self.confirm_group = QGroupBox("確認情報")
+        self.confirm_group.setStyleSheet("QGroupBox { font-weight: bold; }")
+        confirm_layout = QFormLayout()
+        confirm_layout.setVerticalSpacing(8)
 
         # 確認者
         self.confirmed_by = QLineEdit()
-        pdf_layout.addRow("確認者:", self.confirmed_by)
+        confirm_layout.addRow("確認者:", self.confirmed_by)
 
-        self.pdf_group.setLayout(pdf_layout)
+        self.confirm_group.setLayout(confirm_layout)
 
         # ===== セクション6: メール送信情報（メール発注の場合） =====
         self.email_group = QGroupBox("メール送信情報（メール発注用）")
@@ -317,7 +349,7 @@ class OrderContractEditDialog(QDialog):
         form_main_layout.addWidget(program_group)
         form_main_layout.addWidget(partner_group)
         form_main_layout.addWidget(contract_group)
-        form_main_layout.addWidget(self.pdf_group)
+        form_main_layout.addWidget(self.confirm_group)
         form_main_layout.addWidget(self.email_group)
         form_main_layout.addWidget(other_group)
 
@@ -344,7 +376,7 @@ class OrderContractEditDialog(QDialog):
         self.setLayout(main_layout)
 
         # 初期表示：発注書モードでメールフィールドを非表示
-        self.on_order_type_changed("発注書")
+        self.on_doc_type_changed()
 
     def on_payment_type_changed(self, payment_type):
         """支払タイプが変更されたときの処理"""
@@ -362,16 +394,27 @@ class OrderContractEditDialog(QDialog):
             # 特定案件が選択された場合、現在選択されている番組の案件一覧を読み込む
             self.load_projects_for_program()
 
-    def on_order_type_changed(self, order_type):
-        """発注種別が変更されたときにフィールドの表示を切り替える"""
-        if order_type == "メール発注":
-            # PDFグループを非表示、メールグループを表示
-            self.pdf_group.setVisible(False)
-            self.email_group.setVisible(True)
-        else:
-            # 契約書 or 発注書: PDFグループを表示、メールグループを非表示
-            self.pdf_group.setVisible(True)
-            self.email_group.setVisible(False)
+    def on_doc_type_changed(self):
+        """書類タイプが変更されたときにフィールドの表示を切り替える"""
+        is_email = self.doc_type_email.isChecked()
+
+        # メール発注の場合：確認情報を非表示、メールグループを表示
+        # 契約書 or 発注書の場合：確認情報を表示、メールグループを非表示
+        self.confirm_group.setVisible(not is_email)
+        self.email_group.setVisible(is_email)
+
+    def select_file(self):
+        """ファイルを選択"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "ファイルを選択",
+            "",
+            "PDFファイル (*.pdf);;すべてのファイル (*.*)"
+        )
+
+        if file_path:
+            self.pdf_file_path = file_path
+            self.file_label.setText(os.path.basename(file_path))
 
     def on_program_changed(self):
         """番組が変更されたときの処理"""
@@ -488,31 +531,29 @@ class OrderContractEditDialog(QDialog):
             if contract[7]:
                 self.period_type.setCurrentText(contract[7])
 
-            # PDFステータス
-            if contract[8]:
-                self.pdf_status.setCurrentText(contract[8])
-
-            # PDF配布日
-            if contract[9]:
-                self.distributed_date.setDate(QDate.fromString(contract[9], "yyyy-MM-dd"))
-
             # 確認者
             if contract[10]:
                 self.confirmed_by.setText(contract[10])
 
-            # PDFファイルパス
+            # ファイルパス
             if contract[11]:
                 self.pdf_file_path = contract[11]
-                self.pdf_label.setText(os.path.basename(self.pdf_file_path))
+                self.file_label.setText(os.path.basename(self.pdf_file_path))
 
             # 備考
             if contract[12]:
                 self.notes.setPlainText(contract[12])
 
-            # 発注種別（インデックス15）
+            # 発注種別と書類タイプ（インデックス15）
             if contract[15]:
-                self.order_type_combo.setCurrentText(contract[15])
-                self.on_order_type_changed(contract[15])  # フィールド表示を更新
+                # 旧データとの互換性のため、「契約書」「発注書」「メール発注」を変換
+                if contract[15] == "契約書":
+                    self.doc_type_contract.setChecked(True)
+                elif contract[15] == "発注書":
+                    self.doc_type_order.setChecked(True)
+                elif contract[15] == "メール発注":
+                    self.doc_type_email.setChecked(True)
+                self.on_doc_type_changed()  # フィールド表示を更新
 
             # 発注ステータス（インデックス16）
             if contract[16]:
@@ -596,18 +637,6 @@ class OrderContractEditDialog(QDialog):
             new_end_date = start_date.addMonths(months[period_type])
             self.end_date.setDate(new_end_date)
 
-    def select_pdf(self):
-        """PDFファイルを選択"""
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            "PDFファイルを選択",
-            "",
-            "PDFファイル (*.pdf);;すべてのファイル (*.*)"
-        )
-
-        if file_path:
-            self.pdf_file_path = file_path
-            self.pdf_label.setText(os.path.basename(file_path))
 
     def save(self):
         """保存"""
@@ -662,19 +691,30 @@ class OrderContractEditDialog(QDialog):
                 QMessageBox.warning(self, "警告", "取引先が正しく選択されていません。")
                 return
 
+        # 書類タイプの判定
+        if self.doc_type_contract.isChecked():
+            doc_type = "契約書"
+        elif self.doc_type_email.isChecked():
+            doc_type = "メール発注"
+        else:
+            doc_type = "発注書"
+
+        # 発注種別の判定
+        order_type_text = "レギュラー" if self.order_type_regular.isChecked() else "単発"
+
         contract_data = {
             'item_name': self.item_name.text().strip(),
             'partner_id': partner_id,
             'contract_start_date': self.start_date.date().toString("yyyy-MM-dd"),
             'contract_end_date': self.end_date.date().toString("yyyy-MM-dd"),
             'contract_period_type': self.period_type.currentText(),
-            'order_type': self.order_type_combo.currentText(),
+            'order_type': doc_type,  # 書類タイプを保存
             'order_status': self.order_status_combo.currentText(),
-            'pdf_status': self.pdf_status.currentText(),
+            'pdf_status': "",  # 削除されたフィールド
             'pdf_file_path': saved_pdf_path if saved_pdf_path else (
                 self.pdf_file_path if self.contract_id else ""
             ),
-            'pdf_distributed_date': self.distributed_date.date().toString("yyyy-MM-dd"),
+            'pdf_distributed_date': "",  # 削除されたフィールド
             'confirmed_by': self.confirmed_by.text(),
             'email_subject': self.email_subject.text(),
             'email_body': self.email_body.toPlainText(),
