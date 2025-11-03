@@ -99,6 +99,9 @@ class ProgramMasterWidget(QWidget):
         if status:
             programs = [p for p in programs if p[7] == status]
 
+        # 階層順にソート（親番組の直後にその子番組を配置）
+        programs = self._sort_programs_hierarchically(programs)
+
         self.table.setRowCount(len(programs))
 
         for row, program in enumerate(programs):
@@ -132,6 +135,49 @@ class ProgramMasterWidget(QWidget):
 
         # 統計情報を更新
         self._update_stats()
+
+    def _sort_programs_hierarchically(self, programs):
+        """番組を階層順にソート（親番組の直後にその子番組を配置）
+
+        Args:
+            programs: 番組リスト（階層情報付き）
+
+        Returns:
+            階層順にソートされた番組リスト
+        """
+        # 親番組（parent_program_id が None）と子番組を分離
+        parent_programs = []
+        children_by_parent = {}
+
+        for program in programs:
+            parent_program_id = program[9] if len(program) > 9 else None
+
+            if parent_program_id is None:
+                # 親番組
+                parent_programs.append(program)
+            else:
+                # 子番組（コーナー）
+                if parent_program_id not in children_by_parent:
+                    children_by_parent[parent_program_id] = []
+                children_by_parent[parent_program_id].append(program)
+
+        # 親番組を名前順にソート
+        parent_programs.sort(key=lambda p: p[1] or "")
+
+        # 階層順に結合
+        result = []
+        for parent in parent_programs:
+            parent_id = parent[0]
+            result.append(parent)
+
+            # この親番組の子番組（コーナー）を追加
+            if parent_id in children_by_parent:
+                children = children_by_parent[parent_id]
+                # 子番組も名前順にソート
+                children.sort(key=lambda p: p[1] or "")
+                result.extend(children)
+
+        return result
 
     def _create_readonly_item(self, text):
         """読み取り専用のテーブルアイテムを作成"""
