@@ -516,7 +516,8 @@ class OrderManagementDB:
 
         Returns:
             List[Tuple]: (id, name, description, start_date, end_date,
-                         broadcast_time, broadcast_days, status)
+                         broadcast_time, broadcast_days, status,
+                         program_type, parent_program_id)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -524,7 +525,8 @@ class OrderManagementDB:
         try:
             query = """
                 SELECT id, name, description, start_date, end_date,
-                       broadcast_time, broadcast_days, status
+                       broadcast_time, broadcast_days, status,
+                       program_type, parent_program_id
                 FROM programs
                 WHERE 1=1
             """
@@ -550,7 +552,8 @@ class OrderManagementDB:
 
         Returns:
             Tuple: (id, name, description, start_date, end_date,
-                   broadcast_time, broadcast_days, status, created_at, updated_at)
+                   broadcast_time, broadcast_days, status,
+                   program_type, parent_program_id, created_at, updated_at)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -559,6 +562,7 @@ class OrderManagementDB:
             cursor.execute("""
                 SELECT id, name, description, start_date, end_date,
                        broadcast_time, broadcast_days, status,
+                       program_type, parent_program_id,
                        created_at, updated_at
                 FROM programs WHERE id = ?
             """, (program_id,))

@@ -197,16 +197,24 @@ class ProgramEditDialog(QDialog):
         self.parent_program_label.setVisible(is_corner)
 
     def load_parent_programs(self):
-        """親番組一覧を読み込み"""
+        """親番組一覧を読み込み（コーナーは親番組になれない）"""
         programs = self.db.get_programs_with_hierarchy(include_children=False)
         self.parent_program_combo.clear()
         self.parent_program_combo.addItem("（親番組なし）", None)
 
         for program in programs:
-            # program: (id, name, ...)
+            # program: (id, name, ..., program_type, parent_program_id, ...)
+            # program_type is at index 8
+            program_type = program[8] if len(program) > 8 else "レギュラー"
+
             # 自分自身を除外（編集時）
             if self.is_edit and program[0] == self.program[0]:
                 continue
+
+            # コーナーは親番組になれない（レギュラー番組と単発番組のみ）
+            if program_type == "コーナー":
+                continue
+
             self.parent_program_combo.addItem(program[1], program[0])
 
     def _load_program_data(self):
@@ -233,7 +241,10 @@ class ProgramEditDialog(QDialog):
         if self.program[7] == "終了":
             self.status_ended.setChecked(True)
 
-        # 番組種別を設定（新しいフィールド、インデックス8）
+        # 番組種別を設定（インデックス8: program_type）
+        # get_program_by_id returns: (id, name, description, start_date, end_date,
+        #                              broadcast_time, broadcast_days, status,
+        #                              program_type, parent_program_id, created_at, updated_at)
         if len(self.program) > 8 and self.program[8]:
             program_type = self.program[8]
             if program_type == "単発":
@@ -243,7 +254,7 @@ class ProgramEditDialog(QDialog):
             else:
                 self.type_regular.setChecked(True)
 
-        # 親番組を設定（新しいフィールド、インデックス9）
+        # 親番組を設定（インデックス9: parent_program_id）
         if len(self.program) > 9 and self.program[9]:
             parent_program_id = self.program[9]
             for i in range(self.parent_program_combo.count()):
