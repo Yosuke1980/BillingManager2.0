@@ -194,11 +194,12 @@ class ExpenseTab(QWidget):
         master_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.addWidget(master_widget)
 
-        # マスター費用生成グループ
-        master_group = QGroupBox("📊 マスター費用生成")
+        # マスター費用生成グループ（自動生成モードのため無効化）
+        master_group = QGroupBox("📊 マスター費用生成（自動生成モード）")
         master_group_layout = QHBoxLayout(master_group)
         master_group_layout.setContentsMargins(8, 8, 8, 8)
         master_layout.addWidget(master_group)
+        master_group.setEnabled(False)  # グループ全体を無効化
 
         # 年月選択
         self.target_year_combo = QComboBox()
@@ -243,11 +244,12 @@ class ExpenseTab(QWidget):
         action_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.addWidget(action_widget)
 
-        # レコード操作グループ
-        record_group = QGroupBox("📝 レコード操作")
+        # レコード操作グループ（読み取り専用モードのため無効化）
+        record_group = QGroupBox("📝 レコード操作（読み取り専用）")
         record_group_layout = QHBoxLayout(record_group)
         record_group_layout.setContentsMargins(8, 8, 8, 8)
         action_layout.addWidget(record_group)
+        record_group.setEnabled(False)  # グループ全体を無効化
 
         create_button = QPushButton("➕ 新規作成")
         create_button.setMinimumSize(self.button_min_width, self.button_min_height)
@@ -1166,38 +1168,61 @@ class ExpenseTab(QWidget):
         log_message("検索とフィルタをリセットしました")
 
     def refresh_data(self):
-        """費用データを更新（改善版）"""
+        """費用データを更新（発注契約から都度生成）"""
         # ツリーのクリア
         self.tree.clear()
 
         try:
-            # データベースからデータを読み込み
-            expense_rows, matched_count = self.db_manager.get_expense_data()
+            # 選択された月を取得
+            selected_month_text = self.payment_month_filter.currentText()
+
+            # 「すべて表示」の場合は現在の月を使用
+            if selected_month_text == "すべて表示":
+                target_month = datetime.now().strftime("%Y-%m")
+            else:
+                # 月フィルターから年月を取得
+                current_index = self.payment_month_filter.currentIndex()
+                selected_month = self.payment_month_filter.itemData(current_index)
+
+                if not selected_month and "年" in selected_month_text and "月" in selected_month_text:
+                    # 2024年03月 → 2024-03 の形式に変換
+                    parts = selected_month_text.replace("年", "-").replace("月", "")
+                    year_month = parts.split("-")
+                    if len(year_month) == 2:
+                        target_month = f"{year_month[0]}-{year_month[1].zfill(2)}"
+                    else:
+                        target_month = datetime.now().strftime("%Y-%m")
+                else:
+                    target_month = selected_month if selected_month else datetime.now().strftime("%Y-%m")
+
+            # 発注契約から支払予定を生成
+            schedule = self.db_manager.generate_monthly_payment_schedule(target_month)
+
+            matched_count = 0  # 照合済みカウント（将来的に実装）
 
             # ツリーウィジェットにデータを追加
-            for row in expense_rows:
+            for idx, sched in enumerate(schedule, start=1):
                 item = QTreeWidgetItem()
 
                 # 値を設定
-                item.setText(0, str(row[0]))  # ID
-                item.setText(1, row[1])  # 費用項目
-                item.setText(2, row[2])  # 支払い先
-                item.setText(3, row[3] if row[3] else "")  # 支払い先コード
-                item.setText(4, format_amount(row[4]))  # 金額（整形）
-                item.setText(5, row[5])  # 支払日
-                item.setText(6, row[6])  # 状態
+                item.setText(0, str(idx))  # 連番
+                item.setText(1, sched['item_name'])  # 費用項目
+                item.setText(2, sched['partner_name'])  # 支払い先
+                item.setText(3, sched.get('partner_code', ''))  # 支払い先コード
+                item.setText(4, format_amount(sched['amount']))  # 金額（整形）
+                item.setText(5, f"{sched['year_month']}-28")  # 支払日（月末想定）
+                item.setText(6, "予定")  # 状態
 
-                # 状態に応じた背景色を適用
-                status = row[6]
-                self.apply_row_colors(item, status, 7)
+                # 予定データは未処理色で表示
+                self.apply_row_colors(item, "未処理", 7)
 
                 self.tree.addTopLevelItem(item)
 
             # 状態表示の更新
-            total_count = len(expense_rows)
-            unprocessed_count = sum(1 for row in expense_rows if row[6] == "未処理")
-            processing_count = sum(1 for row in expense_rows if row[6] == "処理中")
-            completed_count = sum(1 for row in expense_rows if row[6] == "完了")
+            total_count = len(schedule)
+            unprocessed_count = total_count  # 全て予定データ
+            processing_count = 0  # 予定データのため0
+            completed_count = 0  # 予定データのため0
 
             self.app.status_label.setText(
                 f"費用データ: 全{total_count}件 "
