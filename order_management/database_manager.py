@@ -1834,29 +1834,31 @@ class OrderManagementDB:
                     notes = row_data.get('備考', '').strip()
                     cast_id_str = row_data.get('ID', '').strip()
 
-                    # IDがある場合は更新、ない場合は新規追加
                     now = datetime.now()
 
+                    # UPSERTロジック: IDまたは出演者名+所属事務所で既存レコードを検索
+                    existing_cast = None
                     if cast_id_str and cast_id_str.isdigit():
+                        # IDが指定されている場合はIDで検索
                         cast_id = int(cast_id_str)
+                        cursor.execute("SELECT id FROM cast WHERE id = ?", (cast_id,))
+                        existing_cast = cursor.fetchone()
+                    else:
+                        # IDがない場合は出演者名+所属事務所で検索
+                        cursor.execute("SELECT id FROM cast WHERE name = ? AND partner_id = ?",
+                                     (cast_name, partner_id))
+                        existing_cast = cursor.fetchone()
+
+                    if existing_cast:
                         # 既存出演者を更新
+                        existing_id = existing_cast[0]
                         cursor.execute("""
                             UPDATE cast
                             SET name=?, partner_id=?, notes=?, updated_at=?
                             WHERE id=?
-                        """, (cast_name, partner_id, notes, now, cast_id))
-
-                        if cursor.rowcount > 0:
-                            result['updated'] += 1
-                            result['success'] += 1
-                        else:
-                            # IDが存在しない場合は新規追加
-                            cursor.execute("""
-                                INSERT INTO cast (name, partner_id, notes, created_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?)
-                            """, (cast_name, partner_id, notes, now, now))
-                            result['inserted'] += 1
-                            result['success'] += 1
+                        """, (cast_name, partner_id, notes, now, existing_id))
+                        result['updated'] += 1
+                        result['success'] += 1
                     else:
                         # 新規追加
                         cursor.execute("""
@@ -1968,9 +1970,21 @@ class OrderManagementDB:
                     program_id_str = row_data.get('ID', '').strip()
                     now = datetime.now()
 
+                    # UPSERTロジック: IDまたは番組名で既存レコードを検索
+                    existing_program = None
                     if program_id_str and program_id_str.isdigit():
+                        # IDが指定されている場合はIDで検索
                         program_id = int(program_id_str)
+                        cursor.execute("SELECT id FROM programs WHERE id = ?", (program_id,))
+                        existing_program = cursor.fetchone()
+                    else:
+                        # IDがない場合は番組名で検索
+                        cursor.execute("SELECT id FROM programs WHERE name = ?", (program_name,))
+                        existing_program = cursor.fetchone()
+
+                    if existing_program:
                         # 既存番組を更新
+                        existing_id = existing_program[0]
                         cursor.execute("""
                             UPDATE programs
                             SET name=?, description=?, start_date=?, end_date=?,
@@ -1979,23 +1993,9 @@ class OrderManagementDB:
                             WHERE id=?
                         """, (program_name, description, start_date or None, end_date or None,
                               broadcast_time, broadcast_days, status, program_type,
-                              parent_program_id, now, program_id))
-
-                        if cursor.rowcount > 0:
-                            result['updated'] += 1
-                            result['success'] += 1
-                        else:
-                            # IDが存在しない場合は新規追加
-                            cursor.execute("""
-                                INSERT INTO programs (name, description, start_date, end_date,
-                                                     broadcast_time, broadcast_days, status,
-                                                     program_type, parent_program_id, created_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (program_name, description, start_date or None, end_date or None,
-                                  broadcast_time, broadcast_days, status, program_type,
-                                  parent_program_id, now, now))
-                            result['inserted'] += 1
-                            result['success'] += 1
+                              parent_program_id, now, existing_id))
+                        result['updated'] += 1
+                        result['success'] += 1
                     else:
                         # 新規追加
                         cursor.execute("""
@@ -2122,30 +2122,34 @@ class OrderManagementDB:
                     contract_id_str = row_data.get('ID', '').strip()
                     now = datetime.now()
 
+                    # UPSERTロジック: IDまたは番組+取引先+期間で既存レコードを検索
+                    existing_contract = None
                     if contract_id_str and contract_id_str.isdigit():
+                        # IDが指定されている場合はIDで検索
                         contract_id = int(contract_id_str)
+                        cursor.execute("SELECT id FROM order_contracts WHERE id = ?", (contract_id,))
+                        existing_contract = cursor.fetchone()
+                    else:
+                        # IDがない場合は番組+取引先+期間で検索
+                        cursor.execute("""
+                            SELECT id FROM order_contracts
+                            WHERE program_id = ? AND partner_id = ?
+                            AND contract_start_date = ? AND contract_end_date = ?
+                        """, (program_id, partner_id, start_date, end_date))
+                        existing_contract = cursor.fetchone()
+
+                    if existing_contract:
                         # 既存発注を更新
+                        existing_id = existing_contract[0]
                         cursor.execute("""
                             UPDATE order_contracts
                             SET program_id=?, partner_id=?, contract_start_date=?, contract_end_date=?,
                                 order_type=?, order_status=?, pdf_status=?, notes=?, updated_at=?
                             WHERE id=?
                         """, (program_id, partner_id, start_date, end_date,
-                              order_type, order_status, pdf_status, notes, now, contract_id))
-
-                        if cursor.rowcount > 0:
-                            result['updated'] += 1
-                            result['success'] += 1
-                        else:
-                            # IDが存在しない場合は新規追加
-                            cursor.execute("""
-                                INSERT INTO order_contracts (program_id, partner_id, contract_start_date, contract_end_date,
-                                                            order_type, order_status, pdf_status, notes, created_at, updated_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (program_id, partner_id, start_date, end_date,
-                                  order_type, order_status, pdf_status, notes, now, now))
-                            result['inserted'] += 1
-                            result['success'] += 1
+                              order_type, order_status, pdf_status, notes, now, existing_id))
+                        result['updated'] += 1
+                        result['success'] += 1
                     else:
                         # 新規追加
                         cursor.execute("""
