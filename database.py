@@ -2240,11 +2240,11 @@ class DatabaseManager:
                     FROM order_contracts oc
                     LEFT JOIN programs prog ON oc.program_id = prog.id
                     LEFT JOIN partners p ON oc.partner_id = p.id
-                    WHERE (prog.name = ? OR oc.custom_project_name = ?)
+                    WHERE prog.name = ?
                       AND (oc.item_name = ? OR oc.item_name IS NULL)
                       AND p.name = ?
                     LIMIT 1
-                """, (program_name, program_name, item_name, payee))
+                """, (program_name, item_name, payee))
 
                 order_result = order_cursor.fetchone()
                 has_order = order_result is not None
@@ -2321,8 +2321,7 @@ class DatabaseManager:
                     oc.pdf_distributed_date,
                     oc.email_sent_date,
                     oc.project_id,
-                    proj.name as project_name,
-                    oc.custom_project_name
+                    proj.name as project_name
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -2358,7 +2357,7 @@ class DatabaseManager:
                             'pdf_status': contract['pdf_status'],
                             'pdf_distributed_date': contract['pdf_distributed_date'],
                             'email_sent_date': contract['email_sent_date'],
-                            'program_name': contract['program_name'] or contract['custom_project_name'] or contract['project_name'] or '',
+                            'program_name': contract['program_name'] or contract['project_name'] or '',
                             'contract_start_date': contract['implementation_date'],
                             'contract_end_date': contract['implementation_date']
                         })
@@ -2407,7 +2406,7 @@ class DatabaseManager:
                             'pdf_status': contract['pdf_status'],
                             'pdf_distributed_date': contract['pdf_distributed_date'],
                             'email_sent_date': contract['email_sent_date'],
-                            'program_name': contract['program_name'] or contract['custom_project_name'] or contract['project_name'] or '',
+                            'program_name': contract['program_name'] or contract['project_name'] or '',
                             'contract_start_date': contract['contract_start_date'],
                             'contract_end_date': contract['contract_end_date']
                         })
