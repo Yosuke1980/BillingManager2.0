@@ -2521,7 +2521,7 @@ class DatabaseManager:
 
                 results.append({
                     'item_name': sched['item_name'],
-                    'partner_name': partner_name,
+                    'partner_name': sched['partner_name'],
                     'program_name': sched['program_name'],
                     'year_month': sched['year_month'],
                     'scheduled_amount': scheduled_amount,
