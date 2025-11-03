@@ -562,19 +562,19 @@ class OrderContractEditDialog(QDialog):
 
             # メール件名（インデックス17）
             if contract[17]:
-                self.email_subject.setText(contract[17])
+                self.email_subject.setText(str(contract[17]))
 
             # メール本文（インデックス18）
             if contract[18]:
-                self.email_body.setPlainText(contract[18])
+                self.email_body.setPlainText(str(contract[18]))
 
             # メール送信日（インデックス19）
             if contract[19]:
-                self.email_sent_date.setDate(QDate.fromString(contract[19], "yyyy-MM-dd"))
+                self.email_sent_date.setDate(QDate.fromString(str(contract[19]), "yyyy-MM-dd"))
 
             # メール送信先（インデックス20）
             if contract[20]:
-                self.email_to.setText(contract[20])
+                self.email_to.setText(str(contract[20]))
 
             # 支払タイプ（インデックス21）
             if contract[21]:
