@@ -1231,8 +1231,6 @@ class ExpenseTab(QWidget):
             )
 
             # 最終更新時刻の更新
-            from datetime import datetime
-
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self.app.last_update_label.setText(f"最終更新: {current_time}")
 
@@ -2942,8 +2940,7 @@ class ExpenseTab(QWidget):
         try:
             from PyQt5.QtWidgets import QFileDialog
             import csv
-            from datetime import datetime
-            
+
             # ファイル保存ダイアログ
             filename, _ = QFileDialog.getSaveFileName(
                 self,
