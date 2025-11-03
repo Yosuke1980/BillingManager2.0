@@ -1739,7 +1739,8 @@ class OrderManagementDB:
                        oc.partner_id, part.name as partner_name,
                        oc.item_name, oc.contract_start_date, oc.contract_end_date,
                        oc.order_type, oc.order_status, oc.pdf_status,
-                       oc.notes, oc.created_at, oc.updated_at
+                       oc.notes, oc.created_at, oc.updated_at,
+                       oc.payment_type, oc.unit_price
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN projects proj ON oc.project_id = proj.id
