@@ -88,16 +88,23 @@ class ProgramMasterWidget(QWidget):
         layout.addWidget(self.table)
 
     def load_programs(self):
-        """番組一覧を読み込み"""
+        """番組一覧を読み込み（階層表示対応）"""
         search_term = self.search_edit.text()
         status = self.status_filter.currentData()
-        programs = self.db.get_programs(search_term, status)
+
+        # 階層情報付きで番組を取得
+        programs = self.db.get_programs_with_hierarchy(search_term, "", True)
+
+        # ステータスフィルタを適用（SQL側でフィルタできないため）
+        if status:
+            programs = [p for p in programs if p[7] == status]
 
         self.table.setRowCount(len(programs))
 
         for row, program in enumerate(programs):
             # program: (id, name, description, start_date, end_date,
-            #           broadcast_time, broadcast_days, status)
+            #           broadcast_time, broadcast_days, status,
+            #           program_type, parent_program_id, parent_name)
             program_id = program[0]
             name = program[1] or ""
             start_date = program[3] or ""
@@ -105,9 +112,16 @@ class ProgramMasterWidget(QWidget):
             broadcast_time = program[5] or ""
             broadcast_days = program[6] or ""
             status_text = program[7] or ""
+            program_type = program[8] if len(program) > 8 else ""
+            parent_program_id = program[9] if len(program) > 9 else None
+
+            # コーナー（子番組）の場合は字下げして表示
+            display_name = name
+            if parent_program_id:
+                display_name = f"　└ {name}"
 
             self.table.setItem(row, 0, self._create_readonly_item(str(program_id)))
-            self.table.setItem(row, 1, self._create_readonly_item(name))
+            self.table.setItem(row, 1, self._create_readonly_item(display_name))
             self.table.setItem(row, 2, self._create_readonly_item(start_date))
             self.table.setItem(row, 3, self._create_readonly_item(end_date))
             self.table.setItem(row, 4, self._create_readonly_item(broadcast_time))
