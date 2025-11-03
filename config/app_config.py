@@ -47,7 +47,8 @@ class AppConfig:
     TAB_NAMES = {
         'payment': '💰 支払い情報',
         'payment_order_check': '📋 支払い・発注チェック',
-        'order_management': '📝 発注管理',
+        'order_management': '📄 発注管理',
+        'master_management': '📚 マスター管理',
         'data_management': '⚙️ データ管理',
     }
 

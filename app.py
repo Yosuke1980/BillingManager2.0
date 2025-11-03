@@ -23,8 +23,9 @@ from styles import ApplicationStyleManager
 from ui import MenuBuilder, ToolbarBuilder, StatusBarManager
 from database import DatabaseManager
 from payment_tab import PaymentTab
-from order_management_tab import OrderManagementTab
 from payment_order_check_tab import PaymentOrderCheckTab
+from order_management.ui.order_contract_widget import OrderContractWidget
+from master_management_tab import MasterManagementTab
 from data_management_tab import DataManagementTab
 from utils import get_latest_csv_file, log_message
 
@@ -134,17 +135,21 @@ class RadioBillingApp(QMainWindow):
         self.payment_order_check_tab = PaymentOrderCheckTab()
         tab_control.addTab(self.payment_order_check_tab, self.config.TAB_NAMES['payment_order_check'])
 
-        # メインタブ3: 発注管理（毎日使う）
-        self.order_management_tab = OrderManagementTab(tab_control, self)
-        tab_control.addTab(self.order_management_tab, self.config.TAB_NAMES['order_management'])
+        # メインタブ3: 発注管理（旧「発注書マスタ」を独立）
+        self.order_contract_widget = OrderContractWidget()
+        tab_control.addTab(self.order_contract_widget, self.config.TAB_NAMES['order_management'])
 
-        # メインタブ4: データ管理（たまに使う、サブタブあり）
+        # メインタブ4: マスター管理（新設）
+        self.master_management_tab = MasterManagementTab(tab_control, self)
+        tab_control.addTab(self.master_management_tab, self.config.TAB_NAMES['master_management'])
+
+        # メインタブ5: データ管理（たまに使う、サブタブあり）
         self.data_management_tab = DataManagementTab(tab_control, self)
         tab_control.addTab(self.data_management_tab, self.config.TAB_NAMES['data_management'])
 
         # シグナル接続：発注追加時に発注書マスタを更新
         self.data_management_tab.order_check_tab.order_added.connect(
-            self.order_management_tab.order_contract_widget.load_contracts
+            self.order_contract_widget.load_contracts
         )
 
     def _load_initial_data(self):

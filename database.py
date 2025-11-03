@@ -2434,7 +2434,7 @@ class DatabaseManager:
         schedule = self.generate_monthly_payment_schedule(target_month)
 
         # expensesテーブルから該当月の実績を取得
-        conn = sqlite3.connect(self.db_name)
+        conn = sqlite3.connect(self.expenses_db)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 

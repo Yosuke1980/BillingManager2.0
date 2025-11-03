@@ -99,7 +99,7 @@ class PaymentOrderCheckTab(QWidget):
         self.table.setColumnCount(12)
         self.table.setHorizontalHeaderLabels([
             "費用項目", "取引先", "番組名", "年月", "予定金額", "実績金額",
-            "発注種別", "発注タイプ", "受領", "支払", "不足項目", "状態"
+            "①発注", "②書面", "③受領", "④予定", "⑤支払", "状態"
         ])
 
         # カラム幅の設定
@@ -110,7 +110,12 @@ class PaymentOrderCheckTab(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 年月
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 予定金額
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 実績金額
-        header.setSectionResizeMode(10, QHeaderView.Stretch)  # 不足項目
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # ①発注
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # ②書面
+        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # ③受領
+        header.setSectionResizeMode(9, QHeaderView.ResizeToContents)  # ④予定
+        header.setSectionResizeMode(10, QHeaderView.ResizeToContents)  # ⑤支払
+        header.setSectionResizeMode(11, QHeaderView.ResizeToContents)  # 状態
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)  # 編集不可
@@ -209,45 +214,71 @@ class PaymentOrderCheckTab(QWidget):
             actual_amount = f"{int(item['actual_amount']):,}円" if item['actual_amount'] else "-"
             self.table.setItem(row, 5, QTableWidgetItem(actual_amount))
 
-            # 発注種別
-            self.table.setItem(row, 6, QTableWidgetItem(item['order_category'] or "-"))
+            # ①発注
+            has_order = item['has_order']
+            order_item = QTableWidgetItem("✓" if has_order else "✗")
+            order_item.setTextAlignment(Qt.AlignCenter)
+            if has_order:
+                order_item.setBackground(QColor(200, 255, 200))  # 薄い緑
+            else:
+                order_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            order_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
+            self.table.setItem(row, 6, order_item)
 
-            # 発注タイプ
-            self.table.setItem(row, 7, QTableWidgetItem(item['order_type'] or "-"))
+            # ②書面（PDF配布済/メール送信済）
+            receipt_ok = item['receipt_status'] == "✓"
+            document_item = QTableWidgetItem("✓" if receipt_ok else "✗")
+            document_item.setTextAlignment(Qt.AlignCenter)
+            if receipt_ok:
+                document_item.setBackground(QColor(200, 255, 200))  # 薄い緑
+            else:
+                document_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            document_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
+            self.table.setItem(row, 7, document_item)
 
-            # 受領
-            self.table.setItem(row, 8, QTableWidgetItem(item['receipt_status']))
+            # ③受領（現在は②と同じ）
+            receipt_item = QTableWidgetItem("✓" if receipt_ok else "✗")
+            receipt_item.setTextAlignment(Qt.AlignCenter)
+            if receipt_ok:
+                receipt_item.setBackground(QColor(200, 255, 200))  # 薄い緑
+            else:
+                receipt_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            receipt_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
+            self.table.setItem(row, 8, receipt_item)
 
-            # 支払
-            self.table.setItem(row, 9, QTableWidgetItem(item['payment_status']))
+            # ④予定（発注あり=予定入）
+            schedule_item = QTableWidgetItem("✓" if has_order else "✗")
+            schedule_item.setTextAlignment(Qt.AlignCenter)
+            if has_order:
+                schedule_item.setBackground(QColor(200, 255, 200))  # 薄い緑
+            else:
+                schedule_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            schedule_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
+            self.table.setItem(row, 9, schedule_item)
 
-            # 不足項目
-            missing_items_text = ", ".join(item['missing_items']) if item['missing_items'] else "-"
-            self.table.setItem(row, 10, QTableWidgetItem(missing_items_text))
+            # ⑤支払
+            payment_ok = item['payment_status'] == "✓"
+            payment_item = QTableWidgetItem("✓" if payment_ok else "✗")
+            payment_item.setTextAlignment(Qt.AlignCenter)
+            if payment_ok:
+                payment_item.setBackground(QColor(200, 255, 200))  # 薄い緑
+            else:
+                payment_item.setBackground(QColor(255, 200, 200))  # 薄い赤
+            payment_item.setForeground(QBrush(QColor(0, 0, 0)))  # 黒
+            self.table.setItem(row, 10, payment_item)
 
             # 状態（色で表示）
             status_color = item['status_color']
             if status_color == "red":
                 status_text = "🔴"
-                bg_color = QColor(255, 200, 200)  # 薄い赤
             elif status_color == "yellow":
                 status_text = "🟡"
-                bg_color = QColor(255, 255, 200)  # 薄い黄色
             else:
                 status_text = "🟢"
-                bg_color = QColor(200, 255, 200)  # 薄い緑
 
             status_item = QTableWidgetItem(status_text)
-            status_item.setBackground(bg_color)
+            status_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 11, status_item)
-
-            # 行全体の背景色と文字色を設定
-            text_color = QColor(0, 0, 0)  # 黒
-            for col in range(self.table.columnCount()):
-                cell_item = self.table.item(row, col)
-                if cell_item:
-                    cell_item.setBackground(bg_color)
-                    cell_item.setForeground(QBrush(text_color))
 
     def update_statistics(self):
         """統計情報を更新"""

@@ -40,6 +40,39 @@ class ProgramEditDialog(QDialog):
         self.name_edit = QLineEdit()
         form_layout.addRow("番組名 *:", self.name_edit)
 
+        # 番組種別
+        program_type_layout = QHBoxLayout()
+        self.program_type_group = QButtonGroup()
+        self.type_regular = QRadioButton("レギュラー番組")
+        self.type_special = QRadioButton("単発番組")
+        self.type_corner = QRadioButton("コーナー")
+        self.type_regular.setMinimumWidth(120)
+        self.type_special.setMinimumWidth(100)
+        self.type_corner.setMinimumWidth(90)
+        self.program_type_group.addButton(self.type_regular)
+        self.program_type_group.addButton(self.type_special)
+        self.program_type_group.addButton(self.type_corner)
+        self.type_regular.setChecked(True)
+        self.type_corner.toggled.connect(self.on_program_type_changed)
+        program_type_layout.addWidget(self.type_regular)
+        program_type_layout.addWidget(self.type_special)
+        program_type_layout.addWidget(self.type_corner)
+        program_type_layout.addStretch()
+
+        program_type_widget = QWidget()
+        program_type_widget.setLayout(program_type_layout)
+        form_layout.addRow("番組種別:", program_type_widget)
+
+        # 親番組（コーナーの場合のみ表示）
+        self.parent_program_combo = QComboBox()
+        self.parent_program_combo.setMinimumWidth(300)
+        self.load_parent_programs()
+        form_layout.addRow("親番組:", self.parent_program_combo)
+        self.parent_program_label = form_layout.labelForField(self.parent_program_combo)
+        # 初期状態では非表示
+        self.parent_program_combo.setVisible(False)
+        self.parent_program_label.setVisible(False)
+
         # 備考
         self.description_edit = QTextEdit()
         self.description_edit.setMaximumHeight(80)
@@ -154,6 +187,25 @@ class ProgramEditDialog(QDialog):
         self.cast_data = []  # [{'cast_id': 1, 'role': 'MC'}, ...]
         self.producer_data = []  # [{'id': partner_id, 'name': '会社名'}, ...]
 
+    def on_program_type_changed(self):
+        """番組種別変更時の処理"""
+        is_corner = self.type_corner.isChecked()
+        self.parent_program_combo.setVisible(is_corner)
+        self.parent_program_label.setVisible(is_corner)
+
+    def load_parent_programs(self):
+        """親番組一覧を読み込み"""
+        programs = self.db.get_programs_with_hierarchy(include_children=False)
+        self.parent_program_combo.clear()
+        self.parent_program_combo.addItem("（親番組なし）", None)
+
+        for program in programs:
+            # program: (id, name, ...)
+            # 自分自身を除外（編集時）
+            if self.is_edit and program[0] == self.program[0]:
+                continue
+            self.parent_program_combo.addItem(program[1], program[0])
+
     def _load_program_data(self):
         """番組データを読み込み"""
         if not self.program:
@@ -177,6 +229,24 @@ class ProgramEditDialog(QDialog):
 
         if self.program[7] == "終了":
             self.status_ended.setChecked(True)
+
+        # 番組種別を設定（新しいフィールド、インデックス8）
+        if len(self.program) > 8 and self.program[8]:
+            program_type = self.program[8]
+            if program_type == "単発":
+                self.type_special.setChecked(True)
+            elif program_type == "コーナー":
+                self.type_corner.setChecked(True)
+            else:
+                self.type_regular.setChecked(True)
+
+        # 親番組を設定（新しいフィールド、インデックス9）
+        if len(self.program) > 9 and self.program[9]:
+            parent_program_id = self.program[9]
+            for i in range(self.parent_program_combo.count()):
+                if self.parent_program_combo.itemData(i) == parent_program_id:
+                    self.parent_program_combo.setCurrentIndex(i)
+                    break
 
         # 出演者を読み込み（castテーブル経由）
         program_id = self.program[0]
@@ -275,6 +345,17 @@ class ProgramEditDialog(QDialog):
         selected_days = [day for day, cb in self.day_checkboxes.items() if cb.isChecked()]
         status = "放送中" if self.status_broadcasting.isChecked() else "終了"
 
+        # 番組種別を決定
+        if self.type_special.isChecked():
+            program_type = "単発"
+        elif self.type_corner.isChecked():
+            program_type = "コーナー"
+        else:
+            program_type = "レギュラー"
+
+        # 親番組IDを取得
+        parent_program_id = self.parent_program_combo.currentData()
+
         program_data = {
             'name': self.name_edit.text().strip(),
             'description': self.description_edit.toPlainText().strip(),
@@ -282,7 +363,9 @@ class ProgramEditDialog(QDialog):
             'end_date': self.end_date_edit.date().toString("yyyy-MM-dd") if self.end_date_edit.date().isValid() else None,
             'broadcast_time': self.broadcast_time_edit.text().strip(),
             'broadcast_days': ",".join(selected_days),
-            'status': status
+            'status': status,
+            'program_type': program_type,
+            'parent_program_id': parent_program_id
         }
 
         if self.is_edit:

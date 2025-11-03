@@ -591,8 +591,9 @@ class OrderManagementDB:
                     INSERT INTO programs (
                         name, description, start_date, end_date,
                         broadcast_time, broadcast_days, status,
+                        program_type, parent_program_id,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     program_data['name'],
                     program_data.get('description', ''),
@@ -601,6 +602,8 @@ class OrderManagementDB:
                     program_data.get('broadcast_time', ''),
                     program_data.get('broadcast_days', ''),
                     program_data.get('status', '放送中'),
+                    program_data.get('program_type', 'レギュラー'),
+                    program_data.get('parent_program_id'),
                     now,
                     now
                 ))
@@ -615,6 +618,8 @@ class OrderManagementDB:
                         broadcast_time = ?,
                         broadcast_days = ?,
                         status = ?,
+                        program_type = ?,
+                        parent_program_id = ?,
                         updated_at = ?
                     WHERE id = ?
                 """, (
@@ -625,6 +630,8 @@ class OrderManagementDB:
                     program_data.get('broadcast_time', ''),
                     program_data.get('broadcast_days', ''),
                     program_data.get('status', '放送中'),
+                    program_data.get('program_type', 'レギュラー'),
+                    program_data.get('parent_program_id'),
                     now,
                     program_data['id']
                 ))
@@ -1059,7 +1066,7 @@ class OrderManagementDB:
                 """, (
                     contract_data.get('project_id'),
                     contract_data.get('item_name'),
-                    contract_data.get('program_id'),
+                    contract_data['program_id'],  # NOT NULL制約があるため必須
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
                     contract_data.get('contract_end_date', ''),
@@ -1105,7 +1112,7 @@ class OrderManagementDB:
                 """, (
                     contract_data.get('project_id'),
                     contract_data.get('item_name'),
-                    contract_data.get('program_id'),
+                    contract_data['program_id'],  # NOT NULL制約があるため必須
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
                     contract_data.get('contract_end_date', ''),
@@ -1483,5 +1490,259 @@ class OrderManagementDB:
                 'mismatch_amount': mismatch_amount or 0
             }
 
+        finally:
+            conn.close()
+
+    # ========================================
+    # データベーススキーマ拡張（番組>案件>発注の階層構造対応）
+    # ========================================
+
+    def migrate_to_hierarchy_structure(self) -> bool:
+        """データベーススキーマを階層構造対応に拡張
+
+        実行内容:
+        1. programsテーブルに program_type, parent_program_id を追加
+        2. projectsテーブルに project_type を追加
+        3. 既存データにデフォルト値を設定
+
+        Returns:
+            bool: マイグレーション成功時True
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # programsテーブルの拡張
+            # program_typeカラムが存在するか確認
+            cursor.execute("PRAGMA table_info(programs)")
+            columns = [col[1] for col in cursor.fetchall()]
+
+            if 'program_type' not in columns:
+                log_message("programsテーブルにprogram_typeカラムを追加")
+                cursor.execute("""
+                    ALTER TABLE programs
+                    ADD COLUMN program_type TEXT DEFAULT 'レギュラー'
+                """)
+
+                # 既存データにデフォルト値を設定
+                cursor.execute("""
+                    UPDATE programs
+                    SET program_type = 'レギュラー'
+                    WHERE program_type IS NULL
+                """)
+
+            if 'parent_program_id' not in columns:
+                log_message("programsテーブルにparent_program_idカラムを追加")
+                cursor.execute("""
+                    ALTER TABLE programs
+                    ADD COLUMN parent_program_id INTEGER REFERENCES programs(id)
+                """)
+
+            # projectsテーブルの拡張
+            cursor.execute("PRAGMA table_info(projects)")
+            project_columns = [col[1] for col in cursor.fetchall()]
+
+            if 'project_type' not in project_columns:
+                log_message("projectsテーブルにproject_typeカラムを追加")
+                cursor.execute("""
+                    ALTER TABLE projects
+                    ADD COLUMN project_type TEXT DEFAULT 'イベント'
+                """)
+
+                # 既存のtypeフィールドの値をproject_typeに移行
+                cursor.execute("""
+                    UPDATE projects
+                    SET project_type = CASE
+                        WHEN type = 'レギュラー' THEN '通常'
+                        WHEN type = '単発' THEN 'イベント'
+                        ELSE 'イベント'
+                    END
+                    WHERE project_type IS NULL OR project_type = ''
+                """)
+
+            conn.commit()
+            log_message("階層構造対応のマイグレーションが完了しました")
+            return True
+
+        except Exception as e:
+            conn.rollback()
+            log_message(f"マイグレーションエラー: {e}")
+            return False
+        finally:
+            conn.close()
+
+    # ========================================
+    # 番組階層関連の操作
+    # ========================================
+
+    def get_programs_with_hierarchy(self, search_term: str = "",
+                                    program_type: str = "",
+                                    include_children: bool = True) -> List[Tuple]:
+        """番組一覧を階層情報付きで取得
+
+        Args:
+            search_term: 検索キーワード
+            program_type: 番組種別フィルタ（'レギュラー'/'単発'/'コーナー'）
+            include_children: コーナー（子番組）を含めるか
+
+        Returns:
+            List[Tuple]: (id, name, description, start_date, end_date,
+                         broadcast_time, broadcast_days, status,
+                         program_type, parent_program_id, parent_name)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT p.id, p.name, p.description, p.start_date, p.end_date,
+                       p.broadcast_time, p.broadcast_days, p.status,
+                       COALESCE(p.program_type, 'レギュラー') as program_type,
+                       p.parent_program_id,
+                       parent.name as parent_name
+                FROM programs p
+                LEFT JOIN programs parent ON p.parent_program_id = parent.id
+                WHERE 1=1
+            """
+            params = []
+
+            if search_term:
+                query += " AND p.name LIKE ?"
+                params.append(f"%{search_term}%")
+
+            if program_type:
+                query += " AND COALESCE(p.program_type, 'レギュラー') = ?"
+                params.append(program_type)
+
+            if not include_children:
+                query += " AND p.parent_program_id IS NULL"
+
+            query += " ORDER BY p.parent_program_id NULLS FIRST, p.name"
+
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_program_children(self, parent_program_id: int) -> List[Tuple]:
+        """指定番組の子番組（コーナー）一覧を取得
+
+        Args:
+            parent_program_id: 親番組ID
+
+        Returns:
+            List[Tuple]: (id, name, description, start_date, end_date,
+                         broadcast_time, broadcast_days, status, program_type)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, name, description, start_date, end_date,
+                       broadcast_time, broadcast_days, status,
+                       COALESCE(program_type, 'コーナー') as program_type
+                FROM programs
+                WHERE parent_program_id = ?
+                ORDER BY name
+            """, (parent_program_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    # ========================================
+    # 案件（プロジェクト）関連の拡張操作
+    # ========================================
+
+    def get_projects_by_program(self, program_id: int,
+                                project_type: str = "") -> List[Tuple]:
+        """指定番組に紐づく案件一覧を取得
+
+        Args:
+            program_id: 番組ID
+            project_type: 案件種別フィルタ（'イベント'/'特別企画'/'通常'）
+
+        Returns:
+            List[Tuple]: (id, name, date, type, budget, parent_id,
+                         start_date, end_date, project_type, program_id, program_name)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT p.id, p.name, p.date, p.type, p.budget, p.parent_id,
+                       p.start_date, p.end_date,
+                       COALESCE(p.project_type, 'イベント') as project_type,
+                       p.program_id,
+                       prog.name as program_name
+                FROM projects p
+                LEFT JOIN programs prog ON p.program_id = prog.id
+                WHERE p.program_id = ?
+            """
+            params = [program_id]
+
+            if project_type:
+                query += " AND COALESCE(p.project_type, 'イベント') = ?"
+                params.append(project_type)
+
+            query += " ORDER BY p.start_date DESC, p.name"
+
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_order_contracts_with_project_info(self, search_term: str = "",
+                                              program_id: int = None,
+                                              project_id: int = None) -> List[Tuple]:
+        """発注書一覧を案件情報付きで取得
+
+        Args:
+            search_term: 検索キーワード
+            program_id: 番組IDフィルタ
+            project_id: 案件IDフィルタ
+
+        Returns:
+            List[Tuple]: (id, program_id, program_name, project_id, project_name,
+                         partner_id, partner_name, item_name, contract_start_date,
+                         contract_end_date, order_type, order_status, ...)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT oc.id, oc.program_id, prog.name as program_name,
+                       oc.project_id, proj.name as project_name,
+                       oc.partner_id, part.name as partner_name,
+                       oc.item_name, oc.contract_start_date, oc.contract_end_date,
+                       oc.order_type, oc.order_status, oc.pdf_status,
+                       oc.notes, oc.created_at, oc.updated_at
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN projects proj ON oc.project_id = proj.id
+                LEFT JOIN partners part ON oc.partner_id = part.id
+                WHERE 1=1
+            """
+            params = []
+
+            if search_term:
+                query += """ AND (prog.name LIKE ? OR proj.name LIKE ?
+                            OR part.name LIKE ? OR oc.item_name LIKE ?)"""
+                params.extend([f"%{search_term}%"] * 4)
+
+            if program_id:
+                query += " AND oc.program_id = ?"
+                params.append(program_id)
+
+            if project_id:
+                query += " AND oc.project_id = ?"
+                params.append(project_id)
+
+            query += " ORDER BY oc.contract_start_date DESC, prog.name, proj.name"
+
+            cursor.execute(query, params)
+            return cursor.fetchall()
         finally:
             conn.close()
