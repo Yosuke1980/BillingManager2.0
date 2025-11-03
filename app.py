@@ -163,7 +163,8 @@ class RadioBillingApp(QMainWindow):
 
     def _load_initial_data(self):
         """初期データの読み込み"""
-        self.import_latest_csv()
+        # 起動時はダイアログを表示せずに追記モードでインポート
+        self.import_latest_csv(show_dialog=False)
         self.payment_tab.refresh_data()
         # データ管理タブ内のサブタブのデータを更新
         self.data_management_tab.expense_tab.refresh_data()
@@ -291,8 +292,12 @@ class RadioBillingApp(QMainWindow):
     # データ管理メソッド
     # ========================================
 
-    def import_latest_csv(self):
-        """最新のCSVファイルからデータをインポート"""
+    def import_latest_csv(self, show_dialog=True):
+        """最新のCSVファイルからデータをインポート
+
+        Args:
+            show_dialog: ダイアログを表示するか（起動時はFalse）
+        """
         csv_file = get_latest_csv_file(self.csv_folder)
 
         if not csv_file:
@@ -300,21 +305,25 @@ class RadioBillingApp(QMainWindow):
             return False
 
         try:
-            # 上書き/追記の選択ダイアログを表示
-            reply = QMessageBox.question(
-                self,
-                'インポート方法の選択',
-                '既存のデータをどうしますか？\n\n'
-                '「はい」: 上書き（既存データを削除して新規データのみ）\n'
-                '「いいえ」: 追記（既存データを保持して追加）',
-                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                QMessageBox.Yes
-            )
+            # ダイアログを表示する場合のみ選択を求める
+            if show_dialog:
+                reply = QMessageBox.question(
+                    self,
+                    'インポート方法の選択',
+                    '既存のデータをどうしますか？\n\n'
+                    '「はい」: 上書き（既存データを削除して新規データのみ）\n'
+                    '「いいえ」: 追記（既存データを保持して追加）',
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                    QMessageBox.Yes
+                )
 
-            if reply == QMessageBox.Cancel:
-                return False
+                if reply == QMessageBox.Cancel:
+                    return False
 
-            overwrite = (reply == QMessageBox.Yes)
+                overwrite = (reply == QMessageBox.Yes)
+            else:
+                # 起動時はデフォルトで追記モード
+                overwrite = False
 
             # CSVファイルの情報を更新
             file_size = os.path.getsize(csv_file) // 1024
