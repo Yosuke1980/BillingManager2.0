@@ -130,11 +130,8 @@ class OrderContractEditDialog(QDialog):
         # 番組選択
         program_layout = QHBoxLayout()
         self.program_combo = QComboBox()
-        self.program_combo.setEditable(True)
-        self.program_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.program_combo.setEditable(False)  # 編集不可に設定（リストから選択のみ）
         self.program_combo.setMinimumWidth(300)
-        self.program_combo.completer().setCompletionMode(self.program_combo.completer().PopupCompletion)
-        self.program_combo.completer().setFilterMode(Qt.MatchContains)
         self.program_combo.currentIndexChanged.connect(self.on_program_changed)
         self.load_programs()
         program_layout.addWidget(self.program_combo, 1)

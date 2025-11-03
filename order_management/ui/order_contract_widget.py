@@ -131,6 +131,7 @@ class OrderContractWidget(QWidget):
         header.setSectionResizeMode(6, QHeaderView.Stretch)  # 取引先名
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)  # テーブルを編集不可に設定
         self.table.doubleClicked.connect(self.edit_contract)
         layout.addWidget(self.table)
 
