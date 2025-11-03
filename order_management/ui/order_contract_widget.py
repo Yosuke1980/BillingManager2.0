@@ -106,15 +106,9 @@ class OrderContractWidget(QWidget):
 
         filter_layout.addWidget(QLabel("発注ステータス:"))
         self.order_status_filter = QComboBox()
-        self.order_status_filter.addItems(["すべて", "未", "済"])
+        self.order_status_filter.addItems(["すべて", "未完了", "完了"])
         self.order_status_filter.currentTextChanged.connect(self.load_contracts)
         filter_layout.addWidget(self.order_status_filter)
-
-        filter_layout.addWidget(QLabel("PDFステータス:"))
-        self.status_filter = QComboBox()
-        self.status_filter.addItems(["すべて", "未配布", "配布済", "受領確認済"])
-        self.status_filter.currentTextChanged.connect(self.load_contracts)
-        filter_layout.addWidget(self.status_filter)
 
         expiring_btn = create_button("期限切れ間近 (30日以内)", self.show_expiring_contracts)
         filter_layout.addWidget(expiring_btn)
@@ -193,12 +187,9 @@ class OrderContractWidget(QWidget):
     def load_contracts(self):
         """発注書一覧を読み込み（Phase 1: 色分けとステータス詳細化）"""
         search_term = self.search_input.text()
-        status_filter = self.status_filter.currentText()
         order_type_filter = self.order_type_filter.currentText()
         order_status_filter = self.order_status_filter.currentText()
 
-        if status_filter == "すべて":
-            status_filter = None
         if order_type_filter == "すべて":
             order_type_filter = None
         if order_status_filter == "すべて":
@@ -209,7 +200,13 @@ class OrderContractWidget(QWidget):
             contracts = self.db.get_order_contracts_with_project_info(search_term)
         except AttributeError:
             # 古いメソッドにフォールバック
-            contracts = self.db.get_order_contracts(search_term, status_filter, order_type_filter, order_status_filter)
+            contracts = self.db.get_order_contracts(search_term, None, order_type_filter, order_status_filter)
+
+        # フィルタ適用
+        if order_type_filter:
+            contracts = [c for c in contracts if c[10] == order_type_filter]
+        if order_status_filter:
+            contracts = [c for c in contracts if c[11] == order_status_filter]
 
         self.table.setRowCount(len(contracts))
 
