@@ -1,12 +1,14 @@
 """出演者マスターウィジェット"""
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
-    QMessageBox, QLabel, QLineEdit
+    QMessageBox, QLabel, QLineEdit, QFileDialog
 )
 from PyQt5.QtCore import Qt
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.cast_edit_dialog import CastEditDialog
 from order_management.ui.ui_helpers import create_readonly_table_item
+import csv
+import codecs
 
 
 class CastMasterWidget(QWidget):
@@ -38,14 +40,20 @@ class CastMasterWidget(QWidget):
         self.add_button = QPushButton("新規追加")
         self.edit_button = QPushButton("編集")
         self.delete_button = QPushButton("削除")
+        self.export_csv_button = QPushButton("CSV出力")
+        self.import_csv_button = QPushButton("CSV読込")
 
         self.add_button.clicked.connect(self.add_cast)
         self.edit_button.clicked.connect(self.edit_cast)
         self.delete_button.clicked.connect(self.delete_cast)
+        self.export_csv_button.clicked.connect(self.export_to_csv)
+        self.import_csv_button.clicked.connect(self.import_from_csv)
 
         top_layout.addWidget(self.add_button)
         top_layout.addWidget(self.edit_button)
         top_layout.addWidget(self.delete_button)
+        top_layout.addWidget(self.export_csv_button)
+        top_layout.addWidget(self.import_csv_button)
 
         layout.addLayout(top_layout)
 
@@ -129,3 +137,109 @@ class CastMasterWidget(QWidget):
                 self.load_casts()
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{e}")
+
+    def export_to_csv(self):
+        """出演者データをCSVに出力"""
+        try:
+            # ファイル保存ダイアログ
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "CSV出力",
+                "出演者マスター.csv",
+                "CSV Files (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # 全ての出演者データを取得
+            casts = self.db.get_casts("")
+
+            # CSV出力（UTF-8 with BOM）
+            with codecs.open(file_path, 'w', 'utf-8-sig') as f:
+                writer = csv.writer(f)
+
+                # ヘッダー行
+                writer.writerow(['ID', '出演者名', '所属事務所', '所属コード', '備考'])
+
+                # データ行
+                for cast in casts:
+                    writer.writerow([
+                        cast[0],  # ID
+                        cast[1] or '',  # 出演者名
+                        cast[2] or '',  # 所属事務所
+                        cast[3] or '',  # 所属コード
+                        cast[4] or ''   # 備考
+                    ])
+
+            QMessageBox.information(
+                self,
+                "CSV出力完了",
+                f"{len(casts)}件の出演者データをCSVに出力しました。\n\n{file_path}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV出力に失敗しました:\n{e}")
+
+    def import_from_csv(self):
+        """CSVから出演者データを読み込み"""
+        try:
+            # ファイル選択ダイアログ
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "CSV読み込み",
+                "",
+                "CSV Files (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # CSV読み込み
+            csv_data = []
+            with codecs.open(file_path, 'r', 'utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    csv_data.append(row)
+
+            if not csv_data:
+                QMessageBox.warning(self, "警告", "CSVファイルにデータがありません")
+                return
+
+            # 確認ダイアログ
+            reply = QMessageBox.question(
+                self,
+                "確認",
+                f"{len(csv_data)}件のデータを読み込みます。\n\n"
+                "既存のIDがある場合は更新、ない場合は新規追加されます。\n"
+                "よろしいですか?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+
+            if reply != QMessageBox.Yes:
+                return
+
+            # データベースにインポート
+            result = self.db.import_casts_from_csv(csv_data)
+
+            # 結果を表示
+            message = f"CSV読み込み完了\n\n"
+            message += f"成功: {result['success']}件\n"
+            message += f"  - 新規追加: {result['inserted']}件\n"
+            message += f"  - 更新: {result['updated']}件\n"
+            message += f"スキップ: {result['skipped']}件\n"
+
+            if result['errors']:
+                message += f"\nエラー詳細:\n"
+                for error in result['errors'][:10]:  # 最初の10件のみ表示
+                    message += f"  - {error['row']}行目: {error['reason']}\n"
+                if len(result['errors']) > 10:
+                    message += f"  ... 他{len(result['errors']) - 10}件のエラー\n"
+
+            QMessageBox.information(self, "CSV読み込み完了", message)
+
+            # データを再読み込み
+            self.load_casts()
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV読み込みに失敗しました:\n{e}")

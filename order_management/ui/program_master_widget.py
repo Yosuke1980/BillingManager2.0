@@ -4,11 +4,13 @@
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
-    QTableWidgetItem, QMessageBox, QLabel, QLineEdit, QComboBox
+    QTableWidgetItem, QMessageBox, QLabel, QLineEdit, QComboBox, QFileDialog
 )
 from PyQt5.QtCore import Qt
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.program_edit_dialog import ProgramEditDialog
+import csv
+import codecs
 
 
 class ProgramMasterWidget(QWidget):
@@ -50,14 +52,20 @@ class ProgramMasterWidget(QWidget):
         self.add_button = QPushButton("新規追加")
         self.edit_button = QPushButton("編集")
         self.delete_button = QPushButton("削除")
+        self.export_csv_button = QPushButton("CSV出力")
+        self.import_csv_button = QPushButton("CSV読込")
 
         self.add_button.clicked.connect(self.add_program)
         self.edit_button.clicked.connect(self.edit_program)
         self.delete_button.clicked.connect(self.delete_program)
+        self.export_csv_button.clicked.connect(self.export_to_csv)
+        self.import_csv_button.clicked.connect(self.import_from_csv)
 
         top_layout.addWidget(self.add_button)
         top_layout.addWidget(self.edit_button)
         top_layout.addWidget(self.delete_button)
+        top_layout.addWidget(self.export_csv_button)
+        top_layout.addWidget(self.import_csv_button)
 
         layout.addLayout(top_layout)
 
@@ -184,3 +192,128 @@ class ProgramMasterWidget(QWidget):
                 self.load_programs()
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{e}")
+
+    def export_to_csv(self):
+        """番組データをCSVに出力"""
+        try:
+            # ファイル保存ダイアログ
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "CSV出力",
+                "番組マスター.csv",
+                "CSV Files (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # 全ての番組データを取得（階層情報含む）
+            programs = self.db.get_programs("", "")
+
+            # 親番組名のマップを作成
+            program_map = {p[0]: p[1] for p in programs}
+
+            # CSV出力（UTF-8 with BOM）
+            with codecs.open(file_path, 'w', 'utf-8-sig') as f:
+                writer = csv.writer(f)
+
+                # ヘッダー行
+                writer.writerow([
+                    'ID', '番組名', '説明', '開始日', '終了日',
+                    '放送時間', '放送曜日', 'ステータス', '番組種別', '親番組ID', '親番組名'
+                ])
+
+                # データ行
+                for program in programs:
+                    # program: (id, name, description, start_date, end_date,
+                    #           broadcast_time, broadcast_days, status,
+                    #           program_type, parent_program_id)
+                    parent_program_name = ""
+                    if len(program) > 9 and program[9]:
+                        parent_program_name = program_map.get(program[9], "")
+
+                    writer.writerow([
+                        program[0],  # ID
+                        program[1] or '',  # 番組名
+                        program[2] or '',  # 説明
+                        program[3] or '',  # 開始日
+                        program[4] or '',  # 終了日
+                        program[5] or '',  # 放送時間
+                        program[6] or '',  # 放送曜日
+                        program[7] or '',  # ステータス
+                        program[8] if len(program) > 8 else 'レギュラー',  # 番組種別
+                        program[9] if len(program) > 9 else '',  # 親番組ID
+                        parent_program_name  # 親番組名
+                    ])
+
+            QMessageBox.information(
+                self,
+                "CSV出力完了",
+                f"{len(programs)}件の番組データをCSVに出力しました。\n\n{file_path}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV出力に失敗しました:\n{e}")
+
+    def import_from_csv(self):
+        """CSVから番組データを読み込み"""
+        try:
+            # ファイル選択ダイアログ
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "CSV読み込み",
+                "",
+                "CSV Files (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # CSV読み込み
+            csv_data = []
+            with codecs.open(file_path, 'r', 'utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    csv_data.append(row)
+
+            if not csv_data:
+                QMessageBox.warning(self, "警告", "CSVファイルにデータがありません")
+                return
+
+            # 確認ダイアログ
+            reply = QMessageBox.question(
+                self,
+                "確認",
+                f"{len(csv_data)}件のデータを読み込みます。\n\n"
+                "既存のIDがある場合は更新、ない場合は新規追加されます。\n"
+                "よろしいですか?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+
+            if reply != QMessageBox.Yes:
+                return
+
+            # データベースにインポート
+            result = self.db.import_programs_from_csv(csv_data)
+
+            # 結果を表示
+            message = f"CSV読み込み完了\n\n"
+            message += f"成功: {result['success']}件\n"
+            message += f"  - 新規追加: {result['inserted']}件\n"
+            message += f"  - 更新: {result['updated']}件\n"
+            message += f"スキップ: {result['skipped']}件\n"
+
+            if result['errors']:
+                message += f"\nエラー詳細:\n"
+                for error in result['errors'][:10]:  # 最初の10件のみ表示
+                    message += f"  - {error['row']}行目: {error['reason']}\n"
+                if len(result['errors']) > 10:
+                    message += f"  ... 他{len(result['errors']) - 10}件のエラー\n"
+
+            QMessageBox.information(self, "CSV読み込み完了", message)
+
+            # データを再読み込み
+            self.load_programs()
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV読み込みに失敗しました:\n{e}")

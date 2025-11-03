@@ -1750,3 +1750,381 @@ class OrderManagementDB:
             return cursor.fetchall()
         finally:
             conn.close()
+
+    # ========================================
+    # CSV一括インポート機能
+    # ========================================
+
+    def import_casts_from_csv(self, csv_data: List[dict]) -> dict:
+        """出演者データをCSVから一括インポート
+
+        Args:
+            csv_data: CSVから読み込んだ辞書のリスト
+                     期待されるキー: ID, 出演者名, 所属事務所, 所属コード, 備考
+
+        Returns:
+            dict: {
+                'success': 成功件数,
+                'updated': 更新件数,
+                'inserted': 挿入件数,
+                'skipped': スキップ件数,
+                'errors': [{'row': 行番号, 'reason': 理由}]
+            }
+        """
+        result = {
+            'success': 0,
+            'updated': 0,
+            'inserted': 0,
+            'skipped': 0,
+            'errors': []
+        }
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            for row_num, row_data in enumerate(csv_data, start=2):  # ヘッダー行は1行目なので2から開始
+                try:
+                    # 必須項目チェック
+                    cast_name = row_data.get('出演者名', '').strip()
+                    partner_name = row_data.get('所属事務所', '').strip()
+
+                    if not cast_name:
+                        result['errors'].append({'row': row_num, 'reason': '出演者名が空です'})
+                        result['skipped'] += 1
+                        continue
+
+                    if not partner_name:
+                        result['errors'].append({'row': row_num, 'reason': '所属事務所が空です'})
+                        result['skipped'] += 1
+                        continue
+
+                    # 所属事務所を検索
+                    cursor.execute("SELECT id FROM partners WHERE name = ?", (partner_name,))
+                    partner_result = cursor.fetchone()
+
+                    if not partner_result:
+                        result['errors'].append({'row': row_num, 'reason': f'所属事務所「{partner_name}」が見つかりません'})
+                        result['skipped'] += 1
+                        continue
+
+                    partner_id = partner_result[0]
+                    notes = row_data.get('備考', '').strip()
+                    cast_id_str = row_data.get('ID', '').strip()
+
+                    # IDがある場合は更新、ない場合は新規追加
+                    now = datetime.now()
+
+                    if cast_id_str and cast_id_str.isdigit():
+                        cast_id = int(cast_id_str)
+                        # 既存出演者を更新
+                        cursor.execute("""
+                            UPDATE cast
+                            SET name=?, partner_id=?, notes=?, updated_at=?
+                            WHERE id=?
+                        """, (cast_name, partner_id, notes, now, cast_id))
+
+                        if cursor.rowcount > 0:
+                            result['updated'] += 1
+                            result['success'] += 1
+                        else:
+                            # IDが存在しない場合は新規追加
+                            cursor.execute("""
+                                INSERT INTO cast (name, partner_id, notes, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (cast_name, partner_id, notes, now, now))
+                            result['inserted'] += 1
+                            result['success'] += 1
+                    else:
+                        # 新規追加
+                        cursor.execute("""
+                            INSERT INTO cast (name, partner_id, notes, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (cast_name, partner_id, notes, now, now))
+                        result['inserted'] += 1
+                        result['success'] += 1
+
+                except Exception as e:
+                    result['errors'].append({'row': row_num, 'reason': str(e)})
+                    result['skipped'] += 1
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+        return result
+
+    def import_programs_from_csv(self, csv_data: List[dict]) -> dict:
+        """番組データをCSVから一括インポート
+
+        Args:
+            csv_data: CSVから読み込んだ辞書のリスト
+                     期待されるキー: ID, 番組名, 説明, 開始日, 終了日,
+                                    放送時間, 放送曜日, ステータス, 番組種別, 親番組ID
+
+        Returns:
+            dict: 処理結果サマリー
+        """
+        result = {
+            'success': 0,
+            'updated': 0,
+            'inserted': 0,
+            'skipped': 0,
+            'errors': []
+        }
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            for row_num, row_data in enumerate(csv_data, start=2):
+                try:
+                    # 必須項目チェック
+                    program_name = row_data.get('番組名', '').strip()
+
+                    if not program_name:
+                        result['errors'].append({'row': row_num, 'reason': '番組名が空です'})
+                        result['skipped'] += 1
+                        continue
+
+                    # データ取得
+                    description = row_data.get('説明', '').strip()
+                    start_date = row_data.get('開始日', '').strip()
+                    end_date = row_data.get('終了日', '').strip()
+                    broadcast_time = row_data.get('放送時間', '').strip()
+                    broadcast_days = row_data.get('放送曜日', '').strip()
+                    status = row_data.get('ステータス', '放送中').strip()
+                    program_type = row_data.get('番組種別', 'レギュラー').strip()
+                    parent_program_id_str = row_data.get('親番組ID', '').strip()
+
+                    # 日付フォーマットチェック
+                    if start_date:
+                        try:
+                            datetime.strptime(start_date, '%Y-%m-%d')
+                        except ValueError:
+                            result['errors'].append({'row': row_num, 'reason': f'開始日のフォーマットが不正です: {start_date}'})
+                            result['skipped'] += 1
+                            continue
+
+                    if end_date:
+                        try:
+                            datetime.strptime(end_date, '%Y-%m-%d')
+                        except ValueError:
+                            result['errors'].append({'row': row_num, 'reason': f'終了日のフォーマットが不正です: {end_date}'})
+                            result['skipped'] += 1
+                            continue
+
+                    # 親番組IDのチェック
+                    parent_program_id = None
+                    if parent_program_id_str and parent_program_id_str.isdigit():
+                        parent_program_id = int(parent_program_id_str)
+                        cursor.execute("SELECT id FROM programs WHERE id = ?", (parent_program_id,))
+                        if not cursor.fetchone():
+                            result['errors'].append({'row': row_num, 'reason': f'親番組ID {parent_program_id} が見つかりません'})
+                            result['skipped'] += 1
+                            continue
+
+                    program_id_str = row_data.get('ID', '').strip()
+                    now = datetime.now()
+
+                    if program_id_str and program_id_str.isdigit():
+                        program_id = int(program_id_str)
+                        # 既存番組を更新
+                        cursor.execute("""
+                            UPDATE programs
+                            SET name=?, description=?, start_date=?, end_date=?,
+                                broadcast_time=?, broadcast_days=?, status=?,
+                                program_type=?, parent_program_id=?, updated_at=?
+                            WHERE id=?
+                        """, (program_name, description, start_date or None, end_date or None,
+                              broadcast_time, broadcast_days, status, program_type,
+                              parent_program_id, now, program_id))
+
+                        if cursor.rowcount > 0:
+                            result['updated'] += 1
+                            result['success'] += 1
+                        else:
+                            # IDが存在しない場合は新規追加
+                            cursor.execute("""
+                                INSERT INTO programs (name, description, start_date, end_date,
+                                                     broadcast_time, broadcast_days, status,
+                                                     program_type, parent_program_id, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (program_name, description, start_date or None, end_date or None,
+                                  broadcast_time, broadcast_days, status, program_type,
+                                  parent_program_id, now, now))
+                            result['inserted'] += 1
+                            result['success'] += 1
+                    else:
+                        # 新規追加
+                        cursor.execute("""
+                            INSERT INTO programs (name, description, start_date, end_date,
+                                                 broadcast_time, broadcast_days, status,
+                                                 program_type, parent_program_id, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (program_name, description, start_date or None, end_date or None,
+                              broadcast_time, broadcast_days, status, program_type,
+                              parent_program_id, now, now))
+                        result['inserted'] += 1
+                        result['success'] += 1
+
+                except Exception as e:
+                    result['errors'].append({'row': row_num, 'reason': str(e)})
+                    result['skipped'] += 1
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+        return result
+
+    def import_order_contracts_from_csv(self, csv_data: List[dict]) -> dict:
+        """発注データをCSVから一括インポート
+
+        Args:
+            csv_data: CSVから読み込んだ辞書のリスト
+                     期待されるキー: ID, 番組名, 取引先名, 委託開始日, 委託終了日,
+                                    発注種別, 発注ステータス, PDFステータス, 備考
+
+        Returns:
+            dict: 処理結果サマリー
+        """
+        result = {
+            'success': 0,
+            'updated': 0,
+            'inserted': 0,
+            'skipped': 0,
+            'errors': []
+        }
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            for row_num, row_data in enumerate(csv_data, start=2):
+                try:
+                    # 必須項目チェック
+                    program_name = row_data.get('番組名', '').strip()
+                    partner_name = row_data.get('取引先名', '').strip()
+                    start_date = row_data.get('委託開始日', '').strip()
+                    end_date = row_data.get('委託終了日', '').strip()
+
+                    if not program_name:
+                        result['errors'].append({'row': row_num, 'reason': '番組名が空です'})
+                        result['skipped'] += 1
+                        continue
+
+                    if not partner_name:
+                        result['errors'].append({'row': row_num, 'reason': '取引先名が空です'})
+                        result['skipped'] += 1
+                        continue
+
+                    if not start_date:
+                        result['errors'].append({'row': row_num, 'reason': '委託開始日が空です'})
+                        result['skipped'] += 1
+                        continue
+
+                    if not end_date:
+                        result['errors'].append({'row': row_num, 'reason': '委託終了日が空です'})
+                        result['skipped'] += 1
+                        continue
+
+                    # 日付フォーマットチェック
+                    try:
+                        datetime.strptime(start_date, '%Y-%m-%d')
+                    except ValueError:
+                        result['errors'].append({'row': row_num, 'reason': f'委託開始日のフォーマットが不正です: {start_date}'})
+                        result['skipped'] += 1
+                        continue
+
+                    try:
+                        datetime.strptime(end_date, '%Y-%m-%d')
+                    except ValueError:
+                        result['errors'].append({'row': row_num, 'reason': f'委託終了日のフォーマットが不正です: {end_date}'})
+                        result['skipped'] += 1
+                        continue
+
+                    # 番組IDを検索
+                    cursor.execute("SELECT id FROM programs WHERE name = ?", (program_name,))
+                    program_result = cursor.fetchone()
+
+                    if not program_result:
+                        result['errors'].append({'row': row_num, 'reason': f'番組「{program_name}」が見つかりません'})
+                        result['skipped'] += 1
+                        continue
+
+                    program_id = program_result[0]
+
+                    # 取引先IDを検索
+                    cursor.execute("SELECT id FROM partners WHERE name = ?", (partner_name,))
+                    partner_result = cursor.fetchone()
+
+                    if not partner_result:
+                        result['errors'].append({'row': row_num, 'reason': f'取引先「{partner_name}」が見つかりません'})
+                        result['skipped'] += 1
+                        continue
+
+                    partner_id = partner_result[0]
+
+                    # その他のデータ取得
+                    order_type = row_data.get('発注種別', '発注書').strip()
+                    order_status = row_data.get('発注ステータス', '未').strip()
+                    pdf_status = row_data.get('PDFステータス', '未配布').strip()
+                    notes = row_data.get('備考', '').strip()
+
+                    contract_id_str = row_data.get('ID', '').strip()
+                    now = datetime.now()
+
+                    if contract_id_str and contract_id_str.isdigit():
+                        contract_id = int(contract_id_str)
+                        # 既存発注を更新
+                        cursor.execute("""
+                            UPDATE order_contracts
+                            SET program_id=?, partner_id=?, contract_start_date=?, contract_end_date=?,
+                                order_type=?, order_status=?, pdf_status=?, notes=?, updated_at=?
+                            WHERE id=?
+                        """, (program_id, partner_id, start_date, end_date,
+                              order_type, order_status, pdf_status, notes, now, contract_id))
+
+                        if cursor.rowcount > 0:
+                            result['updated'] += 1
+                            result['success'] += 1
+                        else:
+                            # IDが存在しない場合は新規追加
+                            cursor.execute("""
+                                INSERT INTO order_contracts (program_id, partner_id, contract_start_date, contract_end_date,
+                                                            order_type, order_status, pdf_status, notes, created_at, updated_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (program_id, partner_id, start_date, end_date,
+                                  order_type, order_status, pdf_status, notes, now, now))
+                            result['inserted'] += 1
+                            result['success'] += 1
+                    else:
+                        # 新規追加
+                        cursor.execute("""
+                            INSERT INTO order_contracts (program_id, partner_id, contract_start_date, contract_end_date,
+                                                        order_type, order_status, pdf_status, notes, created_at, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (program_id, partner_id, start_date, end_date,
+                              order_type, order_status, pdf_status, notes, now, now))
+                        result['inserted'] += 1
+                        result['success'] += 1
+
+                except Exception as e:
+                    result['errors'].append({'row': row_num, 'reason': str(e)})
+                    result['skipped'] += 1
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+        return result

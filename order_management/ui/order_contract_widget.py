@@ -10,6 +10,8 @@ from PyQt5.QtGui import QColor
 from datetime import datetime, timedelta
 import os
 import shutil
+import csv
+import codecs
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.unified_order_dialog import UnifiedOrderDialog
@@ -173,6 +175,15 @@ class OrderContractWidget(QWidget):
 
         sync_btn = create_button("番組マスタと同期", self.sync_to_program)
         button_layout.addWidget(sync_btn)
+
+        button_layout.addSpacing(20)
+
+        # CSV出力・読み込みボタン
+        export_csv_btn = create_button("CSV出力", self.export_to_csv)
+        button_layout.addWidget(export_csv_btn)
+
+        import_csv_btn = create_button("CSV読込", self.import_from_csv)
+        button_layout.addWidget(import_csv_btn)
 
         button_layout.addStretch()
         layout.addLayout(button_layout)
@@ -474,3 +485,132 @@ class OrderContractWidget(QWidget):
                     QMessageBox.warning(self, "警告", "同期に失敗しました。")
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"同期に失敗しました:\n{str(e)}")
+
+    def export_to_csv(self):
+        """発注データをCSVに出力"""
+        try:
+            # ファイル保存ダイアログ
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "CSV出力",
+                "発注管理.csv",
+                "CSV Files (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # 現在のフィルタ条件で発注データを取得
+            search_term = self.search_input.text()
+            status_filter = self.status_filter.currentText()
+            order_type_filter = self.order_type_filter.currentText()
+            order_status_filter = self.order_status_filter.currentText()
+
+            # フィルタ条件に応じた値を設定
+            pdf_status = None if status_filter == "すべて" else status_filter
+            order_type = None if order_type_filter == "すべて" else order_type_filter
+            order_status = None if order_status_filter == "すべて" else order_status_filter
+
+            # データ取得（旧形式を使用）
+            contracts = self.db.get_order_contracts(search_term, pdf_status, order_type, order_status)
+
+            # CSV出力（UTF-8 with BOM）
+            with codecs.open(file_path, 'w', 'utf-8-sig') as f:
+                writer = csv.writer(f)
+
+                # ヘッダー行
+                writer.writerow([
+                    'ID', '番組名', '取引先名', '委託開始日', '委託終了日',
+                    '発注種別', '発注ステータス', 'PDFステータス', '備考'
+                ])
+
+                # データ行
+                for contract in contracts:
+                    # contract: (id, program_id, program_name, partner_id, partner_name,
+                    #            contract_start_date, contract_end_date, contract_period_type,
+                    #            pdf_status, pdf_distributed_date, confirmed_by,
+                    #            pdf_file_path, notes, order_type, order_status, ...)
+                    writer.writerow([
+                        contract[0],  # ID
+                        contract[2] or '',  # 番組名
+                        contract[4] or '',  # 取引先名
+                        contract[5] or '',  # 委託開始日
+                        contract[6] or '',  # 委託終了日
+                        contract[13] or '発注書',  # 発注種別
+                        contract[14] or '未',  # 発注ステータス
+                        contract[8] or '未配布',  # PDFステータス
+                        contract[12] or ''  # 備考
+                    ])
+
+            QMessageBox.information(
+                self,
+                "CSV出力完了",
+                f"{len(contracts)}件の発注データをCSVに出力しました。\n\n{file_path}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV出力に失敗しました:\n{e}")
+
+    def import_from_csv(self):
+        """CSVから発注データを読み込み"""
+        try:
+            # ファイル選択ダイアログ
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "CSV読み込み",
+                "",
+                "CSV Files (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # CSV読み込み
+            csv_data = []
+            with codecs.open(file_path, 'r', 'utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    csv_data.append(row)
+
+            if not csv_data:
+                QMessageBox.warning(self, "警告", "CSVファイルにデータがありません")
+                return
+
+            # 確認ダイアログ
+            reply = QMessageBox.question(
+                self,
+                "確認",
+                f"{len(csv_data)}件のデータを読み込みます。\n\n"
+                "既存のIDがある場合は更新、ない場合は新規追加されます。\n"
+                "番組名と取引先名が存在する必要があります。\n"
+                "よろしいですか?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+
+            if reply != QMessageBox.Yes:
+                return
+
+            # データベースにインポート
+            result = self.db.import_order_contracts_from_csv(csv_data)
+
+            # 結果を表示
+            message = f"CSV読み込み完了\n\n"
+            message += f"成功: {result['success']}件\n"
+            message += f"  - 新規追加: {result['inserted']}件\n"
+            message += f"  - 更新: {result['updated']}件\n"
+            message += f"スキップ: {result['skipped']}件\n"
+
+            if result['errors']:
+                message += f"\nエラー詳細:\n"
+                for error in result['errors'][:10]:  # 最初の10件のみ表示
+                    message += f"  - {error['row']}行目: {error['reason']}\n"
+                if len(result['errors']) > 10:
+                    message += f"  ... 他{len(result['errors']) - 10}件のエラー\n"
+
+            QMessageBox.information(self, "CSV読み込み完了", message)
+
+            # データを再読み込み
+            self.load_contracts()
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV読み込みに失敗しました:\n{e}")
