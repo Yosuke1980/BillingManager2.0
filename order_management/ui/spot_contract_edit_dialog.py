@@ -39,6 +39,9 @@ class SpotContractEditDialog(QDialog):
 
     def init_ui(self):
         """UIの初期化"""
+        # ダイアログ全体の背景色を設定
+        self.setStyleSheet("QDialog { background-color: white; }")
+
         layout = QVBoxLayout()
         form_layout = QFormLayout()
 

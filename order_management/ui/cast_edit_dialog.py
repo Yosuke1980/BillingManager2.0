@@ -29,6 +29,9 @@ class CastEditDialog(QDialog):
 
     def _setup_ui(self):
         """UIセットアップ"""
+        # ダイアログ全体の背景色を設定
+        self.setStyleSheet("QDialog { background-color: white; }")
+
         layout = QVBoxLayout(self)
 
         # フォーム

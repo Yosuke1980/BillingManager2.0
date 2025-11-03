@@ -46,6 +46,9 @@ class ProjectEditDialog(QDialog):
         """UIセットアップ"""
         layout = QVBoxLayout(self)
 
+        # ダイアログ全体の背景色を設定
+        self.setStyleSheet("QDialog { background-color: white; }")
+
         # フォーム
         form_layout = QFormLayout()
 
