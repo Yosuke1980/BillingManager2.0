@@ -214,6 +214,7 @@ class ProjectTimelineWidget(QWidget):
             for col in range(5):
                 project_item.setFont(col, font)
                 project_item.setBackground(col, QBrush(QColor(240, 240, 240)))
+                project_item.setForeground(col, QBrush(QColor(0, 0, 0)))  # 黒色
 
             # データを保存（編集用）
             project_item.setData(0, Qt.UserRole, ("project", project_id))
@@ -244,6 +245,10 @@ class ProjectTimelineWidget(QWidget):
                     f"{amount:,.0f}",
                     status
                 ])
+
+                # デフォルト文字色を黒に設定
+                for col in range(5):
+                    expense_item.setForeground(col, QBrush(QColor(0, 0, 0)))
 
                 # ステータスに応じた色分け
                 if status == "支払済":
