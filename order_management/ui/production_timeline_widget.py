@@ -11,6 +11,8 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QBrush
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+import calendar
 import csv
 
 from order_management.database_manager import OrderManagementDB
@@ -154,6 +156,108 @@ class ProductionTimelineWidget(QWidget):
                 display_text += f" ({production[3]})"
             self.program_filter.addItem(display_text, production[0])
 
+    def _expand_regular_production_by_month(self, production, start_date_str, end_date_str):
+        """レギュラー番組を月ごとに展開
+
+        Args:
+            production: 制作物データ
+            start_date_str: フィルター開始日 (YYYY-MM-DD)
+            end_date_str: フィルター終了日 (YYYY-MM-DD)
+
+        Returns:
+            List[(year_month, production, broadcast_count)]: 月ごとの展開リスト
+        """
+        production_id = production[0]
+        production_start = production[4]  # start_date
+        production_end = production[5]    # end_date
+        broadcast_days_str = production[9]  # broadcast_days (例: "月,水,金")
+
+        if not broadcast_days_str:
+            # 放送曜日が設定されていない場合は展開しない
+            return [(start_date_str[:7], production, 0)]
+
+        # 放送曜日をパース
+        broadcast_days = [day.strip() for day in broadcast_days_str.split(',')]
+        day_map = {'月': 0, '火': 1, '水': 2, '木': 3, '金': 4, '土': 5, '日': 6}
+        broadcast_weekdays = [day_map[day] for day in broadcast_days if day in day_map]
+
+        # フィルター期間と番組期間の重複部分を計算
+        filter_start = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        filter_end = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+
+        prog_start = datetime.strptime(production_start, "%Y-%m-%d").date() if production_start else filter_start
+        prog_end = datetime.strptime(production_end, "%Y-%m-%d").date() if production_end else filter_end
+
+        actual_start = max(filter_start, prog_start)
+        actual_end = min(filter_end, prog_end)
+
+        if actual_start > actual_end:
+            return []
+
+        # 月ごとに放送回数を計算
+        monthly_expansions = []
+        current = actual_start.replace(day=1)  # 月初に設定
+
+        while current <= actual_end:
+            # その月の最終日を取得
+            last_day = calendar.monthrange(current.year, current.month)[1]
+            month_end = current.replace(day=last_day)
+
+            # その月の実際の放送期間
+            month_start = max(actual_start, current)
+            month_end_actual = min(actual_end, month_end)
+
+            # 放送回数を計算
+            broadcast_count = 0
+            check_date = month_start
+            while check_date <= month_end_actual:
+                if check_date.weekday() in broadcast_weekdays:
+                    broadcast_count += 1
+                check_date += timedelta(days=1)
+
+            if broadcast_count > 0:
+                year_month = f"{current.year:04d}-{current.month:02d}"
+                monthly_expansions.append((year_month, production, broadcast_count))
+
+            # 次の月へ
+            current = (current + relativedelta(months=1)).replace(day=1)
+
+        return monthly_expansions
+
+    def _calculate_total_broadcasts(self, production):
+        """レギュラー番組の全期間の放送回数を計算
+
+        Args:
+            production: 制作物データ
+
+        Returns:
+            int: 全期間の放送回数
+        """
+        production_start = production[4]  # start_date
+        production_end = production[5]    # end_date
+        broadcast_days_str = production[9]  # broadcast_days
+
+        if not production_start or not broadcast_days_str:
+            return 0
+
+        # 放送曜日をパース
+        broadcast_days = [day.strip() for day in broadcast_days_str.split(',')]
+        day_map = {'月': 0, '火': 1, '水': 2, '木': 3, '金': 4, '土': 5, '日': 6}
+        broadcast_weekdays = [day_map[day] for day in broadcast_days if day in day_map]
+
+        prog_start = datetime.strptime(production_start, "%Y-%m-%d").date()
+        prog_end = datetime.strptime(production_end, "%Y-%m-%d").date() if production_end else (prog_start + timedelta(days=365))
+
+        # 全期間の放送回数を計算
+        total_count = 0
+        check_date = prog_start
+        while check_date <= prog_end:
+            if check_date.weekday() in broadcast_weekdays:
+                total_count += 1
+            check_date += timedelta(days=1)
+
+        return total_count
+
     def load_timeline(self):
         """タイムラインを読み込み"""
         self.tree.clear()
@@ -172,42 +276,69 @@ class ProductionTimelineWidget(QWidget):
             include_children=True
         )
 
-        # フィルタリング
-        filtered_productions = []
+        # レギュラー番組を月ごとに展開
+        expanded_items = []
         for production in productions:
             # production: (id, name, description, production_type, start_date, end_date,
             #             start_time, end_time, broadcast_time, broadcast_days, status,
             #             parent_production_id, parent_name)
-            start_date_val = production[4]  # start_date
+            production_type_val = production[3]
 
-            # 日付フィルター
-            if start_date_val and (start_date_val < start_date or start_date_val > end_date):
-                continue
+            # レギュラー番組の場合は月ごとに展開
+            if production_type_val == "レギュラー番組":
+                monthly_items = self._expand_regular_production_by_month(production, start_date, end_date)
+                expanded_items.extend(monthly_items)
+            else:
+                # 単発番組・イベントは通常通り
+                start_date_val = production[4]  # start_date
 
-            filtered_productions.append(production)
+                # 日付フィルター
+                if start_date_val and (start_date_val < start_date or start_date_val > end_date):
+                    continue
+
+                year_month = start_date_val[:7] if start_date_val else start_date[:7]
+                expanded_items.append((year_month, production, 1))
 
         # 統計用変数
-        total_productions = len(filtered_productions)
         total_amount = 0
+        item_count = 0
 
         # ツリー構築
-        for production in filtered_productions:
+        for year_month, production, broadcast_count in expanded_items:
             production_id = production[0]
             production_name = production[1]
-            start_date_display = production[4] or ""  # start_date
             production_type_str = production[3] or "イベント"
+            start_date_display = production[4] or ""
 
             # 実績合計取得
             summary = self.db.get_production_summary(production_id)
             production_total = summary['actual']
-            total_amount += production_total
+
+            # レギュラー番組の場合、月単位で金額を按分
+            if production_type_str == "レギュラー番組" and broadcast_count > 0:
+                # 全期間の放送回数を計算（簡易版：年間として計算）
+                total_broadcasts = self._calculate_total_broadcasts(production)
+                if total_broadcasts > 0:
+                    monthly_amount = (production_total / total_broadcasts) * broadcast_count
+                else:
+                    monthly_amount = production_total
+
+                display_name = f"{production_name}（全{broadcast_count}回）"
+                display_date = year_month
+            else:
+                monthly_amount = production_total
+                display_name = production_name
+                display_date = start_date_display
+
+            total_amount += monthly_amount
+            item_count += 1
 
             # 番組・イベントノード作成
             production_item = QTreeWidgetItem([
-                start_date_display,
-                production_name,
+                display_date,
+                display_name,
                 production_type_str,
-                f"{production_total:,.0f}",
+                f"{monthly_amount:,.0f}",
                 ""
             ])
 
@@ -239,6 +370,11 @@ class ProductionTimelineWidget(QWidget):
                 payment_scheduled_date = ""
                 if expense_detail and expense_detail[11]:
                     payment_scheduled_date = expense_detail[11]
+
+                # レギュラー番組の場合、支払予定日がその月に含まれるもののみ表示
+                if production_type_str == "レギュラー番組":
+                    if not payment_scheduled_date or not payment_scheduled_date.startswith(year_month):
+                        continue
 
                 # 費用項目ノード作成
                 expense_item = QTreeWidgetItem([
@@ -276,7 +412,7 @@ class ProductionTimelineWidget(QWidget):
 
         # ステータス更新
         self.status_label.setText(
-            f"番組・イベント: {total_productions}件 | 総実績: {total_amount:,.0f}円"
+            f"番組・イベント: {item_count}件 | 総実績: {total_amount:,.0f}円"
         )
 
     def on_item_double_clicked(self, item, column):
