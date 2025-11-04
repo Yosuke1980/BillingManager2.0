@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
-                             QComboBox, QMessageBox, QFileDialog, QHeaderView, QMenu, QGroupBox, QGridLayout)
+                             QComboBox, QMessageBox, QFileDialog, QHeaderView, QGroupBox, QGridLayout)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from datetime import datetime, timedelta
@@ -138,20 +138,9 @@ class OrderContractWidget(QWidget):
         # ボタンエリア
         button_layout = QHBoxLayout()
 
-        # 新規追加ボタン（ドロップダウン付き）
-        add_btn = QPushButton("新規追加 ▼")
-        add_menu = QMenu()
-        add_regular_cast_action = add_menu.addAction("レギュラー出演契約書")
-        add_regular_production_action = add_menu.addAction("レギュラー制作発注書")
-        add_spot_cast_action = add_menu.addAction("単発出演発注書")
-        add_spot_production_action = add_menu.addAction("単発制作発注書")
-
-        add_regular_cast_action.triggered.connect(lambda: self.add_contract("レギュラー出演契約書"))
-        add_regular_production_action.triggered.connect(lambda: self.add_contract("レギュラー制作発注書"))
-        add_spot_cast_action.triggered.connect(lambda: self.add_contract("単発出演発注書"))
-        add_spot_production_action.triggered.connect(lambda: self.add_contract("単発制作発注書"))
-
-        add_btn.setMenu(add_menu)
+        # 新規追加ボタン
+        add_btn = QPushButton("新規追加")
+        add_btn.clicked.connect(self.add_contract)
         button_layout.addWidget(add_btn)
 
         edit_btn = create_button("編集", self.edit_contract)
@@ -377,13 +366,8 @@ class OrderContractWidget(QWidget):
                 if item:
                     item.setBackground(QColor(255, 204, 204))
 
-    def add_contract(self, category="レギュラー制作発注書"):
-        """新規発注書追加
-
-        Args:
-            category: 発注種別（互換性のため残す）
-        """
-        # 新しい発注書編集ダイアログを使用
+    def add_contract(self):
+        """新規発注書追加"""
         dialog = OrderContractEditDialog(self)
         if dialog.exec_():
             self.load_contracts()
