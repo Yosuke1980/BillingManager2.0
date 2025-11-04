@@ -672,7 +672,9 @@ class OrderContractEditDialog(QDialog):
             # 20:project_id, 21:project_name, 22:item_name,
             # 23:contract_type, 24:project_name_type, 25:implementation_date,
             # 26:spot_amount, 27:order_category,
-            # 28:email_subject, 29:email_body, 30:email_to
+            # 28:email_subject, 29:email_body, 30:email_to,
+            # 31:auto_renewal_enabled, 32:renewal_period_months, 33:termination_notice_date,
+            # 34:last_renewal_date, 35:renewal_count, 36:work_type
 
             # 番組選択
             for i in range(self.program_combo.count()):
@@ -707,16 +709,9 @@ class OrderContractEditDialog(QDialog):
             if contract[11]:
                 self.notes.setPlainText(contract[11])
 
-            # 発注種別と書類タイプ（インデックス14）
-            if contract[14]:
-                # 旧データとの互換性のため、「契約書」「発注書」「メール発注」を変換
-                if contract[14] == "契約書":
-                    self.doc_type_contract.setChecked(True)
-                elif contract[14] == "発注書":
-                    self.doc_type_order.setChecked(True)
-                elif contract[14] == "メール発注":
-                    self.doc_type_email.setChecked(True)
-                self.on_doc_type_changed()  # フィールド表示を更新
+            # 発注種別（インデックス14）
+            # 注: 書類タイプは業務種別と発注区分から自動決定されるため、
+            # ここでは特に処理しない（後ほどon_order_configuration_changed()で設定）
 
             # 発注ステータス（インデックス15）
             if contract[15]:
@@ -792,6 +787,30 @@ class OrderContractEditDialog(QDialog):
             else:
                 self.termination_notice_date.setDate(QDate(2000, 1, 1))
 
+            # === 業務種別の読み込み ===
+            work_type = contract[36] if len(contract) > 36 else '制作'
+            if work_type == '出演':
+                self.work_type_cast.setChecked(True)
+            else:
+                self.work_type_production.setChecked(True)
+
+            # === 発注区分（レギュラー/単発）の読み込み ===
+            # order_category (index 27) から判断: '単発' なら単発、それ以外はレギュラー
+            order_category = contract[27] if len(contract) > 27 else None
+            if order_category == '単発':
+                self.order_type_spot.setChecked(True)
+                # 単発の場合、実施日を設定
+                if contract[25]:  # implementation_date
+                    self.implementation_date.setDate(QDate.fromString(contract[25], "yyyy-MM-dd"))
+                # 単発金額を設定
+                if contract[26] is not None:  # spot_amount
+                    self.spot_amount.setText(str(int(contract[26])))
+            else:
+                self.order_type_regular.setChecked(True)
+
+            # 画面の表示状態を更新
+            self.on_order_configuration_changed()
+
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
         period_type = self.period_type.currentText()
@@ -831,6 +850,17 @@ class OrderContractEditDialog(QDialog):
             QMessageBox.warning(self, "警告", "取引先を選択してください。")
             return
 
+        # 単発の場合の追加バリデーション
+        if self.order_type_spot.isChecked():
+            if not self.spot_amount.text().strip():
+                QMessageBox.warning(self, "警告", "単発金額を入力してください。")
+                return
+            try:
+                float(self.spot_amount.text())
+            except ValueError:
+                QMessageBox.warning(self, "警告", "単発金額は数値で入力してください。")
+                return
+
         # PDFファイルを保存
         saved_pdf_path = ""
         if self.pdf_file_path and os.path.exists(self.pdf_file_path):
@@ -864,16 +894,14 @@ class OrderContractEditDialog(QDialog):
                 QMessageBox.warning(self, "警告", "取引先が正しく選択されていません。")
                 return
 
-        # 書類タイプの判定
-        if self.doc_type_contract.isChecked():
+        # 書類タイプの判定（レギュラー出演=契約書、それ以外=発注書）
+        is_regular = self.order_type_regular.isChecked()
+        is_cast = self.work_type_cast.isChecked()
+
+        if is_regular and is_cast:
             doc_type = "契約書"
-        elif self.doc_type_email.isChecked():
-            doc_type = "メール発注"
         else:
             doc_type = "発注書"
-
-        # 発注種別の判定
-        order_type_text = "レギュラー" if self.order_type_regular.isChecked() else "単発"
 
         contract_data = {
             'item_name': self.item_name.text().strip(),
@@ -942,6 +970,20 @@ class OrderContractEditDialog(QDialog):
             contract_data['termination_notice_date'] = None
         else:
             contract_data['termination_notice_date'] = termination_date.toString("yyyy-MM-dd")
+
+        # === 業務種別 ===
+        contract_data['work_type'] = '出演' if self.work_type_cast.isChecked() else '制作'
+
+        # === 発注区分 ===
+        contract_data['order_category'] = '単発' if self.order_type_spot.isChecked() else 'レギュラー'
+
+        # 単発の場合は実施日と単発金額を保存
+        if self.order_type_spot.isChecked():
+            contract_data['implementation_date'] = self.implementation_date.date().toString("yyyy-MM-dd")
+            contract_data['spot_amount'] = float(self.spot_amount.text()) if self.spot_amount.text() else None
+        else:
+            contract_data['implementation_date'] = None
+            contract_data['spot_amount'] = None
 
         if self.contract_id:
             contract_data['id'] = self.contract_id

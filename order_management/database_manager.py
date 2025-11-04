@@ -928,11 +928,15 @@ class OrderManagementDB:
             order_status: 発注ステータスフィルタ（未/済）
 
         Returns:
-            List[Tuple]: (id, program_id, program_name, partner_id, partner_name,
-                         contract_start_date, contract_end_date, contract_period_type,
-                         pdf_status, pdf_distributed_date,
-                         pdf_file_path, notes, order_type, order_status,
-                         email_sent_date)
+            List[Tuple]: (0:id, 1:program_id, 2:program_name, 3:partner_id, 4:partner_name,
+                         5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
+                         8:pdf_status, 9:pdf_distributed_date, 10:pdf_file_path, 11:notes,
+                         12:order_type, 13:order_status, 14:email_sent_date,
+                         15:project_name, 16:item_name, 17:payment_type, 18:unit_price,
+                         19:payment_timing, 20:contract_type, 21:implementation_date,
+                         22:spot_amount, 23:order_category, 24:email_subject, 25:email_body,
+                         26:email_to, 27:auto_renewal_enabled, 28:renewal_period_months,
+                         29:termination_notice_date, 30:renewal_count, 31:work_type)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -963,7 +967,8 @@ class OrderManagementDB:
                        COALESCE(oc.auto_renewal_enabled, 1) as auto_renewal_enabled,
                        COALESCE(oc.renewal_period_months, 3) as renewal_period_months,
                        oc.termination_notice_date,
-                       COALESCE(oc.renewal_count, 0) as renewal_count
+                       COALESCE(oc.renewal_count, 0) as renewal_count,
+                       COALESCE(oc.work_type, '制作') as work_type
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -1029,7 +1034,8 @@ class OrderManagementDB:
                        COALESCE(oc.renewal_period_months, 3) as renewal_period_months,
                        oc.termination_notice_date,
                        oc.last_renewal_date,
-                       COALESCE(oc.renewal_count, 0) as renewal_count
+                       COALESCE(oc.renewal_count, 0) as renewal_count,
+                       COALESCE(oc.work_type, '制作') as work_type
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -1121,6 +1127,7 @@ class OrderManagementDB:
                         auto_renewal_enabled = ?,
                         renewal_period_months = ?,
                         termination_notice_date = ?,
+                        work_type = ?,
                         updated_at = ?
                     WHERE id = ?
                 """, (
@@ -1149,6 +1156,7 @@ class OrderManagementDB:
                     contract_data.get('auto_renewal_enabled', 1),
                     contract_data.get('renewal_period_months', 3),
                     contract_data.get('termination_notice_date'),
+                    contract_data.get('work_type', '制作'),
                     now,
                     contract_id
                 ))
@@ -1166,8 +1174,9 @@ class OrderManagementDB:
                         contract_type, project_name_type,
                         implementation_date, spot_amount, order_category,
                         auto_renewal_enabled, renewal_period_months, termination_notice_date,
+                        work_type,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     contract_data.get('project_id'),
                     contract_data.get('item_name'),
@@ -1194,6 +1203,7 @@ class OrderManagementDB:
                     contract_data.get('auto_renewal_enabled', 1),
                     contract_data.get('renewal_period_months', 3),
                     contract_data.get('termination_notice_date'),
+                    contract_data.get('work_type', '制作'),
                     now,
                     now
                 ))
