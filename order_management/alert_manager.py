@@ -136,11 +136,11 @@ class AlertManager:
             target_str = target_date.strftime("%Y-%m-%d")
 
             cursor.execute("""
-                SELECT oc.id, prog.name as program_name, p.name as partner_name,
+                SELECT oc.id, prod.name as production_name, p.name as partner_name,
                        oc.contract_end_date, oc.auto_renewal_enabled,
                        oc.termination_notice_date, oc.item_name
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN productions prod ON oc.program_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE oc.contract_end_date BETWEEN ? AND ?
                   AND (oc.termination_notice_date IS NULL OR oc.termination_notice_date = '')
@@ -156,7 +156,7 @@ class AlertManager:
 
                 alerts.append({
                     'contract_id': row[0],
-                    'program_name': row[1],
+                    'production_name': row[1],
                     'partner_name': row[2] or "(未設定)",
                     'contract_end_date': row[3],
                     'days_until_expiry': days_until,

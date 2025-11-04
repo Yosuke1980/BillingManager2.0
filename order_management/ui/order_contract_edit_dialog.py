@@ -625,11 +625,13 @@ class OrderContractEditDialog(QDialog):
 
     def load_programs(self):
         """番組一覧を読み込み"""
-        programs = self.db.get_programs()
+        programs = self.db.get_productions()
         self.program_dict = {}
 
         for program in programs:
-            # program: (id, name, description, start_date, end_date, broadcast_time, broadcast_days, status)
+            # production: (id, name, description, production_type, start_date, end_date,
+            #             start_time, end_time, broadcast_time, broadcast_days, status,
+            #             parent_production_id)
             display_text = f"{program[1]} (ID: {program[0]})"
             self.program_combo.addItem(display_text, program[0])  # IDをデータとして保存
             self.program_dict[display_text] = program[0]

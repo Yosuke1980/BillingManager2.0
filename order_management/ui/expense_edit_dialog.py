@@ -15,9 +15,9 @@ from order_management.database_manager import OrderManagementDB
 class ExpenseEditDialog(QDialog):
     """費用項目編集ダイアログ"""
 
-    def __init__(self, parent=None, project_id=None, expense_data=None):
+    def __init__(self, parent=None, production_id=None, expense_data=None):
         super().__init__(parent)
-        self.project_id = project_id
+        self.production_id = production_id
         self.expense_data = expense_data
         self.db = OrderManagementDB()
 
@@ -183,7 +183,7 @@ class ExpenseEditDialog(QDialog):
         supplier_id = self.supplier_combo.currentData()
 
         return {
-            'project_id': self.project_id,
+            'production_id': self.production_id,
             'item_name': self.item_name_edit.text().strip(),
             'amount': self.amount_spin.value(),
             'supplier_id': supplier_id,

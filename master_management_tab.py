@@ -5,11 +5,10 @@
 """
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget
 
-from order_management.ui.projects_main_widget import ProjectsMainWidget
-from order_management.ui.project_timeline_widget import ProjectTimelineWidget
+from order_management.ui.production_timeline_widget import ProductionTimelineWidget
 from order_management.ui.partner_master_widget import PartnerMasterWidget
 from order_management.ui.cast_master_widget import CastMasterWidget
-from order_management.ui.program_master_widget import ProgramMasterWidget
+from order_management.ui.production_master_widget import ProductionMasterWidget
 from order_management.ui.settings_widget import SettingsWidget
 
 
@@ -17,10 +16,10 @@ class MasterManagementTab(QWidget):
     """マスター管理タブ
 
     以下のサブタブを持つ親タブ：
-    - 案件一覧
+    - タイムライン
     - 取引先マスター
     - 出演者マスター
-    - 番組マスター
+    - 番組・イベント管理
     - 設定
     """
 
@@ -34,27 +33,23 @@ class MasterManagementTab(QWidget):
         """UIの初期化"""
         self.sub_tab_control = QTabWidget()
 
-        # Sub-tab 1: 案件一覧
-        self.projects_widget = ProjectsMainWidget()
-        self.sub_tab_control.addTab(self.projects_widget, "案件一覧")
+        # Sub-tab 1: タイムライン
+        self.timeline_widget = ProductionTimelineWidget()
+        self.sub_tab_control.addTab(self.timeline_widget, "タイムライン")
 
-        # Sub-tab 2: プロジェクトタイムライン
-        self.timeline_widget = ProjectTimelineWidget()
-        self.sub_tab_control.addTab(self.timeline_widget, "プロジェクトタイムライン")
-
-        # Sub-tab 3: 取引先マスター
+        # Sub-tab 2: 取引先マスター
         self.partner_widget = PartnerMasterWidget()
         self.sub_tab_control.addTab(self.partner_widget, "取引先マスター")
 
-        # Sub-tab 4: 出演者マスター
+        # Sub-tab 3: 出演者マスター
         self.cast_widget = CastMasterWidget()
         self.sub_tab_control.addTab(self.cast_widget, "出演者マスター")
 
-        # Sub-tab 5: 番組マスター
-        self.program_widget = ProgramMasterWidget()
-        self.sub_tab_control.addTab(self.program_widget, "番組マスター")
+        # Sub-tab 4: 番組・イベント管理
+        self.production_widget = ProductionMasterWidget()
+        self.sub_tab_control.addTab(self.production_widget, "番組・イベント管理")
 
-        # Sub-tab 6: 設定
+        # Sub-tab 5: 設定
         self.settings_widget = SettingsWidget()
         self.sub_tab_control.addTab(self.settings_widget, "設定")
 
@@ -69,7 +64,5 @@ class MasterManagementTab(QWidget):
 
     def on_tab_changed(self, index):
         """タブ切り替え時の処理"""
-        if index == 0:  # 案件一覧タブ
-            self.projects_widget.refresh_all()
-        elif index == 1:  # プロジェクトタイムラインタブ
+        if index == 0:  # タイムラインタブ
             self.timeline_widget.load_timeline()
