@@ -241,9 +241,9 @@ class DatabaseManager:
                 )
             """)
 
-            # 2. 案件マスターテーブル
+            # 2. 制作物マスターテーブル
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS projects (
+                CREATE TABLE IF NOT EXISTS productions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
                     date DATE NOT NULL,
@@ -254,27 +254,27 @@ class DatabaseManager:
                     end_date DATE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (parent_id) REFERENCES projects(id)
+                    FOREIGN KEY (parent_id) REFERENCES productions(id)
                 )
             """)
 
             # start_date, end_dateカラムが存在しない場合は追加
-            cursor.execute("PRAGMA table_info(projects)")
+            cursor.execute("PRAGMA table_info(productions)")
             columns = [column[1] for column in cursor.fetchall()]
 
             if "start_date" not in columns:
-                cursor.execute("ALTER TABLE projects ADD COLUMN start_date DATE")
-                log_message("projects テーブルに start_date カラムを追加しました")
+                cursor.execute("ALTER TABLE productions ADD COLUMN start_date DATE")
+                log_message("productions テーブルに start_date カラムを追加しました")
 
             if "end_date" not in columns:
-                cursor.execute("ALTER TABLE projects ADD COLUMN end_date DATE")
-                log_message("projects テーブルに end_date カラムを追加しました")
+                cursor.execute("ALTER TABLE productions ADD COLUMN end_date DATE")
+                log_message("productions テーブルに end_date カラムを追加しました")
 
             # 3. 費用項目テーブル
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS expenses_order (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    project_id INTEGER NOT NULL,
+                    production_id INTEGER NOT NULL,
                     item_name TEXT NOT NULL,
                     amount REAL NOT NULL,
                     supplier_id INTEGER,
@@ -292,7 +292,7 @@ class DatabaseManager:
                     notes TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (project_id) REFERENCES projects(id),
+                    FOREIGN KEY (production_id) REFERENCES productions(id),
                     FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
                 )
             """)
@@ -1984,21 +1984,20 @@ class DatabaseManager:
             # 指定月の発注データを取得（未照合のもののみ）
             # 契約情報（payment_type, unit_price, payment_timing）も取得
             order_cursor.execute("""
-                SELECT eo.id, eo.order_number, eo.project_id, p.name as project_name,
+                SELECT eo.id, eo.order_number, eo.production_id, prod.name as production_name,
                        eo.supplier_id, part.code as partner_code, part.name as partner_name,
                        eo.expected_payment_amount, eo.expected_payment_date,
                        eo.payment_status,
-                       prog.broadcast_days,
+                       prod.broadcast_days,
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
                        COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
                 FROM expenses_order eo
-                LEFT JOIN projects p ON eo.project_id = p.id
-                LEFT JOIN programs prog ON p.program_id = prog.id
+                LEFT JOIN productions prod ON eo.production_id = prod.id
                 LEFT JOIN partners part ON eo.supplier_id = part.id
                 LEFT JOIN order_contracts oc ON (
-                    (oc.project_id IS NOT NULL AND eo.project_id = oc.project_id AND eo.item_name = oc.item_name)
-                    OR (oc.project_id IS NULL AND p.program_id = oc.program_id)
+                    (oc.production_id IS NOT NULL AND eo.production_id = oc.production_id AND eo.item_name = oc.item_name)
+                    OR (oc.production_id IS NULL AND prod.production_id = oc.production_id)
                 ) AND eo.supplier_id = oc.partner_id
                 WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
                   AND (eo.payment_status = '未払い' OR eo.payment_status IS NULL)
@@ -2040,7 +2039,7 @@ class DatabaseManager:
 
             # 各発注について支払を探す
             for order_row in order_rows:
-                (order_id, order_number, project_id, project_name,
+                (order_id, order_number, production_id, production_name,
                  supplier_id, partner_code, partner_name,
                  order_amount, payment_date, payment_status,
                  broadcast_days, payment_type, unit_price, payment_timing) = order_row
@@ -2261,15 +2260,15 @@ class DatabaseManager:
 
                 # order_contractsで照合
                 # 照合条件:
-                # 1. programs.name = 抽出した番組名
+                # 1. productions.name = 抽出した制作物名
                 # 2. order_contracts.item_name = 抽出した費用項目
                 # 3. partners.name = 取引先名
                 order_cursor.execute("""
                     SELECT oc.id
                     FROM order_contracts oc
-                    LEFT JOIN programs prog ON oc.program_id = prog.id
+                    LEFT JOIN productions prod ON oc.production_id = prod.id
                     LEFT JOIN partners p ON oc.partner_id = p.id
-                    WHERE prog.name = ?
+                    WHERE prod.name = ?
                       AND (oc.item_name = ? OR oc.item_name IS NULL)
                       AND p.name = ?
                     LIMIT 1
@@ -2331,8 +2330,8 @@ class DatabaseManager:
             order_cursor.execute("""
                 SELECT
                     oc.id as order_contract_id,
-                    oc.program_id,
-                    prog.name as program_name,
+                    oc.production_id,
+                    prod.name as production_name,
                     oc.partner_id,
                     p.name as partner_name,
                     p.code as partner_code,
@@ -2348,13 +2347,10 @@ class DatabaseManager:
                     COALESCE(oc.order_status, '未完了') as order_status,
                     oc.pdf_status,
                     oc.pdf_distributed_date,
-                    oc.email_sent_date,
-                    oc.project_id,
-                    proj.name as project_name
+                    oc.email_sent_date
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
-                LEFT JOIN projects proj ON oc.project_id = proj.id
             """)
 
             contracts = order_cursor.fetchall()
@@ -2386,7 +2382,7 @@ class DatabaseManager:
                             'pdf_status': contract['pdf_status'],
                             'pdf_distributed_date': contract['pdf_distributed_date'],
                             'email_sent_date': contract['email_sent_date'],
-                            'program_name': contract['program_name'] or contract['project_name'] or '',
+                            'program_name': contract['production_name'] or '',
                             'contract_start_date': contract['implementation_date'],
                             'contract_end_date': contract['implementation_date']
                         })
@@ -2435,7 +2431,7 @@ class DatabaseManager:
                             'pdf_status': contract['pdf_status'],
                             'pdf_distributed_date': contract['pdf_distributed_date'],
                             'email_sent_date': contract['email_sent_date'],
-                            'program_name': contract['program_name'] or contract['project_name'] or '',
+                            'program_name': contract['production_name'] or '',
                             'contract_start_date': contract['contract_start_date'],
                             'contract_end_date': contract['contract_end_date']
                         })

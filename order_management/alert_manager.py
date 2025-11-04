@@ -34,10 +34,10 @@ class AlertManager:
 
             cursor.execute("""
                 SELECT e.id, e.item_name, e.implementation_date,
-                       p.name as project_name, p.implementation_date as project_date,
+                       prod.name as production_name, prod.start_date as production_date,
                        s.name as supplier_name, e.contact_person
                 FROM expenses_order e
-                JOIN projects p ON e.project_id = p.id
+                JOIN productions prod ON e.production_id = prod.id
                 LEFT JOIN suppliers s ON e.supplier_id = s.id
                 WHERE (e.status = '実施済' OR e.status = '請求書待ち')
                   AND e.implementation_date <= ?
@@ -53,8 +53,8 @@ class AlertManager:
                     'expense_id': row[0],
                     'item_name': row[1],
                     'implementation_date': row[2],
-                    'project_name': row[3],
-                    'project_date': row[4],
+                    'production_name': row[3],
+                    'production_date': row[4],
                     'supplier_name': row[5] or "(未設定)",
                     'contact_person': row[6] or "",
                 })
@@ -83,10 +83,10 @@ class AlertManager:
 
             cursor.execute("""
                 SELECT e.id, e.item_name, e.updated_at,
-                       p.name as project_name, p.implementation_date as project_date,
+                       prod.name as production_name, prod.start_date as production_date,
                        s.name as supplier_name, e.contact_person
                 FROM expenses_order e
-                JOIN projects p ON e.project_id = p.id
+                JOIN productions prod ON e.production_id = prod.id
                 LEFT JOIN suppliers s ON e.supplier_id = s.id
                 WHERE e.status = '下書き作成済'
                   AND e.updated_at <= ?
@@ -101,8 +101,8 @@ class AlertManager:
                     'expense_id': row[0],
                     'item_name': row[1],
                     'updated_at': row[2],
-                    'project_name': row[3],
-                    'project_date': row[4],
+                    'production_name': row[3],
+                    'production_date': row[4],
                     'supplier_name': row[5] or "(未設定)",
                     'contact_person': row[6] or "",
                 })
@@ -140,7 +140,7 @@ class AlertManager:
                        oc.contract_end_date, oc.auto_renewal_enabled,
                        oc.termination_notice_date, oc.item_name
                 FROM order_contracts oc
-                LEFT JOIN productions prod ON oc.program_id = prod.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE oc.contract_end_date BETWEEN ? AND ?
                   AND (oc.termination_notice_date IS NULL OR oc.termination_notice_date = '')
