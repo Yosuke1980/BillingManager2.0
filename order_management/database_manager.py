@@ -211,220 +211,20 @@ class OrderManagementDB:
     # 案件操作
     # ========================================
 
-    def get_projects(self, search_term: str = "", project_type: str = "") -> List[Tuple]:
-        """案件一覧を取得
 
-        Returns:
-            List[Tuple]: (id, name, implementation_date, project_type, parent_id)
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
-            query = """
-                SELECT id, name, implementation_date,
-                       COALESCE(project_type, 'イベント') as project_type,
-                       parent_id
-                FROM projects
-                WHERE 1=1
-            """
-            params = []
-
-            if search_term:
-                query += " AND name LIKE ?"
-                params.append(f"%{search_term}%")
-
-            if project_type:
-                query += " AND COALESCE(project_type, 'イベント') = ?"
-                params.append(project_type)
-
-            query += " ORDER BY implementation_date DESC, name"
-
-            cursor.execute(query, params)
-            return cursor.fetchall()
-        finally:
-            conn.close()
-
-    def get_project_by_id(self, project_id: int) -> Optional[Tuple]:
-        """IDで案件を取得
-
-        Returns:
-            Optional[Tuple]: (id, name, implementation_date, project_type,
-                            parent_id, program_id, created_at, updated_at)
-        """
+    def get_expenses_by_production(self, production_id: int) -> List[Tuple]:
+        """制作物IDで費用項目を取得"""
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT id, name, implementation_date,
-                       COALESCE(project_type, 'イベント') as project_type,
-                       parent_id, program_id, created_at, updated_at
-                FROM projects WHERE id = ?
-            """, (project_id,))
-            return cursor.fetchone()
-        finally:
-            conn.close()
-
-    def save_project(self, project_data: dict, is_new: bool = False) -> int:
-        """案件を保存
-
-        Args:
-            project_data: 案件データ
-                - name: 案件名（必須）
-                - implementation_date: 実施日
-                - project_type: 案件種別（イベント/特別企画/通常）
-                - parent_id: 親案件ID
-                - program_id: 番組ID
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
-            if is_new:
-                cursor.execute("""
-                    INSERT INTO projects (name, implementation_date, project_type,
-                                        parent_id, program_id)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (
-                    project_data.get('name', ''),
-                    project_data.get('implementation_date', ''),
-                    project_data.get('project_type', 'イベント'),
-                    project_data.get('parent_id'),
-                    project_data.get('program_id'),
-                ))
-                project_id = cursor.lastrowid
-            else:
-                cursor.execute("""
-                    UPDATE projects
-                    SET name = ?, implementation_date = ?, project_type = ?,
-                        parent_id = ?, program_id = ?,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                """, (
-                    project_data.get('name', ''),
-                    project_data.get('implementation_date', ''),
-                    project_data.get('project_type', 'イベント'),
-                    project_data.get('parent_id'),
-                    project_data.get('program_id'),
-                    project_data['id'],
-                ))
-                project_id = project_data['id']
-
-            conn.commit()
-            log_message(f"案件保存完了: ID={project_id}")
-            return project_id
-        except Exception as e:
-            conn.rollback()
-            log_message(f"案件保存エラー: {e}")
-            raise
-        finally:
-            conn.close()
-
-    def delete_project(self, project_id: int) -> int:
-        """案件を削除"""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("DELETE FROM projects WHERE id = ?", (project_id,))
-            conn.commit()
-            return cursor.rowcount
-        finally:
-            conn.close()
-
-    def duplicate_project(self, project_id: int) -> int:
-        """案件を複製（費用項目も含めて）
-
-        Args:
-            project_id: 複製元の案件ID
-
-        Returns:
-            int: 新しい案件のID
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
-            # 元の案件データを取得
-            cursor.execute("""
-                SELECT name, implementation_date, project_type, parent_id, program_id
-                FROM projects WHERE id = ?
-            """, (project_id,))
-
-            project = cursor.fetchone()
-            if not project:
-                raise ValueError(f"案件ID {project_id} が見つかりません")
-
-            # 新しい案件を作成（名前に「（コピー）」を追加）
-            cursor.execute("""
-                INSERT INTO projects (name, implementation_date, project_type,
-                                    parent_id, program_id)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                project[0] + "（コピー）",  # 名前
-                project[1],  # implementation_date
-                project[2],  # project_type
-                project[3],  # parent_id
-                project[4],  # program_id
-            ))
-
-            new_project_id = cursor.lastrowid
-
-            # 関連する費用項目をコピー
-            cursor.execute("""
-                SELECT item_name, amount, supplier_id, contact_person, status,
-                       implementation_date, payment_scheduled_date, notes
-                FROM expenses_order WHERE project_id = ?
-            """, (project_id,))
-
-            expenses = cursor.fetchall()
-            for expense in expenses:
-                cursor.execute("""
-                    INSERT INTO expenses_order (
-                        project_id, item_name, amount, supplier_id, contact_person,
-                        status, implementation_date, payment_scheduled_date, notes
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    new_project_id,
-                    expense[0],  # item_name
-                    expense[1],  # amount
-                    expense[2],  # supplier_id
-                    expense[3],  # contact_person
-                    expense[4],  # status
-                    expense[5],  # implementation_date
-                    expense[6],  # payment_scheduled_date
-                    expense[7],  # notes
-                ))
-
-            conn.commit()
-            log_message(f"案件複製完了: 元ID={project_id}, 新ID={new_project_id}, 費用項目={len(expenses)}件")
-            return new_project_id
-
-        except Exception as e:
-            conn.rollback()
-            log_message(f"案件複製エラー: {e}")
-            raise
-        finally:
-            conn.close()
-
-    # ========================================
-    # 費用項目操作
-    # ========================================
-
-    def get_expenses_by_project(self, project_id: int) -> List[Tuple]:
-        """案件IDで費用項目を取得"""
-        conn = self._get_connection()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("""
-                SELECT id, project_id, item_name, amount, supplier_id, contact_person,
+                SELECT id, production_id, item_name, amount, supplier_id, contact_person,
                        status, order_number, implementation_date, invoice_received_date
                 FROM expenses_order
-                WHERE project_id = ?
+                WHERE production_id = ?
                 ORDER BY implementation_date, id
-            """, (project_id,))
+            """, (production_id,))
             return cursor.fetchall()
         finally:
             conn.close()
@@ -436,7 +236,7 @@ class OrderManagementDB:
 
         try:
             cursor.execute("""
-                SELECT id, project_id, item_name, amount, supplier_id, contact_person,
+                SELECT id, production_id, item_name, amount, supplier_id, contact_person,
                        status, order_number, order_date, implementation_date,
                        invoice_received_date, payment_scheduled_date, payment_date,
                        gmail_draft_id, gmail_message_id, email_sent_at, notes
@@ -455,13 +255,13 @@ class OrderManagementDB:
             if is_new:
                 cursor.execute("""
                     INSERT INTO expenses_order (
-                        project_id, item_name, amount, supplier_id, contact_person,
+                        production_id, item_name, amount, supplier_id, contact_person,
                         status, order_number, order_date, implementation_date,
                         invoice_received_date, payment_scheduled_date, payment_date,
                         gmail_draft_id, gmail_message_id, notes
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    expense_data.get('project_id', 0),
+                    expense_data.get('production_id', 0),
                     expense_data.get('item_name', ''),
                     expense_data.get('amount', 0.0),
                     expense_data.get('supplier_id'),
@@ -481,14 +281,14 @@ class OrderManagementDB:
             else:
                 cursor.execute("""
                     UPDATE expenses_order
-                    SET project_id = ?, item_name = ?, amount = ?, supplier_id = ?,
+                    SET production_id = ?, item_name = ?, amount = ?, supplier_id = ?,
                         contact_person = ?, status = ?, order_number = ?, order_date = ?,
                         implementation_date = ?, invoice_received_date = ?,
                         payment_scheduled_date = ?, payment_date = ?, gmail_draft_id = ?,
                         gmail_message_id = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 """, (
-                    expense_data.get('project_id', 0),
+                    expense_data.get('production_id', 0),
                     expense_data.get('item_name', ''),
                     expense_data.get('amount', 0.0),
                     expense_data.get('supplier_id'),
@@ -533,8 +333,8 @@ class OrderManagementDB:
     # 統計・集計
     # ========================================
 
-    def get_project_summary(self, project_id: int) -> dict:
-        """案件の実績サマリーを取得
+    def get_production_summary(self, production_id: int) -> dict:
+        """制作物の実績サマリーを取得
 
         Note: budget カラム削除により、実績のみを返します
         """
@@ -544,8 +344,8 @@ class OrderManagementDB:
         try:
             # 実績合計取得
             cursor.execute("""
-                SELECT SUM(amount) FROM expenses_order WHERE project_id = ?
-            """, (project_id,))
+                SELECT SUM(amount) FROM expenses_order WHERE production_id = ?
+            """, (production_id,))
             row = cursor.fetchone()
             actual = row[0] if row and row[0] else 0.0
 
@@ -556,30 +356,30 @@ class OrderManagementDB:
             conn.close()
 
     # ========================================
-    # 番組マスター操作
+    # 制作物マスター操作
     # ========================================
 
-    def get_programs(self, search_term: str = "", status: str = "") -> List[Tuple]:
-        """番組マスター一覧を取得
+    def get_productions(self, search_term: str = "", status: str = "") -> List[Tuple]:
+        """制作物マスター一覧を取得
 
         Args:
             search_term: 検索キーワード
             status: ステータスフィルタ（'放送中' or '終了' or ''）
 
         Returns:
-            List[Tuple]: (id, name, description, start_date, end_date,
-                         broadcast_time, broadcast_days, status,
-                         program_type, parent_program_id)
+            List[Tuple]: (id, name, description, production_type, start_date, end_date,
+                         start_time, end_time, broadcast_time, broadcast_days, status,
+                         parent_production_id)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             query = """
-                SELECT id, name, description, start_date, end_date,
-                       broadcast_time, broadcast_days, status,
-                       program_type, parent_program_id
-                FROM programs
+                SELECT id, name, description, production_type, start_date, end_date,
+                       start_time, end_time, broadcast_time, broadcast_days, status,
+                       parent_production_id
+                FROM productions
                 WHERE 1=1
             """
             params = []
@@ -599,41 +399,44 @@ class OrderManagementDB:
         finally:
             conn.close()
 
-    def get_program_by_id(self, program_id: int) -> Optional[Tuple]:
-        """IDで番組を取得
+    def get_production_by_id(self, production_id: int) -> Optional[Tuple]:
+        """IDで制作物を取得
 
         Returns:
-            Tuple: (id, name, description, start_date, end_date,
-                   broadcast_time, broadcast_days, status,
-                   program_type, parent_program_id, created_at, updated_at)
+            Tuple: (id, name, description, production_type, start_date, end_date,
+                   start_time, end_time, broadcast_time, broadcast_days, status,
+                   parent_production_id, created_at, updated_at)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT id, name, description, start_date, end_date,
-                       broadcast_time, broadcast_days, status,
-                       program_type, parent_program_id,
-                       created_at, updated_at
-                FROM programs WHERE id = ?
-            """, (program_id,))
+                SELECT id, name, description, production_type, start_date, end_date,
+                       start_time, end_time, broadcast_time, broadcast_days, status,
+                       parent_production_id, created_at, updated_at
+                FROM productions WHERE id = ?
+            """, (production_id,))
             return cursor.fetchone()
         finally:
             conn.close()
 
-    def save_program(self, program_data: dict, is_new: bool = True):
-        """番組を保存
+    def save_production(self, production_data: dict, is_new: bool = True):
+        """制作物を保存
 
         Args:
-            program_data: 番組データ辞書
-                - name: 番組名（必須）
+            production_data: 制作物データ辞書
+                - name: 制作物名（必須）
                 - description: 備考
+                - production_type: 種別
                 - start_date: 開始日
                 - end_date: 終了日
+                - start_time: 実施開始時間
+                - end_time: 実施終了時間
                 - broadcast_time: 放送時間
                 - broadcast_days: 放送曜日（カンマ区切り）
                 - status: ステータス
+                - parent_production_id: 親制作物ID
             is_new: 新規登録かどうか
         """
         conn = self._get_connection()
@@ -644,80 +447,85 @@ class OrderManagementDB:
 
             if is_new:
                 cursor.execute("""
-                    INSERT INTO programs (
-                        name, description, start_date, end_date,
-                        broadcast_time, broadcast_days, status,
-                        program_type, parent_program_id,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO productions (
+                        name, description, production_type, start_date, end_date,
+                        start_time, end_time, broadcast_time, broadcast_days, status,
+                        parent_production_id, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    program_data['name'],
-                    program_data.get('description', ''),
-                    program_data.get('start_date'),
-                    program_data.get('end_date'),
-                    program_data.get('broadcast_time', ''),
-                    program_data.get('broadcast_days', ''),
-                    program_data.get('status', '放送中'),
-                    program_data.get('program_type', 'レギュラー'),
-                    program_data.get('parent_program_id'),
+                    production_data['name'],
+                    production_data.get('description', ''),
+                    production_data.get('production_type', 'レギュラー番組'),
+                    production_data.get('start_date'),
+                    production_data.get('end_date'),
+                    production_data.get('start_time'),
+                    production_data.get('end_time'),
+                    production_data.get('broadcast_time', ''),
+                    production_data.get('broadcast_days', ''),
+                    production_data.get('status', '放送中'),
+                    production_data.get('parent_production_id'),
                     now,
                     now
                 ))
-                program_id = cursor.lastrowid
+                production_id = cursor.lastrowid
             else:
                 cursor.execute("""
-                    UPDATE programs SET
+                    UPDATE productions SET
                         name = ?,
                         description = ?,
+                        production_type = ?,
                         start_date = ?,
                         end_date = ?,
+                        start_time = ?,
+                        end_time = ?,
                         broadcast_time = ?,
                         broadcast_days = ?,
                         status = ?,
-                        program_type = ?,
-                        parent_program_id = ?,
+                        parent_production_id = ?,
                         updated_at = ?
                     WHERE id = ?
                 """, (
-                    program_data['name'],
-                    program_data.get('description', ''),
-                    program_data.get('start_date'),
-                    program_data.get('end_date'),
-                    program_data.get('broadcast_time', ''),
-                    program_data.get('broadcast_days', ''),
-                    program_data.get('status', '放送中'),
-                    program_data.get('program_type', 'レギュラー'),
-                    program_data.get('parent_program_id'),
+                    production_data['name'],
+                    production_data.get('description', ''),
+                    production_data.get('production_type', 'レギュラー番組'),
+                    production_data.get('start_date'),
+                    production_data.get('end_date'),
+                    production_data.get('start_time'),
+                    production_data.get('end_time'),
+                    production_data.get('broadcast_time', ''),
+                    production_data.get('broadcast_days', ''),
+                    production_data.get('status', '放送中'),
+                    production_data.get('parent_production_id'),
                     now,
-                    program_data['id']
+                    production_data['id']
                 ))
-                program_id = program_data['id']
+                production_id = production_data['id']
 
             conn.commit()
-            return program_id
+            return production_id
         except Exception as e:
             conn.rollback()
             raise e
         finally:
             conn.close()
 
-    def delete_program(self, program_id: int):
-        """番組を削除（関連する出演者・制作会社も削除）"""
+    def delete_production(self, production_id: int):
+        """制作物を削除（関連する出演者・制作会社も削除）"""
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
-            # 関連案件が存在するかチェック
+            # 関連する費用項目が存在するかチェック
             cursor.execute("""
-                SELECT COUNT(*) FROM projects WHERE program_id = ?
-            """, (program_id,))
+                SELECT COUNT(*) FROM expenses_order WHERE production_id = ?
+            """, (production_id,))
             count = cursor.fetchone()[0]
 
             if count > 0:
-                raise Exception(f"この番組には{count}件の案件が関連付けられています。削除できません。")
+                raise Exception(f"この制作物には{count}件の費用項目が関連付けられています。削除できません。")
 
             # CASCADE削除により出演者・制作会社も自動削除される
-            cursor.execute("DELETE FROM programs WHERE id = ?", (program_id,))
+            cursor.execute("DELETE FROM productions WHERE id = ?", (production_id,))
             conn.commit()
         except Exception as e:
             conn.rollback()
@@ -725,31 +533,115 @@ class OrderManagementDB:
         finally:
             conn.close()
 
-    def get_program_cast(self, program_id: int) -> List[Tuple]:
-        """番組の出演者一覧を取得
+    def duplicate_production(self, production_id: int) -> int:
+        """制作物を複製（費用項目も含めて）
+
+        Args:
+            production_id: 複製元の制作物ID
 
         Returns:
-            List[Tuple]: (id, program_id, cast_name, role)
+            int: 新しい制作物のID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 元の制作物データを取得
+            cursor.execute("""
+                SELECT name, description, production_type, start_date, end_date,
+                       start_time, end_time, broadcast_time, broadcast_days,
+                       status, parent_production_id
+                FROM productions WHERE id = ?
+            """, (production_id,))
+
+            production = cursor.fetchone()
+            if not production:
+                raise ValueError(f"制作物ID {production_id} が見つかりません")
+
+            # 新しい制作物を作成（名前に「（コピー）」を追加）
+            cursor.execute("""
+                INSERT INTO productions (name, description, production_type, start_date, end_date,
+                                       start_time, end_time, broadcast_time, broadcast_days,
+                                       status, parent_production_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                production[0] + "（コピー）",  # name
+                production[1],  # description
+                production[2],  # production_type
+                production[3],  # start_date
+                production[4],  # end_date
+                production[5],  # start_time
+                production[6],  # end_time
+                production[7],  # broadcast_time
+                production[8],  # broadcast_days
+                production[9],  # status
+                production[10],  # parent_production_id
+            ))
+
+            new_production_id = cursor.lastrowid
+
+            # 関連する費用項目をコピー
+            cursor.execute("""
+                SELECT item_name, amount, supplier_id, contact_person, status,
+                       implementation_date, payment_scheduled_date, notes
+                FROM expenses_order WHERE production_id = ?
+            """, (production_id,))
+
+            expenses = cursor.fetchall()
+            for expense in expenses:
+                cursor.execute("""
+                    INSERT INTO expenses_order (
+                        production_id, item_name, amount, supplier_id, contact_person,
+                        status, implementation_date, payment_scheduled_date, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    new_production_id,
+                    expense[0],  # item_name
+                    expense[1],  # amount
+                    expense[2],  # supplier_id
+                    expense[3],  # contact_person
+                    expense[4],  # status
+                    expense[5],  # implementation_date
+                    expense[6],  # payment_scheduled_date
+                    expense[7],  # notes
+                ))
+
+            conn.commit()
+            log_message(f"制作物複製完了: 元ID={production_id}, 新ID={new_production_id}, 費用項目={len(expenses)}件")
+            return new_production_id
+
+        except Exception as e:
+            conn.rollback()
+            log_message(f"制作物複製エラー: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def get_production_cast(self, production_id: int) -> List[Tuple]:
+        """制作物の出演者一覧を取得
+
+        Returns:
+            List[Tuple]: (id, production_id, cast_name, role)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT id, program_id, cast_name, role
-                FROM program_cast
-                WHERE program_id = ?
+                SELECT id, production_id, cast_name, role
+                FROM production_cast
+                WHERE production_id = ?
                 ORDER BY cast_name
-            """, (program_id,))
+            """, (production_id,))
             return cursor.fetchall()
         finally:
             conn.close()
 
-    def save_program_cast(self, program_id: int, cast_list: List[dict]):
-        """番組の出演者を保存（既存データを全削除して再登録）
+    def save_production_cast(self, production_id: int, cast_list: List[dict]):
+        """制作物の出演者を保存（既存データを全削除して再登録）
 
         Args:
-            program_id: 番組ID
+            production_id: 制作物ID
             cast_list: 出演者リスト [{'cast_name': '名前', 'role': '役割'}, ...]
         """
         conn = self._get_connection()
@@ -757,15 +649,15 @@ class OrderManagementDB:
 
         try:
             # 既存の出演者を全削除
-            cursor.execute("DELETE FROM program_cast WHERE program_id = ?", (program_id,))
+            cursor.execute("DELETE FROM production_cast WHERE production_id = ?", (production_id,))
 
             # 新しい出演者を登録
             now = datetime.now()
             for cast in cast_list:
                 cursor.execute("""
-                    INSERT INTO program_cast (program_id, cast_name, role, created_at)
+                    INSERT INTO production_cast (production_id, cast_name, role, created_at)
                     VALUES (?, ?, ?, ?)
-                """, (program_id, cast['cast_name'], cast.get('role', ''), now))
+                """, (production_id, cast['cast_name'], cast.get('role', ''), now))
 
             conn.commit()
         except Exception as e:
@@ -774,11 +666,11 @@ class OrderManagementDB:
         finally:
             conn.close()
 
-    def get_program_producers(self, program_id: int) -> List[Tuple]:
-        """番組の制作会社一覧を取得
+    def get_production_producers(self, production_id: int) -> List[Tuple]:
+        """制作物の制作会社一覧を取得
 
         Returns:
-            List[Tuple]: (program_producers.id, partner_id, partner_name, partner_code)
+            List[Tuple]: (production_producers.id, partner_id, partner_name, partner_code)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -786,20 +678,20 @@ class OrderManagementDB:
         try:
             cursor.execute("""
                 SELECT pp.id, pp.partner_id, p.name, p.code
-                FROM program_producers pp
+                FROM production_producers pp
                 INNER JOIN partners p ON pp.partner_id = p.id
-                WHERE pp.program_id = ?
+                WHERE pp.production_id = ?
                 ORDER BY p.name
-            """, (program_id,))
+            """, (production_id,))
             return cursor.fetchall()
         finally:
             conn.close()
 
-    def save_program_producers(self, program_id: int, partner_ids: List[int]):
-        """番組の制作会社を保存（既存データを全削除して再登録）
+    def save_production_producers(self, production_id: int, partner_ids: List[int]):
+        """制作物の制作会社を保存（既存データを全削除して再登録）
 
         Args:
-            program_id: 番組ID
+            production_id: 制作物ID
             partner_ids: 取引先IDのリスト
         """
         conn = self._get_connection()
@@ -807,15 +699,15 @@ class OrderManagementDB:
 
         try:
             # 既存の制作会社を全削除
-            cursor.execute("DELETE FROM program_producers WHERE program_id = ?", (program_id,))
+            cursor.execute("DELETE FROM production_producers WHERE production_id = ?", (production_id,))
 
             # 新しい制作会社を登録
             now = datetime.now()
             for partner_id in partner_ids:
                 cursor.execute("""
-                    INSERT INTO program_producers (program_id, partner_id, created_at)
+                    INSERT INTO production_producers (production_id, partner_id, created_at)
                     VALUES (?, ?, ?)
-                """, (program_id, partner_id, now))
+                """, (production_id, partner_id, now))
 
             conn.commit()
         except Exception as e:
@@ -884,9 +776,9 @@ class OrderManagementDB:
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute("SELECT COUNT(*) FROM program_cast WHERE cast_id = ?", (cast_id,))
+            cursor.execute("SELECT COUNT(*) FROM production_cast WHERE cast_id = ?", (cast_id,))
             if cursor.fetchone()[0] > 0:
-                raise Exception("この出演者は番組に関連付けられています。削除できません。")
+                raise Exception("この出演者は制作物に関連付けられています。削除できません。")
             cursor.execute("DELETE FROM cast WHERE id = ?", (cast_id,))
             conn.commit()
         except Exception as e:
@@ -895,32 +787,32 @@ class OrderManagementDB:
         finally:
             conn.close()
 
-    def get_program_cast_v2(self, program_id: int) -> List[Tuple]:
-        """番組の出演者一覧を取得（castテーブル経由）"""
+    def get_production_cast_v2(self, production_id: int) -> List[Tuple]:
+        """制作物の出演者一覧を取得（castテーブル経由）"""
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
             cursor.execute("""
                 SELECT pc.id, c.id, c.name, p.name, pc.role
-                FROM program_cast pc
+                FROM production_cast pc
                 INNER JOIN cast c ON pc.cast_id = c.id
                 INNER JOIN partners p ON c.partner_id = p.id
-                WHERE pc.program_id = ? ORDER BY c.name
-            """, (program_id,))
+                WHERE pc.production_id = ? ORDER BY c.name
+            """, (production_id,))
             return cursor.fetchall()
         finally:
             conn.close()
 
-    def save_program_cast_v2(self, program_id: int, cast_assignments: List[dict]):
-        """番組の出演者を保存（castテーブル経由）"""
+    def save_production_cast_v2(self, production_id: int, cast_assignments: List[dict]):
+        """制作物の出演者を保存（castテーブル経由）"""
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute("DELETE FROM program_cast WHERE program_id = ?", (program_id,))
+            cursor.execute("DELETE FROM production_cast WHERE production_id = ?", (production_id,))
             now = datetime.now()
             for assignment in cast_assignments:
-                cursor.execute("INSERT INTO program_cast (program_id, cast_id, role, created_at) VALUES (?, ?, ?, ?)",
-                              (program_id, assignment['cast_id'], assignment.get('role', ''), now))
+                cursor.execute("INSERT INTO production_cast (production_id, cast_id, role, created_at) VALUES (?, ?, ?, ?)",
+                              (production_id, assignment['cast_id'], assignment.get('role', ''), now))
             conn.commit()
         except Exception as e:
             conn.rollback()
@@ -936,13 +828,13 @@ class OrderManagementDB:
         """発注書一覧を取得
 
         Args:
-            search_term: 検索キーワード（取引先名、番組名）
+            search_term: 検索キーワード（取引先名、制作物名）
             pdf_status: PDFステータスフィルタ
             order_type: 発注種別フィルタ（契約書/発注書/メール発注）
             order_status: 発注ステータスフィルタ（未/済）
 
         Returns:
-            List[Tuple]: (0:id, 1:program_id, 2:program_name, 3:partner_id, 4:partner_name,
+            List[Tuple]: (0:id, 1:production_id, 2:program_name, 3:partner_id, 4:partner_name,
                          5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
                          8:pdf_status, 9:pdf_distributed_date, 10:pdf_file_path, 11:notes,
                          12:order_type, 13:order_status, 14:email_sent_date,
@@ -957,7 +849,7 @@ class OrderManagementDB:
 
         try:
             query = """
-                SELECT oc.id, oc.program_id, prog.name as program_name,
+                SELECT oc.id, oc.production_id, prod.name as program_name,
                        oc.partner_id, p.name as partner_name,
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
@@ -966,7 +858,7 @@ class OrderManagementDB:
                        COALESCE(oc.order_type, '発注書') as order_type,
                        COALESCE(oc.order_status, '未') as order_status,
                        oc.email_sent_date,
-                       proj.name as project_name,
+                       prod.name as project_name,
                        oc.item_name,
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
@@ -984,9 +876,9 @@ class OrderManagementDB:
                        COALESCE(oc.renewal_count, 0) as renewal_count,
                        COALESCE(oc.work_type, '制作') as work_type
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
-                LEFT JOIN projects proj ON oc.project_id = proj.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 WHERE 1=1
             """
             params = []
@@ -1021,7 +913,7 @@ class OrderManagementDB:
 
         try:
             cursor.execute("""
-                SELECT oc.id, oc.program_id, prog.name as program_name,
+                SELECT oc.id, oc.production_id, prod.name as program_name,
                        oc.partner_id, p.name as partner_name,
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
@@ -1034,7 +926,7 @@ class OrderManagementDB:
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
                        COALESCE(oc.payment_timing, '翌月末払い') as payment_timing,
-                       oc.project_id, proj.name as project_name,
+                       oc.production_id, prod.name as project_name,
                        oc.item_name,
                        COALESCE(oc.contract_type, 'regular_fixed') as contract_type,
                        COALESCE(oc.project_name_type, 'program') as project_name_type,
@@ -1051,34 +943,34 @@ class OrderManagementDB:
                        COALESCE(oc.renewal_count, 0) as renewal_count,
                        COALESCE(oc.work_type, '制作') as work_type
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
-                LEFT JOIN projects proj ON oc.project_id = proj.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 WHERE oc.id = ?
             """, (contract_id,))
             return cursor.fetchone()
         finally:
             conn.close()
 
-    def get_order_contracts_by_program(self, program_id: int) -> List[Tuple]:
-        """番組IDで発注書を取得"""
+    def get_order_contracts_by_production(self, production_id: int) -> List[Tuple]:
+        """制作物IDで発注書を取得"""
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT oc.id, oc.program_id, prog.name as program_name,
+                SELECT oc.id, oc.production_id, prod.name as program_name,
                        oc.partner_id, p.name as partner_name,
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
                        oc.pdf_distributed_date,
                        oc.pdf_file_path, oc.notes
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
-                WHERE oc.program_id = ?
+                WHERE oc.production_id = ?
                 ORDER BY oc.contract_start_date DESC
-            """, (program_id,))
+            """, (production_id,))
             return cursor.fetchall()
         finally:
             conn.close()
@@ -1089,7 +981,7 @@ class OrderManagementDB:
         Args:
             contract_data: 発注書データ
                 - id: 契約ID（更新時のみ）
-                - program_id: 番組ID
+                - production_id: 制作物ID
                 - partner_id: 取引先ID
                 - contract_start_date: 委託開始日
                 - contract_end_date: 委託終了日
@@ -1116,9 +1008,9 @@ class OrderManagementDB:
                 # 更新
                 cursor.execute("""
                     UPDATE order_contracts SET
-                        project_id = ?,
+                        production_id = ?,
                         item_name = ?,
-                        program_id = ?,
+                        production_id = ?,
                         partner_id = ?,
                         contract_start_date = ?,
                         contract_end_date = ?,
@@ -1145,9 +1037,9 @@ class OrderManagementDB:
                         updated_at = ?
                     WHERE id = ?
                 """, (
-                    contract_data.get('project_id'),
+                    contract_data.get('production_id'),
                     contract_data.get('item_name'),
-                    contract_data['program_id'],  # NOT NULL制約があるため必須
+                    contract_data['production_id'],  # NOT NULL制約があるため必須
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
                     contract_data.get('contract_end_date', ''),
@@ -1178,7 +1070,7 @@ class OrderManagementDB:
                 # 新規追加
                 cursor.execute("""
                     INSERT INTO order_contracts (
-                        project_id, item_name, program_id, partner_id,
+                        production_id, item_name, production_id, partner_id,
                         contract_start_date, contract_end_date,
                         contract_period_type, order_type, order_status,
                         pdf_status, pdf_file_path,
@@ -1192,9 +1084,9 @@ class OrderManagementDB:
                         created_at, updated_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    contract_data.get('project_id'),
+                    contract_data.get('production_id'),
                     contract_data.get('item_name'),
-                    contract_data['program_id'],  # NOT NULL制約があるため必須
+                    contract_data['production_id'],  # NOT NULL制約があるため必須
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
                     contract_data.get('contract_end_date', ''),
@@ -1276,7 +1168,7 @@ class OrderManagementDB:
         try:
             # 発注書情報を取得
             cursor.execute("""
-                SELECT program_id, contract_start_date, contract_end_date
+                SELECT production_id, contract_start_date, contract_end_date
                 FROM order_contracts WHERE id = ?
             """, (contract_id,))
 
@@ -1284,17 +1176,17 @@ class OrderManagementDB:
             if not row:
                 return False
 
-            program_id, start_date, end_date = row
+            production_id, start_date, end_date = row
 
             # 番組マスタを更新
             now = datetime.now()
             cursor.execute("""
-                UPDATE programs SET
+                UPDATE productions SET
                     start_date = ?,
                     end_date = ?,
                     updated_at = ?
                 WHERE id = ?
-            """, (start_date, end_date, now, program_id))
+            """, (start_date, end_date, now, production_id))
 
             conn.commit()
             return True
@@ -1312,13 +1204,13 @@ class OrderManagementDB:
 
         try:
             cursor.execute("""
-                SELECT oc.id, oc.program_id, prog.name as program_name,
+                SELECT oc.id, oc.production_id, prod.name as program_name,
                        oc.partner_id, p.name as partner_name,
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
                        oc.pdf_distributed_date
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE DATE(oc.contract_end_date) BETWEEN DATE('now')
                       AND DATE('now', '+' || ? || ' days')
@@ -1350,7 +1242,7 @@ class OrderManagementDB:
                         {
                             'order_id': 発注ID,
                             'order_number': 発注番号,
-                            'project_name': 案件名,
+                            'project_name': 制作物名,
                             'item_name': 項目名,
                             'amount': 金額,
                             'expected_payment_date': 支払予定日,
@@ -1376,9 +1268,9 @@ class OrderManagementDB:
                 SELECT
                     eo.id,
                     eo.order_number,
-                    eo.project_id,
+                    eo.production_id,
                     p.name as project_name,
-                    prog.broadcast_days,
+                    prod.broadcast_days,
                     eo.item_name,
                     eo.supplier_id,
                     eo.expected_payment_amount,
@@ -1391,11 +1283,11 @@ class OrderManagementDB:
                     oc.unit_price,
                     COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
                 FROM expenses_order eo
-                LEFT JOIN projects p ON eo.project_id = p.id
-                LEFT JOIN programs prog ON p.program_id = prog.id
+                LEFT JOIN productions p ON eo.production_id = p.id
+                LEFT JOIN productions prod ON p.production_id = prod.id
                 LEFT JOIN order_contracts oc ON (
-                    (oc.project_id IS NOT NULL AND eo.project_id = oc.project_id AND eo.item_name = oc.item_name)
-                    OR (oc.project_id IS NULL AND p.program_id = oc.program_id)
+                    (oc.production_id IS NOT NULL AND eo.production_id = oc.production_id AND eo.item_name = oc.item_name)
+                    OR (oc.production_id IS NULL AND p.production_id = oc.production_id)
                 ) AND eo.supplier_id = oc.partner_id
                 WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
                 ORDER BY eo.supplier_id, eo.expected_payment_date
@@ -1407,7 +1299,7 @@ class OrderManagementDB:
             partners_dict = {}
 
             for order in orders:
-                (order_id, order_number, project_id, project_name, broadcast_days, item_name,
+                (order_id, order_number, production_id, project_name, broadcast_days, item_name,
                  supplier_id, amount, payment_date, payment_status,
                  payment_matched_id, payment_difference, order_type,
                  payment_type, unit_price, payment_timing) = order
@@ -1653,7 +1545,7 @@ class OrderManagementDB:
         """データベーススキーマを階層構造対応に拡張
 
         実行内容:
-        1. programsテーブルに program_type, parent_program_id を追加
+        1. programsテーブルに production_type, parent_production_id を追加
         2. projectsテーブルに project_type を追加
         3. 既存データにデフォルト値を設定
 
@@ -1669,25 +1561,25 @@ class OrderManagementDB:
             cursor.execute("PRAGMA table_info(programs)")
             columns = [col[1] for col in cursor.fetchall()]
 
-            if 'program_type' not in columns:
+            if 'production_type' not in columns:
                 log_message("programsテーブルにprogram_typeカラムを追加")
                 cursor.execute("""
                     ALTER TABLE programs
-                    ADD COLUMN program_type TEXT DEFAULT 'レギュラー'
+                    ADD COLUMN production_type TEXT DEFAULT 'レギュラー'
                 """)
 
                 # 既存データにデフォルト値を設定
                 cursor.execute("""
-                    UPDATE programs
-                    SET program_type = 'レギュラー'
-                    WHERE program_type IS NULL
+                    UPDATE productions
+                    SET production_type = 'レギュラー'
+                    WHERE production_type IS NULL
                 """)
 
-            if 'parent_program_id' not in columns:
+            if 'parent_production_id' not in columns:
                 log_message("programsテーブルにparent_program_idカラムを追加")
                 cursor.execute("""
                     ALTER TABLE programs
-                    ADD COLUMN parent_program_id INTEGER REFERENCES programs(id)
+                    ADD COLUMN parent_production_id INTEGER REFERENCES programs(id)
                 """)
 
             # projectsテーブルの拡張
@@ -1703,7 +1595,7 @@ class OrderManagementDB:
 
                 # 既存のtypeフィールドの値をproject_typeに移行
                 cursor.execute("""
-                    UPDATE projects
+                    UPDATE productions
                     SET project_type = CASE
                         WHEN type = 'レギュラー' THEN '通常'
                         WHEN type = '単発' THEN 'イベント'
@@ -1727,33 +1619,32 @@ class OrderManagementDB:
     # 番組階層関連の操作
     # ========================================
 
-    def get_programs_with_hierarchy(self, search_term: str = "",
-                                    program_type: str = "",
+    def get_productions_with_hierarchy(self, search_term: str = "",
+                                    production_type: str = "",
                                     include_children: bool = True) -> List[Tuple]:
-        """番組一覧を階層情報付きで取得
+        """制作物一覧を階層情報付きで取得
 
         Args:
             search_term: 検索キーワード
-            program_type: 番組種別フィルタ（'レギュラー'/'単発'/'コーナー'）
-            include_children: コーナー（子番組）を含めるか
+            production_type: 制作物種別フィルタ（'レギュラー番組'/'特別番組'等）
+            include_children: 子制作物を含めるか
 
         Returns:
-            List[Tuple]: (id, name, description, start_date, end_date,
-                         broadcast_time, broadcast_days, status,
-                         program_type, parent_program_id, parent_name)
+            List[Tuple]: (id, name, description, production_type, start_date, end_date,
+                         start_time, end_time, broadcast_time, broadcast_days, status,
+                         parent_production_id, parent_name)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             query = """
-                SELECT p.id, p.name, p.description, p.start_date, p.end_date,
-                       p.broadcast_time, p.broadcast_days, p.status,
-                       COALESCE(p.program_type, 'レギュラー') as program_type,
-                       p.parent_program_id,
+                SELECT p.id, p.name, p.description, p.production_type, p.start_date, p.end_date,
+                       p.start_time, p.end_time, p.broadcast_time, p.broadcast_days, p.status,
+                       p.parent_production_id,
                        parent.name as parent_name
-                FROM programs p
-                LEFT JOIN programs parent ON p.parent_program_id = parent.id
+                FROM productions p
+                LEFT JOIN productions parent ON p.parent_production_id = parent.id
                 WHERE 1=1
             """
             params = []
@@ -1762,61 +1653,60 @@ class OrderManagementDB:
                 query += " AND p.name LIKE ?"
                 params.append(f"%{search_term}%")
 
-            if program_type:
-                query += " AND COALESCE(p.program_type, 'レギュラー') = ?"
-                params.append(program_type)
+            if production_type:
+                query += " AND p.production_type = ?"
+                params.append(production_type)
 
             if not include_children:
-                query += " AND p.parent_program_id IS NULL"
+                query += " AND p.parent_production_id IS NULL"
 
-            query += " ORDER BY p.parent_program_id NULLS FIRST, p.name"
+            query += " ORDER BY p.parent_production_id NULLS FIRST, p.name"
 
             cursor.execute(query, params)
             return cursor.fetchall()
         finally:
             conn.close()
 
-    def get_program_children(self, parent_program_id: int) -> List[Tuple]:
-        """指定番組の子番組（コーナー）一覧を取得
+    def get_production_children(self, parent_production_id: int) -> List[Tuple]:
+        """指定制作物の子制作物一覧を取得
 
         Args:
-            parent_program_id: 親番組ID
+            parent_production_id: 親制作物ID
 
         Returns:
-            List[Tuple]: (id, name, description, start_date, end_date,
-                         broadcast_time, broadcast_days, status, program_type)
+            List[Tuple]: (id, name, description, production_type, start_date, end_date,
+                         start_time, end_time, broadcast_time, broadcast_days, status)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT id, name, description, start_date, end_date,
-                       broadcast_time, broadcast_days, status,
-                       COALESCE(program_type, 'コーナー') as program_type
-                FROM programs
-                WHERE parent_program_id = ?
+                SELECT id, name, description, production_type, start_date, end_date,
+                       start_time, end_time, broadcast_time, broadcast_days, status
+                FROM productions
+                WHERE parent_production_id = ?
                 ORDER BY name
-            """, (parent_program_id,))
+            """, (parent_production_id,))
             return cursor.fetchall()
         finally:
             conn.close()
 
     # ========================================
-    # 案件（プロジェクト）関連の拡張操作
+    # 制作物関連の拡張操作
     # ========================================
 
-    def get_projects_by_program(self, program_id: int,
+    def get_productions_by_parent(self, production_id: int,
                                 project_type: str = "") -> List[Tuple]:
-        """指定番組に紐づく案件一覧を取得
+        """指定制作物に紐づく制作物一覧を取得
 
         Args:
-            program_id: 番組ID
-            project_type: 案件種別フィルタ（'イベント'/'特別企画'/'通常'）
+            production_id: 制作物ID
+            project_type: 制作物種別フィルタ（'イベント'/'特別企画'/'通常'）
 
         Returns:
             List[Tuple]: (id, name, implementation_date, project_type,
-                         parent_id, program_id, program_name)
+                         parent_id, production_id, program_name)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -1825,13 +1715,13 @@ class OrderManagementDB:
             query = """
                 SELECT p.id, p.name, p.implementation_date,
                        COALESCE(p.project_type, 'イベント') as project_type,
-                       p.parent_id, p.program_id,
-                       prog.name as program_name
-                FROM projects p
-                LEFT JOIN programs prog ON p.program_id = prog.id
-                WHERE p.program_id = ?
+                       p.parent_id, p.production_id,
+                       prod.name as program_name
+                FROM productions p
+                LEFT JOIN productions prod ON p.production_id = prod.id
+                WHERE p.production_id = ?
             """
-            params = [program_id]
+            params = [production_id]
 
             if project_type:
                 query += " AND COALESCE(p.project_type, 'イベント') = ?"
@@ -1844,18 +1734,16 @@ class OrderManagementDB:
         finally:
             conn.close()
 
-    def get_order_contracts_with_project_info(self, search_term: str = "",
-                                              program_id: int = None,
-                                              project_id: int = None) -> List[Tuple]:
-        """発注書一覧を案件情報付きで取得
+    def get_order_contracts_with_production_info(self, search_term: str = "",
+                                                  production_id: int = None) -> List[Tuple]:
+        """発注書一覧を制作物情報付きで取得
 
         Args:
             search_term: 検索キーワード
-            program_id: 番組IDフィルタ
-            project_id: 案件IDフィルタ
+            production_id: 制作物IDフィルタ
 
         Returns:
-            List[Tuple]: (id, program_id, program_name, project_id, project_name,
+            List[Tuple]: (id, production_id, production_name,
                          partner_id, partner_name, item_name, contract_start_date,
                          contract_end_date, order_type, order_status, ...)
         """
@@ -1864,35 +1752,28 @@ class OrderManagementDB:
 
         try:
             query = """
-                SELECT oc.id, oc.program_id, prog.name as program_name,
-                       oc.project_id, proj.name as project_name,
+                SELECT oc.id, oc.production_id, prod.name as production_name,
                        oc.partner_id, part.name as partner_name,
                        oc.item_name, oc.contract_start_date, oc.contract_end_date,
                        oc.order_type, oc.order_status, oc.pdf_status,
                        oc.notes, oc.created_at, oc.updated_at,
                        oc.payment_type, oc.unit_price
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
-                LEFT JOIN projects proj ON oc.project_id = proj.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners part ON oc.partner_id = part.id
                 WHERE 1=1
             """
             params = []
 
             if search_term:
-                query += """ AND (prog.name LIKE ? OR proj.name LIKE ?
-                            OR part.name LIKE ? OR oc.item_name LIKE ?)"""
-                params.extend([f"%{search_term}%"] * 4)
+                query += """ AND (prod.name LIKE ? OR part.name LIKE ? OR oc.item_name LIKE ?)"""
+                params.extend([f"%{search_term}%"] * 3)
 
-            if program_id:
-                query += " AND oc.program_id = ?"
-                params.append(program_id)
+            if production_id:
+                query += " AND oc.production_id = ?"
+                params.append(production_id)
 
-            if project_id:
-                query += " AND oc.project_id = ?"
-                params.append(project_id)
-
-            query += " ORDER BY oc.contract_start_date DESC, prog.name, proj.name"
+            query += " ORDER BY oc.contract_start_date DESC, prod.name"
 
             cursor.execute(query, params)
             return cursor.fetchall()
@@ -2017,8 +1898,8 @@ class OrderManagementDB:
 
         Args:
             csv_data: CSVから読み込んだ辞書のリスト
-                     期待されるキー: ID, 番組名, 説明, 開始日, 終了日,
-                                    放送時間, 放送曜日, ステータス, 番組種別, 親番組ID
+                     期待されるキー: ID, 制作物名, 説明, 開始日, 終了日,
+                                    放送時間, 放送曜日, ステータス, 制作物種別, 親制作物ID
             overwrite: True=上書き（既存データ削除）、False=追記/更新
 
         Returns:
@@ -2038,15 +1919,15 @@ class OrderManagementDB:
         try:
             # 上書きモードの場合は既存データを削除
             if overwrite:
-                cursor.execute("DELETE FROM programs")
+                cursor.execute("DELETE FROM productions")
                 conn.commit()
             for row_num, row_data in enumerate(csv_data, start=2):
                 try:
                     # 必須項目チェック
-                    program_name = row_data.get('番組名', '').strip()
+                    program_name = row_data.get('制作物名', '').strip()
 
                     if not program_name:
-                        result['errors'].append({'row': row_num, 'reason': '番組名が空です'})
+                        result['errors'].append({'row': row_num, 'reason': '制作物名が空です'})
                         result['skipped'] += 1
                         continue
 
@@ -2057,8 +1938,8 @@ class OrderManagementDB:
                     broadcast_time = row_data.get('放送時間', '').strip()
                     broadcast_days_raw = row_data.get('放送曜日', '').strip()
                     status = row_data.get('ステータス', '放送中').strip()
-                    program_type = row_data.get('番組種別', 'レギュラー').strip()
-                    parent_program_id_str = row_data.get('親番組ID', '').strip()
+                    production_type = row_data.get('制作物種別', 'レギュラー').strip()
+                    parent_program_id_str = row_data.get('親制作物ID', '').strip()
 
                     # 放送曜日に日付が入っていないかチェック（データ整合性）
                     if broadcast_days_raw and parse_flexible_date(broadcast_days_raw):
@@ -2088,55 +1969,55 @@ class OrderManagementDB:
                             result['skipped'] += 1
                             continue
 
-                    # 親番組IDのチェック
-                    parent_program_id = None
+                    # 親制作物IDのチェック
+                    parent_production_id = None
                     if parent_program_id_str and parent_program_id_str.isdigit():
-                        parent_program_id = int(parent_program_id_str)
-                        cursor.execute("SELECT id FROM programs WHERE id = ?", (parent_program_id,))
+                        parent_production_id = int(parent_program_id_str)
+                        cursor.execute("SELECT id FROM productions WHERE id = ?", (parent_production_id,))
                         if not cursor.fetchone():
-                            result['errors'].append({'row': row_num, 'reason': f'親番組ID {parent_program_id} が見つかりません'})
+                            result['errors'].append({'row': row_num, 'reason': f'親制作物ID {parent_production_id} が見つかりません'})
                             result['skipped'] += 1
                             continue
 
                     program_id_str = row_data.get('ID', '').strip()
                     now = datetime.now()
 
-                    # UPSERTロジック: IDまたは番組名で既存レコードを検索
+                    # UPSERTロジック: IDまたは制作物名で既存レコードを検索
                     existing_program = None
                     if program_id_str and program_id_str.isdigit():
                         # IDが指定されている場合はIDで検索
-                        program_id = int(program_id_str)
-                        cursor.execute("SELECT id FROM programs WHERE id = ?", (program_id,))
+                        production_id = int(program_id_str)
+                        cursor.execute("SELECT id FROM productions WHERE id = ?", (production_id,))
                         existing_program = cursor.fetchone()
                     else:
-                        # IDがない場合は番組名で検索
-                        cursor.execute("SELECT id FROM programs WHERE name = ?", (program_name,))
+                        # IDがない場合は制作物名で検索
+                        cursor.execute("SELECT id FROM productions WHERE name = ?", (program_name,))
                         existing_program = cursor.fetchone()
 
                     if existing_program:
-                        # 既存番組を更新
+                        # 既存制作物を更新
                         existing_id = existing_program[0]
                         cursor.execute("""
-                            UPDATE programs
+                            UPDATE productions
                             SET name=?, description=?, start_date=?, end_date=?,
                                 broadcast_time=?, broadcast_days=?, status=?,
-                                program_type=?, parent_program_id=?, updated_at=?
+                                production_type=?, parent_production_id=?, updated_at=?
                             WHERE id=?
                         """, (program_name, description, start_date or None, end_date or None,
-                              broadcast_time, broadcast_days, status, program_type,
-                              parent_program_id, now, existing_id))
+                              broadcast_time, broadcast_days, status, production_type,
+                              parent_production_id, now, existing_id))
                         result['updated'] += 1
                         result['success'] += 1
                     else:
                         # 新規追加
                         cursor.execute("""
-                            INSERT INTO programs (name, description, start_date, end_date,
+                            INSERT INTO productions (name, description, start_date, end_date,
                                                  broadcast_time, broadcast_days, status,
-                                                 program_type, parent_program_id, created_at, updated_at)
+                                                 production_type, parent_production_id, created_at, updated_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (program_name, description, start_date or None, end_date or None,
-                              broadcast_time, broadcast_days, status, program_type,
-                              parent_program_id, now, now))
+                              broadcast_time, broadcast_days, status, production_type,
+                              parent_production_id, now, now))
                         result['inserted'] += 1
                         result['success'] += 1
 
@@ -2158,7 +2039,7 @@ class OrderManagementDB:
 
         Args:
             csv_data: CSVから読み込んだ辞書のリスト
-                     期待されるキー: ID, 番組名, 取引先名, 委託開始日, 委託終了日,
+                     期待されるキー: ID, 制作物名, 取引先名, 委託開始日, 委託終了日,
                                     発注種別, 発注ステータス, PDFステータス, 備考
             overwrite: True=上書き（既存データ削除）、False=追記/更新
 
@@ -2184,13 +2065,13 @@ class OrderManagementDB:
             for row_num, row_data in enumerate(csv_data, start=2):
                 try:
                     # 必須項目チェック
-                    program_name = row_data.get('番組名', '').strip()
+                    program_name = row_data.get('制作物名', '').strip()
                     partner_name = row_data.get('取引先名', '').strip()
                     start_date_raw = row_data.get('委託開始日', '').strip()
                     end_date_raw = row_data.get('委託終了日', '').strip()
 
                     if not program_name:
-                        result['errors'].append({'row': row_num, 'reason': '番組名が空です'})
+                        result['errors'].append({'row': row_num, 'reason': '制作物名が空です'})
                         result['skipped'] += 1
                         continue
 
@@ -2222,8 +2103,8 @@ class OrderManagementDB:
                         result['skipped'] += 1
                         continue
 
-                    # 番組IDを検索
-                    cursor.execute("SELECT id FROM programs WHERE name = ?", (program_name,))
+                    # 制作物IDを検索
+                    cursor.execute("SELECT id FROM productions WHERE name = ?", (program_name,))
                     program_result = cursor.fetchone()
 
                     if not program_result:
@@ -2231,7 +2112,7 @@ class OrderManagementDB:
                         result['skipped'] += 1
                         continue
 
-                    program_id = program_result[0]
+                    production_id = program_result[0]
 
                     # 取引先IDを検索
                     cursor.execute("SELECT id FROM partners WHERE name = ?", (partner_name,))
@@ -2245,7 +2126,7 @@ class OrderManagementDB:
                     partner_id = partner_result[0]
 
                     # その他のデータ取得（全項目対応）
-                    project_name = row_data.get('案件名', '').strip()
+                    project_name = row_data.get('制作物名', '').strip()
                     item_name = row_data.get('費用項目名', '').strip()
                     period_type = row_data.get('契約期間種別', '半年').strip()
                     order_type = row_data.get('発注種別', '発注書').strip()
@@ -2275,13 +2156,13 @@ class OrderManagementDB:
                     auto_renewal_enabled = 1 if auto_renewal_str == '有効' else 0
                     renewal_period_months = int(renewal_period_str) if renewal_period_str.isdigit() else 3
 
-                    # 案件IDを取得（案件名が指定されている場合）
-                    project_id = None
+                    # 制作物IDを取得（制作物名が指定されている場合）
+                    production_id = None
                     if project_name:
-                        cursor.execute("SELECT id FROM projects WHERE name = ?", (project_name,))
+                        cursor.execute("SELECT id FROM productions WHERE name = ?", (project_name,))
                         project_result = cursor.fetchone()
                         if project_result:
-                            project_id = project_result[0]
+                            production_id = project_result[0]
 
                     contract_id_str = row_data.get('ID', '').strip()
                     now = datetime.now()
@@ -2297,9 +2178,9 @@ class OrderManagementDB:
                         # IDがない場合は番組+取引先+期間で検索
                         cursor.execute("""
                             SELECT id FROM order_contracts
-                            WHERE program_id = ? AND partner_id = ?
+                            WHERE production_id = ? AND partner_id = ?
                             AND contract_start_date = ? AND contract_end_date = ?
-                        """, (program_id, partner_id, start_date, end_date))
+                        """, (production_id, partner_id, start_date, end_date))
                         existing_contract = cursor.fetchone()
 
                     if existing_contract:
@@ -2307,7 +2188,7 @@ class OrderManagementDB:
                         existing_id = existing_contract[0]
                         cursor.execute("""
                             UPDATE order_contracts
-                            SET program_id=?, partner_id=?, project_id=?, item_name=?,
+                            SET production_id=?, partner_id=?, production_id=?, item_name=?,
                                 contract_start_date=?, contract_end_date=?, contract_period_type=?,
                                 order_type=?, order_status=?, pdf_status=?, pdf_file_path=?, pdf_distributed_date=?,
                                 payment_type=?, unit_price=?, payment_timing=?, contract_type=?,
@@ -2316,7 +2197,7 @@ class OrderManagementDB:
                                 auto_renewal_enabled=?, renewal_period_months=?, termination_notice_date=?,
                                 notes=?, updated_at=?
                             WHERE id=?
-                        """, (program_id, partner_id, project_id, item_name,
+                        """, (production_id, partner_id, production_id, item_name,
                               start_date, end_date, period_type,
                               order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
                               payment_type, unit_price, payment_timing, contract_type,
@@ -2330,7 +2211,7 @@ class OrderManagementDB:
                         # 新規追加（全項目対応）
                         cursor.execute("""
                             INSERT INTO order_contracts (
-                                program_id, partner_id, project_id, item_name,
+                                production_id, partner_id, production_id, item_name,
                                 contract_start_date, contract_end_date, contract_period_type,
                                 order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
                                 payment_type, unit_price, payment_timing, contract_type,
@@ -2339,7 +2220,7 @@ class OrderManagementDB:
                                 auto_renewal_enabled, renewal_period_months, termination_notice_date,
                                 notes, created_at, updated_at
                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (program_id, partner_id, project_id, item_name,
+                        """, (production_id, partner_id, production_id, item_name,
                               start_date, end_date, period_type,
                               order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
                               payment_type, unit_price, payment_timing, contract_type,
@@ -2455,11 +2336,11 @@ class OrderManagementDB:
             today = datetime.now().strftime('%Y-%m-%d')
 
             cursor.execute("""
-                SELECT oc.id, prog.name as program_name, p.name as partner_name,
+                SELECT oc.id, prod.name as program_name, p.name as partner_name,
                        oc.contract_end_date, oc.renewal_period_months,
                        oc.renewal_count, oc.item_name
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE oc.auto_renewal_enabled = 1
                   AND (oc.termination_notice_date IS NULL OR oc.termination_notice_date = '')
@@ -2559,12 +2440,12 @@ class OrderManagementDB:
             today_str = today.strftime('%Y-%m-%d')
 
             cursor.execute("""
-                SELECT oc.id, prog.name as program_name, p.name as partner_name,
+                SELECT oc.id, prod.name as program_name, p.name as partner_name,
                        oc.contract_end_date, oc.auto_renewal_enabled,
                        oc.termination_notice_date, oc.renewal_count,
                        oc.item_name
                 FROM order_contracts oc
-                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE oc.contract_end_date BETWEEN ? AND ?
                   AND (oc.termination_notice_date IS NULL OR oc.termination_notice_date = '')
