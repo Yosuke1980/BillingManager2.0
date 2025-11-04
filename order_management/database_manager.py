@@ -878,13 +878,12 @@ class OrderManagementDB:
                 FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
-                LEFT JOIN productions prod ON oc.production_id = prod.id
                 WHERE 1=1
             """
             params = []
 
             if search_term:
-                query += " AND (prog.name LIKE ? OR p.name LIKE ?)"
+                query += " AND (prod.name LIKE ? OR p.name LIKE ?)"
                 params.extend([f"%{search_term}%", f"%{search_term}%"])
 
             if pdf_status:
@@ -1696,38 +1695,47 @@ class OrderManagementDB:
     # 制作物関連の拡張操作
     # ========================================
 
-    def get_productions_by_parent(self, production_id: int,
-                                project_type: str = "") -> List[Tuple]:
-        """指定制作物に紐づく制作物一覧を取得
+    def get_productions_by_parent(self, parent_production_id: int = None,
+                                production_type: str = "") -> List[Tuple]:
+        """指定制作物に紐づく子制作物一覧を取得
 
         Args:
-            production_id: 制作物ID
-            project_type: 制作物種別フィルタ（'イベント'/'特別企画'/'通常'）
+            parent_production_id: 親制作物ID（Noneの場合はトップレベルを取得）
+            production_type: 制作物種別フィルタ（'イベント'/'特別企画'/'通常'など）
 
         Returns:
-            List[Tuple]: (id, name, implementation_date, project_type,
-                         parent_id, production_id, program_name)
+            List[Tuple]: (id, name, start_date, production_type,
+                         parent_production_id)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
-            query = """
-                SELECT p.id, p.name, p.implementation_date,
-                       COALESCE(p.project_type, 'イベント') as project_type,
-                       p.parent_id, p.production_id,
-                       prod.name as program_name
-                FROM productions p
-                LEFT JOIN productions prod ON p.production_id = prod.id
-                WHERE p.production_id = ?
-            """
-            params = [production_id]
+            if parent_production_id is None:
+                # 親IDがNullの制作物（トップレベル）を取得
+                query = """
+                    SELECT id, name, start_date,
+                           COALESCE(production_type, 'イベント') as production_type,
+                           parent_production_id
+                    FROM productions
+                    WHERE parent_production_id IS NULL
+                """
+                params = []
+            else:
+                query = """
+                    SELECT id, name, start_date,
+                           COALESCE(production_type, 'イベント') as production_type,
+                           parent_production_id
+                    FROM productions
+                    WHERE parent_production_id = ?
+                """
+                params = [parent_production_id]
 
-            if project_type:
-                query += " AND COALESCE(p.project_type, 'イベント') = ?"
-                params.append(project_type)
+            if production_type:
+                query += " AND COALESCE(production_type, 'イベント') = ?"
+                params.append(production_type)
 
-            query += " ORDER BY p.implementation_date DESC, p.name"
+            query += " ORDER BY start_date DESC, name"
 
             cursor.execute(query, params)
             return cursor.fetchall()

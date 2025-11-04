@@ -194,9 +194,9 @@ class OrderContractWidget(QWidget):
         if order_status_filter == "すべて":
             order_status_filter = None
 
-        # 新しい階層対応メソッドを使用
+        # production対応メソッドを使用
         try:
-            contracts = self.db.get_order_contracts_with_project_info(search_term)
+            contracts = self.db.get_order_contracts_with_production_info(search_term)
         except AttributeError:
             # 古いメソッドにフォールバック
             contracts = self.db.get_order_contracts(search_term, None, order_type_filter, order_status_filter)

@@ -14,7 +14,7 @@ import shutil
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
-from order_management.ui.program_edit_dialog import ProgramEditDialog
+from order_management.ui.production_edit_dialog import ProductionEditDialog
 from order_management.ui.partner_master_widget import PartnerEditDialog
 from partner_manager import PartnerManager
 
@@ -999,7 +999,7 @@ class OrderContractEditDialog(QDialog):
 
     def add_new_program(self):
         """新規番組を追加"""
-        dialog = ProgramEditDialog(self)
+        dialog = ProductionEditDialog(self)
         if dialog.exec_():
             # 番組一覧を再読み込み
             current_count = self.program_combo.count()

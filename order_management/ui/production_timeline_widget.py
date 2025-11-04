@@ -165,21 +165,23 @@ class ProductionTimelineWidget(QWidget):
         production_type = self.type_filter.currentData()
         program_id = self.program_filter.currentData()
 
-        # 番組・イベント取得
-        productions = self.db.get_productions_by_parent(
-            program_id if program_id else 0,
-            project_type=production_type or ""
+        # 番組・イベント取得（全体から取得し、後でフィルタリング）
+        productions = self.db.get_productions_with_hierarchy(
+            search_term="",
+            production_type=production_type or "",
+            include_children=True
         )
 
         # フィルタリング
         filtered_productions = []
         for production in productions:
-            # production: (id, name, implementation_date, project_type,
-            #             parent_id, production_id, program_name)
-            impl_date = production[2]
+            # production: (id, name, description, production_type, start_date, end_date,
+            #             start_time, end_time, broadcast_time, broadcast_days, status,
+            #             parent_production_id, parent_name)
+            start_date_val = production[4]  # start_date
 
             # 日付フィルター
-            if impl_date and (impl_date < start_date or impl_date > end_date):
+            if start_date_val and (start_date_val < start_date or start_date_val > end_date):
                 continue
 
             filtered_productions.append(production)
@@ -192,7 +194,7 @@ class ProductionTimelineWidget(QWidget):
         for production in filtered_productions:
             production_id = production[0]
             production_name = production[1]
-            implementation_date = production[2] or ""
+            start_date_display = production[4] or ""  # start_date
             production_type_str = production[3] or "イベント"
 
             # 実績合計取得
@@ -202,7 +204,7 @@ class ProductionTimelineWidget(QWidget):
 
             # 番組・イベントノード作成
             production_item = QTreeWidgetItem([
-                implementation_date,
+                start_date_display,
                 production_name,
                 production_type_str,
                 f"{production_total:,.0f}",
