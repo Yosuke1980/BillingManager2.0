@@ -170,8 +170,44 @@ class RadioBillingApp(QMainWindow):
         self.data_management_tab.expense_tab.refresh_data()
         self.data_management_tab.master_tab.refresh_data()
 
+        # 契約自動延長チェック（起動時）
+        self._check_auto_renewal_on_startup()
+
         # 起動時アラートとバッジ更新を統合（パフォーマンス最適化）
         self._check_and_update_urgent_status()
+
+    def _check_auto_renewal_on_startup(self):
+        """起動時に契約自動延長をチェック（通知のみ、自動実行はしない）"""
+        try:
+            # 自動延長対象の契約を取得
+            contracts = self.order_db.get_contracts_for_auto_renewal()
+
+            if contracts and len(contracts) > 0:
+                # 確認メッセージを表示
+                message = f"📝 <b>契約自動延長の通知</b><br><br>"
+                message += f"以下の{len(contracts)}件の契約が自動延長の対象です:<br><br>"
+
+                for i, contract in enumerate(contracts[:3], 1):  # 最初の3件のみ表示
+                    program_name = contract[1]
+                    partner_name = contract[2]
+                    end_date = contract[3]
+                    message += f"{i}. {program_name} - {partner_name}<br>"
+                    message += f"   終了日: {end_date}<br>"
+
+                if len(contracts) > 3:
+                    message += f"<br>... 他{len(contracts) - 3}件<br>"
+
+                message += "<br>発注管理タブの「自動延長チェック」ボタンから実行できます。"
+
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Information)
+                msg_box.setWindowTitle("契約自動延長の通知")
+                msg_box.setTextFormat(Qt.RichText)
+                msg_box.setText(message)
+                msg_box.exec_()
+
+        except Exception as e:
+            log_message(f"契約自動延長チェックエラー: {e}")
 
     def _check_and_update_urgent_status(self):
         """起動時アラートとバッジ更新を統合（パフォーマンス最適化版）

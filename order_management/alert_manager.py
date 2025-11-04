@@ -112,6 +112,63 @@ class AlertManager:
         finally:
             conn.close()
 
+    def get_contract_expiring_alerts(self, days_before: int = 30) -> List[Dict]:
+        """契約期限切れ間近アラートを取得
+
+        条件:
+        - 契約終了日が指定日数以内
+        - 終了通知未受領
+        - 自動延長が有効な契約も含む
+
+        Args:
+            days_before: 何日前から対象にするか（デフォルト: 30日）
+
+        Returns:
+            List[Dict]: アラート情報のリスト
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            today = datetime.now().date()
+            target_date = today + timedelta(days=days_before)
+            today_str = today.strftime("%Y-%m-%d")
+            target_str = target_date.strftime("%Y-%m-%d")
+
+            cursor.execute("""
+                SELECT oc.id, prog.name as program_name, p.name as partner_name,
+                       oc.contract_end_date, oc.auto_renewal_enabled,
+                       oc.termination_notice_date, oc.item_name
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN partners p ON oc.partner_id = p.id
+                WHERE oc.contract_end_date BETWEEN ? AND ?
+                  AND (oc.termination_notice_date IS NULL OR oc.termination_notice_date = '')
+                ORDER BY oc.contract_end_date
+            """, (today_str, target_str))
+
+            rows = cursor.fetchall()
+            alerts = []
+
+            for row in rows:
+                end_date = datetime.strptime(row[3], '%Y-%m-%d').date()
+                days_until = (end_date - today).days
+
+                alerts.append({
+                    'contract_id': row[0],
+                    'program_name': row[1],
+                    'partner_name': row[2] or "(未設定)",
+                    'contract_end_date': row[3],
+                    'days_until_expiry': days_until,
+                    'auto_renewal_enabled': bool(row[4]),
+                    'item_name': row[6] or "",
+                })
+
+            return alerts
+
+        finally:
+            conn.close()
+
     def get_all_alerts(self) -> Dict[str, List[Dict]]:
         """全アラートを取得
 
@@ -121,6 +178,7 @@ class AlertManager:
         return {
             'invoice_waiting': self.get_invoice_waiting_alerts(),
             'draft_unsent': self.get_draft_unsent_alerts(),
+            'contract_expiring': self.get_contract_expiring_alerts(30),
         }
 
     def get_alert_count(self) -> Dict[str, int]:
@@ -133,5 +191,6 @@ class AlertManager:
         return {
             'invoice_waiting': len(alerts['invoice_waiting']),
             'draft_unsent': len(alerts['draft_unsent']),
-            'total': len(alerts['invoice_waiting']) + len(alerts['draft_unsent']),
+            'contract_expiring': len(alerts['contract_expiring']),
+            'total': len(alerts['invoice_waiting']) + len(alerts['draft_unsent']) + len(alerts['contract_expiring']),
         }
