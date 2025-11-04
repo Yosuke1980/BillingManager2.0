@@ -173,6 +173,15 @@ class OrderContractWidget(QWidget):
 
         button_layout.addSpacing(20)
 
+        # 契約延長ボタン
+        extend_btn = create_button("契約延長", self.extend_contract_manual)
+        button_layout.addWidget(extend_btn)
+
+        auto_extend_btn = create_button("自動延長チェック", self.check_auto_renewal)
+        button_layout.addWidget(auto_extend_btn)
+
+        button_layout.addSpacing(20)
+
         # CSV出力・読み込みボタン
         export_csv_btn = create_button("CSV出力", self.export_to_csv)
         button_layout.addWidget(export_csv_btn)
@@ -521,28 +530,60 @@ class OrderContractWidget(QWidget):
             with codecs.open(file_path, 'w', 'utf-8-sig') as f:
                 writer = csv.writer(f)
 
-                # ヘッダー行
+                # ヘッダー行（全項目対応）
                 writer.writerow([
-                    'ID', '番組名', '取引先名', '委託開始日', '委託終了日',
-                    '発注種別', '発注ステータス', 'PDFステータス', '備考'
+                    'ID', '番組名', '案件名', '費用項目名', '取引先名',
+                    '委託開始日', '委託終了日', '契約期間種別',
+                    '発注種別', '発注ステータス', 'PDFステータス', 'PDFファイルパス', 'PDF配布日',
+                    '支払タイプ', '単価', '支払タイミング', '契約種別',
+                    '実施日', 'スポット金額', '発注カテゴリ',
+                    'メール件名', 'メール本文', 'メール送信先', 'メール送信日',
+                    '自動延長有効', '延長期間（月）', '終了通知受領日', '延長回数',
+                    '備考'
                 ])
 
-                # データ行
+                # データ行（全項目対応）
                 for contract in contracts:
-                    # contract: (id, program_id, program_name, partner_id, partner_name,
-                    #            contract_start_date, contract_end_date, contract_period_type,
-                    #            pdf_status, pdf_distributed_date, confirmed_by,
-                    #            pdf_file_path, notes, order_type, order_status, ...)
+                    # contract: (0:id, 1:program_id, 2:program_name, 3:partner_id, 4:partner_name,
+                    #            5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
+                    #            8:pdf_status, 9:pdf_distributed_date, 10:pdf_file_path, 11:notes,
+                    #            12:order_type, 13:order_status, 14:email_sent_date,
+                    #            15:project_name, 16:item_name,
+                    #            17:payment_type, 18:unit_price, 19:payment_timing, 20:contract_type,
+                    #            21:implementation_date, 22:spot_amount, 23:order_category,
+                    #            24:email_subject, 25:email_body, 26:email_to,
+                    #            27:auto_renewal_enabled, 28:renewal_period_months,
+                    #            29:termination_notice_date, 30:renewal_count)
                     writer.writerow([
                         contract[0],  # ID
                         contract[2] or '',  # 番組名
+                        contract[15] or '',  # 案件名
+                        contract[16] or '',  # 費用項目名
                         contract[4] or '',  # 取引先名
                         contract[5] or '',  # 委託開始日
                         contract[6] or '',  # 委託終了日
-                        contract[13] or '発注書',  # 発注種別
-                        contract[14] or '未',  # 発注ステータス
+                        contract[7] or '半年',  # 契約期間種別
+                        contract[12] or '発注書',  # 発注種別
+                        contract[13] or '未',  # 発注ステータス
                         contract[8] or '未配布',  # PDFステータス
-                        contract[12] or ''  # 備考
+                        contract[10] or '',  # PDFファイルパス
+                        contract[9] or '',  # PDF配布日
+                        contract[17] or '月額固定',  # 支払タイプ
+                        contract[18] or '',  # 単価
+                        contract[19] or '翌月末払い',  # 支払タイミング
+                        contract[20] or 'regular_fixed',  # 契約種別
+                        contract[21] or '',  # 実施日
+                        contract[22] or '',  # スポット金額
+                        contract[23] or 'レギュラー制作発注書',  # 発注カテゴリ
+                        contract[24] or '',  # メール件名
+                        contract[25] or '',  # メール本文
+                        contract[26] or '',  # メール送信先
+                        contract[14] or '',  # メール送信日
+                        '有効' if contract[27] == 1 else '無効',  # 自動延長有効
+                        contract[28] or 3,  # 延長期間（月）
+                        contract[29] or '',  # 終了通知受領日
+                        contract[30] or 0,  # 延長回数
+                        contract[11] or ''  # 備考
                     ])
 
             QMessageBox.information(
@@ -621,3 +662,102 @@ class OrderContractWidget(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"CSV読み込みに失敗しました:\n{e}")
+
+    def extend_contract_manual(self):
+        """選択した契約を手動で延長"""
+        selected_row = self.table.currentRow()
+        if selected_row < 0:
+            QMessageBox.warning(self, "警告", "延長する契約を選択してください。")
+            return
+
+        # UserRoleからIDを取得
+        contract_id = self.table.item(selected_row, 0).data(Qt.UserRole)
+        program_name = self.table.item(selected_row, 2).text()  # 番組名
+        end_date = self.table.item(selected_row, 8).text()  # 終了日
+
+        reply = QMessageBox.question(
+            self, "確認",
+            f"契約「{program_name}」を延長しますか?\n\n"
+            f"現在の終了日: {end_date}\n"
+            f"延長後、設定された期間（デフォルト3ヶ月）分、終了日が延長されます。",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                if self.db.extend_contract(contract_id, "手動延長", "ユーザー"):
+                    QMessageBox.information(self, "成功", "契約を延長しました。")
+                    self.load_contracts()
+                else:
+                    QMessageBox.warning(self, "失敗", "契約の延長に失敗しました。")
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"契約延長に失敗しました:\n{str(e)}")
+
+    def check_auto_renewal(self):
+        """自動延長対象の契約をチェックして一括延長"""
+        reply = QMessageBox.question(
+            self, "確認",
+            "自動延長チェックを実行しますか?\n\n"
+            "終了日が過ぎており、終了通知を受領していない契約を\n"
+            "自動的に延長します。",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.No:
+            return
+
+        try:
+            # 自動延長対象を取得
+            contracts = self.db.get_contracts_for_auto_renewal()
+
+            if not contracts:
+                QMessageBox.information(
+                    self, "自動延長チェック",
+                    "自動延長対象の契約はありません。"
+                )
+                return
+
+            # 確認メッセージを作成
+            message = f"以下の{len(contracts)}件の契約を延長します:\n\n"
+            for i, contract in enumerate(contracts[:5], 1):  # 最初の5件のみ表示
+                program_name = contract[1]
+                partner_name = contract[2]
+                end_date = contract[3]
+                message += f"{i}. {program_name} - {partner_name} (終了日: {end_date})\n"
+
+            if len(contracts) > 5:
+                message += f"... 他{len(contracts) - 5}件\n"
+
+            message += "\n実行してよろしいですか?"
+
+            reply = QMessageBox.question(
+                self, "自動延長実行確認",
+                message,
+                QMessageBox.Yes | QMessageBox.No
+            )
+
+            if reply == QMessageBox.No:
+                return
+
+            # 自動延長を実行
+            result = self.db.check_and_execute_auto_renewal("ユーザー")
+
+            # 結果を表示
+            result_message = f"自動延長チェックが完了しました。\n\n"
+            result_message += f"対象契約: {result['checked']}件\n"
+            result_message += f"延長成功: {result['extended']}件\n"
+            result_message += f"失敗: {result['failed']}件\n"
+
+            if result['failed'] > 0 and result['details']:
+                result_message += "\n失敗した契約:\n"
+                for contract_id, name, status in result['details']:
+                    if "失敗" in status or "エラー" in status:
+                        result_message += f"  - {name}: {status}\n"
+
+            QMessageBox.information(self, "自動延長完了", result_message)
+
+            # データを再読み込み
+            self.load_contracts()
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"自動延長チェックに失敗しました:\n{str(e)}")

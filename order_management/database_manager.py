@@ -947,10 +947,27 @@ class OrderManagementDB:
                        oc.pdf_file_path, oc.notes,
                        COALESCE(oc.order_type, '発注書') as order_type,
                        COALESCE(oc.order_status, '未') as order_status,
-                       oc.email_sent_date
+                       oc.email_sent_date,
+                       proj.name as project_name,
+                       oc.item_name,
+                       COALESCE(oc.payment_type, '月額固定') as payment_type,
+                       oc.unit_price,
+                       COALESCE(oc.payment_timing, '翌月末払い') as payment_timing,
+                       COALESCE(oc.contract_type, 'regular_fixed') as contract_type,
+                       oc.implementation_date,
+                       oc.spot_amount,
+                       COALESCE(oc.order_category, 'レギュラー制作発注書') as order_category,
+                       oc.email_subject,
+                       oc.email_body,
+                       oc.email_to,
+                       COALESCE(oc.auto_renewal_enabled, 1) as auto_renewal_enabled,
+                       COALESCE(oc.renewal_period_months, 3) as renewal_period_months,
+                       oc.termination_notice_date,
+                       COALESCE(oc.renewal_count, 0) as renewal_count
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
+                LEFT JOIN projects proj ON oc.project_id = proj.id
                 WHERE 1=1
             """
             params = []
@@ -2204,11 +2221,44 @@ class OrderManagementDB:
 
                     partner_id = partner_result[0]
 
-                    # その他のデータ取得
+                    # その他のデータ取得（全項目対応）
+                    project_name = row_data.get('案件名', '').strip()
+                    item_name = row_data.get('費用項目名', '').strip()
+                    period_type = row_data.get('契約期間種別', '半年').strip()
                     order_type = row_data.get('発注種別', '発注書').strip()
                     order_status = row_data.get('発注ステータス', '未').strip()
                     pdf_status = row_data.get('PDFステータス', '未配布').strip()
+                    pdf_file_path = row_data.get('PDFファイルパス', '').strip()
+                    pdf_distributed_date = row_data.get('PDF配布日', '').strip()
+                    payment_type = row_data.get('支払タイプ', '月額固定').strip()
+                    unit_price_str = row_data.get('単価', '').strip()
+                    payment_timing = row_data.get('支払タイミング', '翌月末払い').strip()
+                    contract_type = row_data.get('契約種別', 'regular_fixed').strip()
+                    implementation_date = row_data.get('実施日', '').strip()
+                    spot_amount_str = row_data.get('スポット金額', '').strip()
+                    order_category = row_data.get('発注カテゴリ', 'レギュラー制作発注書').strip()
+                    email_subject = row_data.get('メール件名', '').strip()
+                    email_body = row_data.get('メール本文', '').strip()
+                    email_to = row_data.get('メール送信先', '').strip()
+                    email_sent_date = row_data.get('メール送信日', '').strip()
+                    auto_renewal_str = row_data.get('自動延長有効', '有効').strip()
+                    renewal_period_str = row_data.get('延長期間（月）', '3').strip()
+                    termination_notice_date = row_data.get('終了通知受領日', '').strip()
                     notes = row_data.get('備考', '').strip()
+
+                    # 数値変換
+                    unit_price = float(unit_price_str) if unit_price_str else None
+                    spot_amount = float(spot_amount_str) if spot_amount_str else None
+                    auto_renewal_enabled = 1 if auto_renewal_str == '有効' else 0
+                    renewal_period_months = int(renewal_period_str) if renewal_period_str.isdigit() else 3
+
+                    # 案件IDを取得（案件名が指定されている場合）
+                    project_id = None
+                    if project_name:
+                        cursor.execute("SELECT id FROM projects WHERE name = ?", (project_name,))
+                        project_result = cursor.fetchone()
+                        if project_result:
+                            project_id = project_result[0]
 
                     contract_id_str = row_data.get('ID', '').strip()
                     now = datetime.now()
@@ -2230,25 +2280,50 @@ class OrderManagementDB:
                         existing_contract = cursor.fetchone()
 
                     if existing_contract:
-                        # 既存発注を更新
+                        # 既存発注を更新（全項目対応）
                         existing_id = existing_contract[0]
                         cursor.execute("""
                             UPDATE order_contracts
-                            SET program_id=?, partner_id=?, contract_start_date=?, contract_end_date=?,
-                                order_type=?, order_status=?, pdf_status=?, notes=?, updated_at=?
+                            SET program_id=?, partner_id=?, project_id=?, item_name=?,
+                                contract_start_date=?, contract_end_date=?, contract_period_type=?,
+                                order_type=?, order_status=?, pdf_status=?, pdf_file_path=?, pdf_distributed_date=?,
+                                payment_type=?, unit_price=?, payment_timing=?, contract_type=?,
+                                implementation_date=?, spot_amount=?, order_category=?,
+                                email_subject=?, email_body=?, email_to=?, email_sent_date=?,
+                                auto_renewal_enabled=?, renewal_period_months=?, termination_notice_date=?,
+                                notes=?, updated_at=?
                             WHERE id=?
-                        """, (program_id, partner_id, start_date, end_date,
-                              order_type, order_status, pdf_status, notes, now, existing_id))
+                        """, (program_id, partner_id, project_id, item_name,
+                              start_date, end_date, period_type,
+                              order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
+                              payment_type, unit_price, payment_timing, contract_type,
+                              implementation_date, spot_amount, order_category,
+                              email_subject, email_body, email_to, email_sent_date,
+                              auto_renewal_enabled, renewal_period_months, termination_notice_date,
+                              notes, now, existing_id))
                         result['updated'] += 1
                         result['success'] += 1
                     else:
-                        # 新規追加
+                        # 新規追加（全項目対応）
                         cursor.execute("""
-                            INSERT INTO order_contracts (program_id, partner_id, contract_start_date, contract_end_date,
-                                                        order_type, order_status, pdf_status, notes, created_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (program_id, partner_id, start_date, end_date,
-                              order_type, order_status, pdf_status, notes, now, now))
+                            INSERT INTO order_contracts (
+                                program_id, partner_id, project_id, item_name,
+                                contract_start_date, contract_end_date, contract_period_type,
+                                order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
+                                payment_type, unit_price, payment_timing, contract_type,
+                                implementation_date, spot_amount, order_category,
+                                email_subject, email_body, email_to, email_sent_date,
+                                auto_renewal_enabled, renewal_period_months, termination_notice_date,
+                                notes, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (program_id, partner_id, project_id, item_name,
+                              start_date, end_date, period_type,
+                              order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
+                              payment_type, unit_price, payment_timing, contract_type,
+                              implementation_date, spot_amount, order_category,
+                              email_subject, email_body, email_to, email_sent_date,
+                              auto_renewal_enabled, renewal_period_months, termination_notice_date,
+                              notes, now, now))
                         result['inserted'] += 1
                         result['success'] += 1
 
