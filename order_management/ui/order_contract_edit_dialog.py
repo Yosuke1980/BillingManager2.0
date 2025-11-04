@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
                              QDateEdit, QTextEdit, QFileDialog, QMessageBox, QWidget,
                              QRadioButton, QButtonGroup, QScrollArea, QApplication, QGroupBox,
-                             QSizePolicy)
+                             QSizePolicy, QCheckBox, QSpinBox)
 from PyQt5.QtCore import QDate, Qt
 from datetime import datetime, timedelta
 import os
@@ -282,6 +282,53 @@ class OrderContractEditDialog(QDialog):
         self.payment_timing.setCurrentText("翌月末払い")
         contract_layout.addRow("支払いタイミング:", self.payment_timing)
 
+        # === 契約自動延長設定 ===
+        renewal_header = QLabel("<b>契約自動延長設定</b>")
+        contract_layout.addRow("", renewal_header)
+
+        # 自動延長有効チェックボックス
+        renewal_enable_layout = QHBoxLayout()
+        self.auto_renewal_checkbox = QCheckBox("自動延長を有効にする")
+        self.auto_renewal_checkbox.setChecked(True)
+        self.auto_renewal_checkbox.stateChanged.connect(self.on_auto_renewal_changed)
+        renewal_enable_layout.addWidget(self.auto_renewal_checkbox)
+        renewal_enable_layout.addStretch()
+        contract_layout.addRow("", renewal_enable_layout)
+
+        # 延長期間
+        renewal_period_layout = QHBoxLayout()
+        self.renewal_period_spin = QSpinBox()
+        self.renewal_period_spin.setMinimum(1)
+        self.renewal_period_spin.setMaximum(12)
+        self.renewal_period_spin.setValue(3)
+        self.renewal_period_spin.setSuffix(" ヶ月")
+        renewal_period_layout.addWidget(self.renewal_period_spin)
+        renewal_period_layout.addWidget(QLabel("ずつ自動延長"))
+        renewal_period_layout.addStretch()
+        contract_layout.addRow("延長期間:", renewal_period_layout)
+
+        # 終了通知受領日
+        termination_notice_layout = QHBoxLayout()
+        self.termination_notice_date = QDateEdit()
+        self.termination_notice_date.setCalendarPopup(True)
+        self.termination_notice_date.setSpecialValueText("未受領")
+        self.termination_notice_date.setDate(QDate(2000, 1, 1))  # 最小値
+        self.termination_notice_date.setMinimumDate(QDate(2000, 1, 1))
+        termination_notice_layout.addWidget(self.termination_notice_date)
+        clear_notice_btn = QPushButton("クリア")
+        clear_notice_btn.clicked.connect(lambda: self.termination_notice_date.setDate(QDate(2000, 1, 1)))
+        clear_notice_btn.setMaximumWidth(80)
+        termination_notice_layout.addWidget(clear_notice_btn)
+        termination_notice_layout.addStretch()
+        contract_layout.addRow("終了通知受領日:", termination_notice_layout)
+
+        # ヘルプテキスト
+        renewal_help = QLabel(
+            "<i><font color='#666'>ヒント: 終了日の1ヶ月前までに終了通知がない場合、設定した期間で自動延長されます</font></i>"
+        )
+        renewal_help.setWordWrap(True)
+        contract_layout.addRow("", renewal_help)
+
         contract_group.setLayout(contract_layout)
 
         # ===== セクション5: 確認情報（契約書・発注書の場合） =====
@@ -383,6 +430,14 @@ class OrderContractEditDialog(QDialog):
         """支払タイプが変更されたときの処理"""
         # 既存の処理を維持
         pass
+
+    def on_auto_renewal_changed(self, state):
+        """自動延長チェックボックスが変更されたときの処理"""
+        enabled = (state == Qt.Checked)
+        self.renewal_period_spin.setEnabled(enabled)
+        if not enabled:
+            # 自動延長を無効にした場合、終了通知受領日もクリア推奨
+            pass  # ユーザーの判断に任せる
 
     def on_project_type_changed(self):
         """案件区分が変更されたときの処理"""
@@ -611,6 +666,23 @@ class OrderContractEditDialog(QDialog):
                         self.program_combo.setCurrentIndex(i)
                         break
 
+            # === 自動延長設定の読み込み ===
+            # 自動延長有効フラグ
+            auto_renewal_enabled = contract[31] if len(contract) > 31 else 1
+            self.auto_renewal_checkbox.setChecked(bool(auto_renewal_enabled))
+
+            # 延長期間
+            renewal_period = contract[32] if len(contract) > 32 else 3
+            if renewal_period:
+                self.renewal_period_spin.setValue(int(renewal_period))
+
+            # 終了通知受領日
+            termination_notice = contract[33] if len(contract) > 33 else None
+            if termination_notice:
+                self.termination_notice_date.setDate(QDate.fromString(str(termination_notice), "yyyy-MM-dd"))
+            else:
+                self.termination_notice_date.setDate(QDate(2000, 1, 1))
+
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
         period_type = self.period_type.currentText()
@@ -750,6 +822,17 @@ class OrderContractEditDialog(QDialog):
         # 後方互換性のため、古いフィールドも設定
         contract_data['project_name_type'] = 'program'
         contract_data['custom_project_name'] = None
+
+        # === 自動延長設定 ===
+        contract_data['auto_renewal_enabled'] = 1 if self.auto_renewal_checkbox.isChecked() else 0
+        contract_data['renewal_period_months'] = self.renewal_period_spin.value()
+
+        # 終了通知受領日（最小値の場合はNULLとして扱う）
+        termination_date = self.termination_notice_date.date()
+        if termination_date == QDate(2000, 1, 1):
+            contract_data['termination_notice_date'] = None
+        else:
+            contract_data['termination_notice_date'] = termination_date.toString("yyyy-MM-dd")
 
         if self.contract_id:
             contract_data['id'] = self.contract_id

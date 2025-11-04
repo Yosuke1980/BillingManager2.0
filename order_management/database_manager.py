@@ -1007,7 +1007,12 @@ class OrderManagementDB:
                        COALESCE(oc.order_category, 'レギュラー制作発注書') as order_category,
                        oc.email_subject,
                        oc.email_body,
-                       oc.email_to
+                       oc.email_to,
+                       COALESCE(oc.auto_renewal_enabled, 1) as auto_renewal_enabled,
+                       COALESCE(oc.renewal_period_months, 3) as renewal_period_months,
+                       oc.termination_notice_date,
+                       oc.last_renewal_date,
+                       COALESCE(oc.renewal_count, 0) as renewal_count
                 FROM order_contracts oc
                 LEFT JOIN programs prog ON oc.program_id = prog.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -1096,6 +1101,9 @@ class OrderManagementDB:
                         implementation_date = ?,
                         spot_amount = ?,
                         order_category = ?,
+                        auto_renewal_enabled = ?,
+                        renewal_period_months = ?,
+                        termination_notice_date = ?,
                         updated_at = ?
                     WHERE id = ?
                 """, (
@@ -1121,6 +1129,9 @@ class OrderManagementDB:
                     contract_data.get('implementation_date', ''),
                     contract_data.get('spot_amount'),
                     contract_data.get('order_category', 'レギュラー制作発注書'),
+                    contract_data.get('auto_renewal_enabled', 1),
+                    contract_data.get('renewal_period_months', 3),
+                    contract_data.get('termination_notice_date'),
                     now,
                     contract_id
                 ))
@@ -1137,8 +1148,9 @@ class OrderManagementDB:
                         notes, payment_type, unit_price, payment_timing,
                         contract_type, project_name_type,
                         implementation_date, spot_amount, order_category,
+                        auto_renewal_enabled, renewal_period_months, termination_notice_date,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     contract_data.get('project_id'),
                     contract_data.get('item_name'),
@@ -1162,6 +1174,9 @@ class OrderManagementDB:
                     contract_data.get('implementation_date', ''),
                     contract_data.get('spot_amount'),
                     contract_data.get('order_category', 'レギュラー制作発注書'),
+                    contract_data.get('auto_renewal_enabled', 1),
+                    contract_data.get('renewal_period_months', 3),
+                    contract_data.get('termination_notice_date'),
                     now,
                     now
                 ))
@@ -1518,8 +1533,80 @@ class OrderManagementDB:
             conn.close()
 
     # ========================================
-    # データベーススキーマ拡張（番組>案件>発注の階層構造対応）
+    # データベーススキーマ拡張
     # ========================================
+
+    def migrate_add_auto_renewal_fields(self) -> bool:
+        """契約自動延長機能のためのカラムとテーブルを追加
+
+        実行内容:
+        1. order_contractsテーブルに自動延長関連カラムを追加
+        2. contract_renewal_historyテーブルを作成
+
+        Returns:
+            bool: マイグレーション成功時True
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # order_contractsテーブルの拡張
+            cursor.execute("PRAGMA table_info(order_contracts)")
+            columns = [col[1] for col in cursor.fetchall()]
+
+            if 'auto_renewal_enabled' not in columns:
+                log_message("order_contractsテーブルに自動延長関連カラムを追加")
+
+                cursor.execute("""
+                    ALTER TABLE order_contracts
+                    ADD COLUMN auto_renewal_enabled INTEGER DEFAULT 1
+                """)
+
+                cursor.execute("""
+                    ALTER TABLE order_contracts
+                    ADD COLUMN renewal_period_months INTEGER DEFAULT 3
+                """)
+
+                cursor.execute("""
+                    ALTER TABLE order_contracts
+                    ADD COLUMN termination_notice_date DATE
+                """)
+
+                cursor.execute("""
+                    ALTER TABLE order_contracts
+                    ADD COLUMN last_renewal_date DATE
+                """)
+
+                cursor.execute("""
+                    ALTER TABLE order_contracts
+                    ADD COLUMN renewal_count INTEGER DEFAULT 0
+                """)
+
+            # 契約延長履歴テーブルの作成
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS contract_renewal_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    contract_id INTEGER NOT NULL,
+                    previous_end_date DATE NOT NULL,
+                    new_end_date DATE NOT NULL,
+                    renewal_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    renewal_reason TEXT,
+                    executed_by TEXT,
+                    notes TEXT,
+                    FOREIGN KEY (contract_id) REFERENCES order_contracts(id) ON DELETE CASCADE
+                )
+            """)
+
+            conn.commit()
+            log_message("契約自動延長機能のマイグレーションが完了しました")
+            return True
+
+        except Exception as e:
+            conn.rollback()
+            log_message(f"マイグレーションエラー: {e}")
+            return False
+        finally:
+            conn.close()
 
     def migrate_to_hierarchy_structure(self) -> bool:
         """データベーススキーマを階層構造対応に拡張
@@ -2177,3 +2264,224 @@ class OrderManagementDB:
             conn.close()
 
         return result
+
+    # ========================================
+    # 契約自動延長機能
+    # ========================================
+
+    def extend_contract(self, contract_id: int, reason: str = "自動延長",
+                       executed_by: str = "システム", notes: str = "") -> bool:
+        """契約を延長する
+
+        Args:
+            contract_id: 契約ID
+            reason: 延長理由（"自動延長" or "手動延長"）
+            executed_by: 実行者
+            notes: 備考
+
+        Returns:
+            bool: 延長成功時True
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 現在の契約情報を取得
+            cursor.execute("""
+                SELECT contract_end_date, renewal_period_months, renewal_count
+                FROM order_contracts
+                WHERE id = ?
+            """, (contract_id,))
+
+            row = cursor.fetchone()
+            if not row:
+                log_message(f"契約ID {contract_id} が見つかりません")
+                return False
+
+            current_end_date_str, renewal_months, renewal_count = row
+            renewal_months = renewal_months or 3  # デフォルト3ヶ月
+            renewal_count = renewal_count or 0
+
+            # 新しい終了日を計算
+            current_end_date = datetime.strptime(current_end_date_str, '%Y-%m-%d')
+            new_end_date = current_end_date + timedelta(days=renewal_months * 30)
+            new_end_date_str = new_end_date.strftime('%Y-%m-%d')
+
+            # 契約を更新
+            now = datetime.now()
+            cursor.execute("""
+                UPDATE order_contracts
+                SET contract_end_date = ?,
+                    last_renewal_date = ?,
+                    renewal_count = ?,
+                    updated_at = ?
+                WHERE id = ?
+            """, (new_end_date_str, now.strftime('%Y-%m-%d'),
+                  renewal_count + 1, now, contract_id))
+
+            # 延長履歴を記録
+            cursor.execute("""
+                INSERT INTO contract_renewal_history (
+                    contract_id, previous_end_date, new_end_date,
+                    renewal_reason, executed_by, notes
+                ) VALUES (?, ?, ?, ?, ?, ?)
+            """, (contract_id, current_end_date_str, new_end_date_str,
+                  reason, executed_by, notes))
+
+            conn.commit()
+            log_message(f"契約ID {contract_id} を延長しました: {current_end_date_str} → {new_end_date_str}")
+            return True
+
+        except Exception as e:
+            conn.rollback()
+            log_message(f"契約延長エラー: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_contracts_for_auto_renewal(self) -> List[Tuple]:
+        """自動延長対象の契約を取得
+
+        条件:
+        - auto_renewal_enabled = 1
+        - termination_notice_date が NULL（終了通知未受領）
+        - 契約終了日が過去または今日
+
+        Returns:
+            List[Tuple]: (id, program_name, partner_name, contract_end_date, ...)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            today = datetime.now().strftime('%Y-%m-%d')
+
+            cursor.execute("""
+                SELECT oc.id, prog.name as program_name, p.name as partner_name,
+                       oc.contract_end_date, oc.renewal_period_months,
+                       oc.renewal_count, oc.item_name
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN partners p ON oc.partner_id = p.id
+                WHERE oc.auto_renewal_enabled = 1
+                  AND (oc.termination_notice_date IS NULL OR oc.termination_notice_date = '')
+                  AND oc.contract_end_date <= ?
+                ORDER BY oc.contract_end_date
+            """, (today,))
+
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def check_and_execute_auto_renewal(self, executed_by: str = "システム") -> dict:
+        """自動延長チェックと実行
+
+        Args:
+            executed_by: 実行者
+
+        Returns:
+            dict: {
+                'checked': チェック件数,
+                'extended': 延長件数,
+                'failed': 失敗件数,
+                'details': [(contract_id, program_name, result), ...]
+            }
+        """
+        result = {
+            'checked': 0,
+            'extended': 0,
+            'failed': 0,
+            'details': []
+        }
+
+        contracts = self.get_contracts_for_auto_renewal()
+        result['checked'] = len(contracts)
+
+        for contract in contracts:
+            contract_id = contract[0]
+            program_name = contract[1]
+            partner_name = contract[2]
+
+            try:
+                if self.extend_contract(contract_id, "自動延長", executed_by):
+                    result['extended'] += 1
+                    result['details'].append((contract_id, f"{program_name} - {partner_name}", "成功"))
+                else:
+                    result['failed'] += 1
+                    result['details'].append((contract_id, f"{program_name} - {partner_name}", "失敗"))
+            except Exception as e:
+                result['failed'] += 1
+                result['details'].append((contract_id, f"{program_name} - {partner_name}", f"エラー: {e}"))
+
+        return result
+
+    def get_renewal_history(self, contract_id: int) -> List[Tuple]:
+        """契約の延長履歴を取得
+
+        Args:
+            contract_id: 契約ID
+
+        Returns:
+            List[Tuple]: (id, previous_end_date, new_end_date, renewal_date,
+                         renewal_reason, executed_by, notes)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, previous_end_date, new_end_date, renewal_date,
+                       renewal_reason, executed_by, notes
+                FROM contract_renewal_history
+                WHERE contract_id = ?
+                ORDER BY renewal_date DESC
+            """, (contract_id,))
+
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_contracts_expiring_in_days(self, days_before: int = 30) -> List[Tuple]:
+        """指定日数以内に期限が来る契約を取得（終了通知なし）
+
+        Args:
+            days_before: 何日前から対象にするか
+
+        Returns:
+            List[Tuple]: (id, program_name, partner_name, contract_end_date,
+                         auto_renewal_enabled, termination_notice_date, 
+                         renewal_count, item_name, days_until_expiry)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            today = datetime.now()
+            target_date = (today + timedelta(days=days_before)).strftime('%Y-%m-%d')
+            today_str = today.strftime('%Y-%m-%d')
+
+            cursor.execute("""
+                SELECT oc.id, prog.name as program_name, p.name as partner_name,
+                       oc.contract_end_date, oc.auto_renewal_enabled,
+                       oc.termination_notice_date, oc.renewal_count,
+                       oc.item_name
+                FROM order_contracts oc
+                LEFT JOIN programs prog ON oc.program_id = prog.id
+                LEFT JOIN partners p ON oc.partner_id = p.id
+                WHERE oc.contract_end_date BETWEEN ? AND ?
+                  AND (oc.termination_notice_date IS NULL OR oc.termination_notice_date = '')
+                ORDER BY oc.contract_end_date
+            """, (today_str, target_date))
+
+            results = cursor.fetchall()
+
+            # 残り日数を計算
+            enriched_results = []
+            for row in results:
+                contract_end_date = datetime.strptime(row[3], '%Y-%m-%d')
+                days_until = (contract_end_date - today).days
+                enriched_results.append(row + (days_until,))
+
+            return enriched_results
+        finally:
+            conn.close()
