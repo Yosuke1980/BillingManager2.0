@@ -74,9 +74,7 @@ class ProjectTreeWidget(QWidget):
         self.current_project_id = project_ids[0]
 
         # 複数案件の場合の合計を計算
-        total_budget = 0
         total_actual = 0
-        total_remaining = 0
         project_names = []
         project_dates = []
 
@@ -87,9 +85,7 @@ class ProjectTreeWidget(QWidget):
                 project_dates.append(project[2] or "")
 
                 summary = self.db.get_project_summary(project_id)
-                total_budget += summary['budget']
                 total_actual += summary['actual']
-                total_remaining += summary['remaining']
 
         # ヘッダー更新（複数案件対応）
         if len(project_ids) == 1:
@@ -99,12 +95,7 @@ class ProjectTreeWidget(QWidget):
             # 複数案件の場合
             header_text = f"{project_names[0]} ({len(project_ids)}件) | "
 
-        header_text += f"予算: {total_budget:,.0f}円 / "
-        header_text += f"実績: {total_actual:,.0f}円 / "
-        header_text += f"残: {total_remaining:,.0f}円"
-
-        if total_remaining < 0:
-            header_text += " ⚠️予算超過"
+        header_text += f"実績: {total_actual:,.0f}円"
 
         self.header_label.setText(header_text)
 
