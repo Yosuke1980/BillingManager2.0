@@ -1,6 +1,6 @@
-"""プロジェクトタイムラインウィジェット
+"""番組・イベントタイムラインウィジェット
 
-プロジェクトを時系列に並べ、ツリー構造で費用項目を表示します。
+番組・イベントを時系列に並べ、ツリー構造で費用項目を表示します。
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
@@ -14,12 +14,12 @@ from datetime import datetime, timedelta
 import csv
 
 from order_management.database_manager import OrderManagementDB
-from order_management.ui.project_edit_dialog import ProjectEditDialog
+from order_management.ui.production_edit_dialog import ProductionEditDialog
 from order_management.ui.expense_edit_dialog import ExpenseEditDialog
 
 
-class ProjectTimelineWidget(QWidget):
-    """プロジェクトタイムラインウィジェット"""
+class ProductionTimelineWidget(QWidget):
+    """番組・イベントタイムラインウィジェット"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -61,9 +61,12 @@ class ProjectTimelineWidget(QWidget):
 
         self.type_filter = QComboBox()
         self.type_filter.addItem("全て", "")
+        self.type_filter.addItem("レギュラー番組", "レギュラー番組")
+        self.type_filter.addItem("特別番組", "特別番組")
         self.type_filter.addItem("イベント", "イベント")
+        self.type_filter.addItem("公開放送", "公開放送")
+        self.type_filter.addItem("公開収録", "公開収録")
         self.type_filter.addItem("特別企画", "特別企画")
-        self.type_filter.addItem("通常", "通常")
         category_filter_layout.addWidget(self.type_filter)
 
         category_filter_layout.addWidget(QLabel("  番組:"))
@@ -107,7 +110,7 @@ class ProjectTimelineWidget(QWidget):
         self.tree = QTreeWidget()
         self.tree.setColumnCount(5)
         self.tree.setHeaderLabels([
-            "実施日/支払予定日", "プロジェクト名/項目名", "種別", "金額（円）", "ステータス"
+            "実施日/支払予定日", "番組・イベント名/項目名", "種別", "金額（円）", "ステータス"
         ])
 
         # カラム幅設定
@@ -132,7 +135,7 @@ class ProjectTimelineWidget(QWidget):
         layout.addWidget(self.tree)
 
         # ===== ステータスバー =====
-        self.status_label = QLabel("プロジェクト: 0件 | 総実績: 0円")
+        self.status_label = QLabel("番組・イベント: 0件 | 総実績: 0円")
         self.status_label.setStyleSheet("padding: 5px; background-color: #f0f0f0;")
         layout.addWidget(self.status_label)
 
@@ -141,15 +144,15 @@ class ProjectTimelineWidget(QWidget):
         self.program_filter.clear()
         self.program_filter.addItem("全て", None)
 
-        programs = self.db.get_programs()
-        for program in programs:
-            # program: (id, name, description, start_date, end_date,
-            #          broadcast_time, broadcast_days, status,
-            #          program_type, parent_program_id)
-            display_text = program[1]
-            if program[8]:  # program_type
-                display_text += f" ({program[8]})"
-            self.program_filter.addItem(display_text, program[0])
+        productions = self.db.get_productions()
+        for production in productions:
+            # production: (id, name, description, production_type, start_date, end_date,
+            #             start_time, end_time, broadcast_time, broadcast_days, status,
+            #             parent_production_id)
+            display_text = production[1]
+            if production[3]:  # production_type
+                display_text += f" ({production[3]})"
+            self.program_filter.addItem(display_text, production[0])
 
     def load_timeline(self):
         """タイムラインを読み込み"""
@@ -159,71 +162,69 @@ class ProjectTimelineWidget(QWidget):
         # フィルター条件取得
         start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
         end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
-        project_type = self.type_filter.currentData()
+        production_type = self.type_filter.currentData()
         program_id = self.program_filter.currentData()
 
-        # プロジェクト取得
-        projects = self.db.get_projects(project_type=project_type or "")
+        # 番組・イベント取得
+        productions = self.db.get_productions_by_parent(
+            program_id if program_id else 0,
+            project_type=production_type or ""
+        )
 
         # フィルタリング
-        filtered_projects = []
-        for project in projects:
-            # project: (id, name, implementation_date, project_type, parent_id)
-            impl_date = project[2]
+        filtered_productions = []
+        for production in productions:
+            # production: (id, name, implementation_date, project_type,
+            #             parent_id, production_id, program_name)
+            impl_date = production[2]
 
             # 日付フィルター
             if impl_date and (impl_date < start_date or impl_date > end_date):
                 continue
 
-            # 番組フィルター（プロジェクトに番組IDがあれば）
-            if program_id:
-                project_detail = self.db.get_project_by_id(project[0])
-                if project_detail and project_detail[5] != program_id:
-                    continue
-
-            filtered_projects.append(project)
+            filtered_productions.append(production)
 
         # 統計用変数
-        total_projects = len(filtered_projects)
+        total_productions = len(filtered_productions)
         total_amount = 0
 
         # ツリー構築
-        for project in filtered_projects:
-            project_id = project[0]
-            project_name = project[1]
-            implementation_date = project[2] or ""
-            project_type_str = project[3] or "イベント"
+        for production in filtered_productions:
+            production_id = production[0]
+            production_name = production[1]
+            implementation_date = production[2] or ""
+            production_type_str = production[3] or "イベント"
 
             # 実績合計取得
-            summary = self.db.get_project_summary(project_id)
-            project_total = summary['actual']
-            total_amount += project_total
+            summary = self.db.get_production_summary(production_id)
+            production_total = summary['actual']
+            total_amount += production_total
 
-            # プロジェクトノード作成
-            project_item = QTreeWidgetItem([
+            # 番組・イベントノード作成
+            production_item = QTreeWidgetItem([
                 implementation_date,
-                project_name,
-                project_type_str,
-                f"{project_total:,.0f}",
+                production_name,
+                production_type_str,
+                f"{production_total:,.0f}",
                 ""
             ])
 
-            # プロジェクトノードのスタイル
+            # 番組・イベントノードのスタイル
             font = QFont()
             font.setBold(True)
             for col in range(5):
-                project_item.setFont(col, font)
-                project_item.setBackground(col, QBrush(QColor(240, 240, 240)))
-                project_item.setForeground(col, QBrush(QColor(0, 0, 0)))  # 黒色
+                production_item.setFont(col, font)
+                production_item.setBackground(col, QBrush(QColor(240, 240, 240)))
+                production_item.setForeground(col, QBrush(QColor(0, 0, 0)))  # 黒色
 
             # データを保存（編集用）
-            project_item.setData(0, Qt.UserRole, ("project", project_id))
+            production_item.setData(0, Qt.UserRole, ("production", production_id))
 
             # 費用項目取得
-            expenses = self.db.get_expenses_by_project(project_id)
+            expenses = self.db.get_expenses_by_production(production_id)
 
             for expense in expenses:
-                # expense: (id, project_id, item_name, amount, supplier_id,
+                # expense: (id, production_id, item_name, amount, supplier_id,
                 #          contact_person, status, order_number,
                 #          implementation_date, invoice_received_date)
                 expense_id = expense[0]
@@ -261,9 +262,9 @@ class ProjectTimelineWidget(QWidget):
                 # データを保存（編集用）
                 expense_item.setData(0, Qt.UserRole, ("expense", expense_id))
 
-                project_item.addChild(expense_item)
+                production_item.addChild(expense_item)
 
-            self.tree.addTopLevelItem(project_item)
+            self.tree.addTopLevelItem(production_item)
 
         # ソートを再有効化
         self.tree.setSortingEnabled(True)
@@ -273,7 +274,7 @@ class ProjectTimelineWidget(QWidget):
 
         # ステータス更新
         self.status_label.setText(
-            f"プロジェクト: {total_projects}件 | 総実績: {total_amount:,.0f}円"
+            f"番組・イベント: {total_productions}件 | 総実績: {total_amount:,.0f}円"
         )
 
     def on_item_double_clicked(self, item, column):
@@ -284,11 +285,11 @@ class ProjectTimelineWidget(QWidget):
 
         data_type, data_id = data
 
-        if data_type == "project":
-            # プロジェクト編集
-            project = self.db.get_project_by_id(data_id)
-            if project:
-                dialog = ProjectEditDialog(self, project=project)
+        if data_type == "production":
+            # 番組・イベント編集
+            production = self.db.get_production_by_id(data_id)
+            if production:
+                dialog = ProductionEditDialog(self, production=production)
                 if dialog.exec_():
                     self.load_timeline()
 
@@ -330,15 +331,15 @@ class ProjectTimelineWidget(QWidget):
         """アイテム削除"""
         reply = QMessageBox.question(
             self, "確認",
-            f"この{'プロジェクト' if data_type == 'project' else '費用項目'}を削除してもよろしいですか？",
+            f"この{'番組・イベント' if data_type == 'production' else '費用項目'}を削除してもよろしいですか？",
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
             try:
-                if data_type == "project":
-                    self.db.delete_project(data_id)
-                    QMessageBox.information(self, "成功", "プロジェクトを削除しました")
+                if data_type == "production":
+                    self.db.delete_production(data_id)
+                    QMessageBox.information(self, "成功", "番組・イベントを削除しました")
                 elif data_type == "expense":
                     self.db.delete_expense_order(data_id)
                     QMessageBox.information(self, "成功", "費用項目を削除しました")
@@ -358,7 +359,7 @@ class ProjectTimelineWidget(QWidget):
     def export_to_csv(self):
         """CSV出力"""
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "CSV出力", f"project_timeline_{datetime.now().strftime('%Y%m%d')}.csv",
+            self, "CSV出力", f"production_timeline_{datetime.now().strftime('%Y%m%d')}.csv",
             "CSV Files (*.csv)"
         )
 
@@ -371,27 +372,27 @@ class ProjectTimelineWidget(QWidget):
 
                 # ヘッダー
                 writer.writerow([
-                    "実施日/支払予定日", "プロジェクト名/項目名",
+                    "実施日/支払予定日", "番組・イベント名/項目名",
                     "種別", "金額（円）", "ステータス"
                 ])
 
                 # データ
                 root = self.tree.invisibleRootItem()
                 for i in range(root.childCount()):
-                    project_item = root.child(i)
+                    production_item = root.child(i)
 
-                    # プロジェクト行
+                    # 番組・イベント行
                     writer.writerow([
-                        project_item.text(0),
-                        project_item.text(1),
-                        project_item.text(2),
-                        project_item.text(3),
-                        project_item.text(4)
+                        production_item.text(0),
+                        production_item.text(1),
+                        production_item.text(2),
+                        production_item.text(3),
+                        production_item.text(4)
                     ])
 
                     # 費用項目行（インデント付き）
-                    for j in range(project_item.childCount()):
-                        expense_item = project_item.child(j)
+                    for j in range(production_item.childCount()):
+                        expense_item = production_item.child(j)
                         writer.writerow([
                             expense_item.text(0),
                             "  " + expense_item.text(1),  # インデント
@@ -432,16 +433,16 @@ class ProjectTimelineWidget(QWidget):
                 table { width: 100%; border-collapse: collapse; }
                 th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
                 th { background-color: #f2f2f2; }
-                .project { font-weight: bold; background-color: #f9f9f9; }
+                .production { font-weight: bold; background-color: #f9f9f9; }
                 .expense { padding-left: 20px; }
             </style>
         </head>
         <body>
-            <h2>プロジェクトタイムライン</h2>
+            <h2>番組・イベントタイムライン</h2>
             <table>
                 <tr>
                     <th>実施日/支払予定日</th>
-                    <th>プロジェクト名/項目名</th>
+                    <th>番組・イベント名/項目名</th>
                     <th>種別</th>
                     <th>金額（円）</th>
                     <th>ステータス</th>
@@ -450,22 +451,22 @@ class ProjectTimelineWidget(QWidget):
 
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
-            project_item = root.child(i)
+            production_item = root.child(i)
 
-            # プロジェクト行
+            # 番組・イベント行
             html += f"""
-                <tr class="project">
-                    <td>{project_item.text(0)}</td>
-                    <td>{project_item.text(1)}</td>
-                    <td>{project_item.text(2)}</td>
-                    <td>{project_item.text(3)}</td>
-                    <td>{project_item.text(4)}</td>
+                <tr class="production">
+                    <td>{production_item.text(0)}</td>
+                    <td>{production_item.text(1)}</td>
+                    <td>{production_item.text(2)}</td>
+                    <td>{production_item.text(3)}</td>
+                    <td>{production_item.text(4)}</td>
                 </tr>
             """
 
             # 費用項目行
-            for j in range(project_item.childCount()):
-                expense_item = project_item.child(j)
+            for j in range(production_item.childCount()):
+                expense_item = production_item.child(j)
                 html += f"""
                     <tr class="expense">
                         <td>{expense_item.text(0)}</td>

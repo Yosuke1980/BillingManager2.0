@@ -1,6 +1,6 @@
-"""案件ツリービューウィジェット
+"""番組・イベントツリービューウィジェット
 
-案件と費用項目をツリー形式で表示するウィジェットです。
+番組・イベントと費用項目をツリー形式で表示するウィジェットです。
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QPushButton,
@@ -16,13 +16,13 @@ from order_management.email_template import EmailTemplate
 from order_management.order_number_generator import OrderNumberGenerator
 
 
-class ProjectTreeWidget(QWidget):
-    """案件ツリービューウィジェット"""
+class ProductionTreeWidget(QWidget):
+    """番組・イベントツリービューウィジェット"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.db = OrderManagementDB()
-        self.current_project_id = None
+        self.current_production_id = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -30,7 +30,7 @@ class ProjectTreeWidget(QWidget):
         layout = QVBoxLayout(self)
 
         # ヘッダー
-        self.header_label = QLabel("案件を選択してください")
+        self.header_label = QLabel("番組・イベントを選択してください")
         self.header_label.setStyleSheet("font-weight: bold; font-size: 14px; padding: 10px;")
         layout.addWidget(self.header_label)
 
@@ -58,50 +58,50 @@ class ProjectTreeWidget(QWidget):
 
         layout.addLayout(button_layout)
 
-    def load_project(self, project_id: int):
-        """案件データを読み込み（単一ID、後方互換性のため残す）"""
-        self.load_projects([project_id])
+    def load_production(self, production_id: int):
+        """番組・イベントデータを読み込み（単一ID、後方互換性のため残す）"""
+        self.load_productions([production_id])
 
-    def load_projects(self, project_ids: list):
-        """案件データを読み込み（複数ID対応）"""
+    def load_productions(self, production_ids: list):
+        """番組・イベントデータを読み込み（複数ID対応）"""
         self.tree.clear()
 
-        if not project_ids or not project_ids[0]:
-            self.header_label.setText("案件を選択してください")
+        if not production_ids or not production_ids[0]:
+            self.header_label.setText("番組・イベントを選択してください")
             return
 
         # 最初のIDを保存（既存機能との互換性）
-        self.current_project_id = project_ids[0]
+        self.current_production_id = production_ids[0]
 
-        # 複数案件の場合の合計を計算
+        # 複数番組・イベントの場合の合計を計算
         total_actual = 0
-        project_names = []
-        project_dates = []
+        production_names = []
+        production_dates = []
 
-        for project_id in project_ids:
-            project = self.db.get_project_by_id(project_id)
-            if project:
-                project_names.append(project[1])
-                project_dates.append(project[2] or "")
+        for production_id in production_ids:
+            production = self.db.get_production_by_id(production_id)
+            if production:
+                production_names.append(production[1])
+                production_dates.append(production[2] or "")
 
-                summary = self.db.get_project_summary(project_id)
+                summary = self.db.get_production_summary(production_id)
                 total_actual += summary['actual']
 
-        # ヘッダー更新（複数案件対応）
-        if len(project_ids) == 1:
-            # 単一案件の場合
-            header_text = f"{project_dates[0]} {project_names[0]} | "
+        # ヘッダー更新（複数番組・イベント対応）
+        if len(production_ids) == 1:
+            # 単一番組・イベントの場合
+            header_text = f"{production_dates[0]} {production_names[0]} | "
         else:
-            # 複数案件の場合
-            header_text = f"{project_names[0]} ({len(project_ids)}件) | "
+            # 複数番組・イベントの場合
+            header_text = f"{production_names[0]} ({len(production_ids)}件) | "
 
         header_text += f"実績: {total_actual:,.0f}円"
 
         self.header_label.setText(header_text)
 
-        # 全案件の費用項目を取得して表示
-        for project_id in project_ids:
-            expenses = self.db.get_expenses_by_project(project_id)
+        # 全番組・イベントの費用項目を取得して表示
+        for production_id in production_ids:
+            expenses = self.db.get_expenses_by_production(production_id)
 
             for expense in expenses:
                 expense_id = expense[0]
@@ -151,13 +151,13 @@ class ProjectTreeWidget(QWidget):
         expense_id = current_item.data(0, Qt.UserRole)
         expense = self.db.get_expense_order_by_id(expense_id)
 
-        dialog = ExpenseEditDialog(self, self.current_project_id, expense)
+        dialog = ExpenseEditDialog(self, self.current_production_id, expense)
         if dialog.exec_():
             expense_data = dialog.get_data()
             expense_data['id'] = expense_id
             try:
                 self.db.save_expense_order(expense_data, is_new=False)
-                self.load_project(self.current_project_id)
+                self.load_production(self.current_production_id)
                 # 成功メッセージは表示しない（煩わしいため）
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"更新に失敗しました: {e}")
@@ -181,7 +181,7 @@ class ProjectTreeWidget(QWidget):
         if reply == QMessageBox.Yes:
             try:
                 self.db.delete_expense_order(expense_id)
-                self.load_project(self.current_project_id)
+                self.load_production(self.current_production_id)
                 QMessageBox.information(self, "成功", "費用項目を削除しました")
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"削除に失敗しました: {e}")
@@ -215,8 +215,8 @@ class ProjectTreeWidget(QWidget):
             QMessageBox.warning(self, "警告", "発注先のメールアドレスが設定されていません")
             return
 
-        # 案件情報取得
-        project = self.db.get_project_by_id(self.current_project_id)
+        # 番組・イベント情報取得
+        production = self.db.get_production_by_id(self.current_production_id)
 
         # 発注番号生成
         generator = OrderNumberGenerator()
@@ -227,7 +227,7 @@ class ProjectTreeWidget(QWidget):
         template_data = {
             'contact_person': expense[5] or supplier[2] or "ご担当者",
             'order_number': order_number,
-            'project_name': project[1],
+            'production_name': production[1],
             'implementation_date': expense[8],
             'item_name': expense[2],
             'amount': expense[3],
@@ -235,7 +235,7 @@ class ProjectTreeWidget(QWidget):
         }
 
         subject = EmailTemplate.generate_subject(
-            order_number, expense[8], project[1], expense[2]
+            order_number, expense[8], production[1], expense[2]
         )
         body = EmailTemplate.generate_body(template_data, config['signature'])
 
@@ -254,7 +254,7 @@ class ProjectTreeWidget(QWidget):
                 # データベース更新
                 expense_data = {
                     'id': expense_id,
-                    'project_id': expense[1],
+                    'production_id': expense[1],
                     'item_name': expense[2],
                     'amount': expense[3],
                     'supplier_id': supplier_id,
@@ -271,7 +271,7 @@ class ProjectTreeWidget(QWidget):
                 }
                 self.db.save_expense_order(expense_data, is_new=False)
 
-                self.load_project(self.current_project_id)
+                self.load_production(self.current_production_id)
                 QMessageBox.information(
                     self, "成功",
                     f"Gmail下書きを作成しました\n発注番号: {order_number}\n\nGmailを開いて下書きを確認・送信してください。"
