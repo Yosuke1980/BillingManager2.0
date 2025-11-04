@@ -212,13 +212,19 @@ class OrderManagementDB:
     # ========================================
 
     def get_projects(self, search_term: str = "", project_type: str = "") -> List[Tuple]:
-        """案件一覧を取得"""
+        """案件一覧を取得
+
+        Returns:
+            List[Tuple]: (id, name, implementation_date, project_type, parent_id)
+        """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             query = """
-                SELECT id, name, date, type, budget, parent_id
+                SELECT id, name, implementation_date,
+                       COALESCE(project_type, 'イベント') as project_type,
+                       parent_id
                 FROM projects
                 WHERE 1=1
             """
@@ -229,10 +235,10 @@ class OrderManagementDB:
                 params.append(f"%{search_term}%")
 
             if project_type:
-                query += " AND type = ?"
+                query += " AND COALESCE(project_type, 'イベント') = ?"
                 params.append(project_type)
 
-            query += " ORDER BY date DESC, name"
+            query += " ORDER BY implementation_date DESC, name"
 
             cursor.execute(query, params)
             return cursor.fetchall()
@@ -240,14 +246,20 @@ class OrderManagementDB:
             conn.close()
 
     def get_project_by_id(self, project_id: int) -> Optional[Tuple]:
-        """IDで案件を取得"""
+        """IDで案件を取得
+
+        Returns:
+            Optional[Tuple]: (id, name, implementation_date, project_type,
+                            parent_id, program_id, created_at, updated_at)
+        """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT id, name, date, type, budget, parent_id, start_date, end_date,
-                       created_at, updated_at
+                SELECT id, name, implementation_date,
+                       COALESCE(project_type, 'イベント') as project_type,
+                       parent_id, program_id, created_at, updated_at
                 FROM projects WHERE id = ?
             """, (project_id,))
             return cursor.fetchone()
@@ -255,39 +267,46 @@ class OrderManagementDB:
             conn.close()
 
     def save_project(self, project_data: dict, is_new: bool = False) -> int:
-        """案件を保存"""
+        """案件を保存
+
+        Args:
+            project_data: 案件データ
+                - name: 案件名（必須）
+                - implementation_date: 実施日
+                - project_type: 案件種別（イベント/特別企画/通常）
+                - parent_id: 親案件ID
+                - program_id: 番組ID
+        """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             if is_new:
                 cursor.execute("""
-                    INSERT INTO projects (name, date, type, budget, parent_id, start_date, end_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO projects (name, implementation_date, project_type,
+                                        parent_id, program_id)
+                    VALUES (?, ?, ?, ?, ?)
                 """, (
                     project_data.get('name', ''),
-                    project_data.get('date', ''),
-                    project_data.get('type', '単発'),
-                    project_data.get('budget', 0.0),
+                    project_data.get('implementation_date', ''),
+                    project_data.get('project_type', 'イベント'),
                     project_data.get('parent_id'),
-                    project_data.get('start_date', ''),
-                    project_data.get('end_date', ''),
+                    project_data.get('program_id'),
                 ))
                 project_id = cursor.lastrowid
             else:
                 cursor.execute("""
                     UPDATE projects
-                    SET name = ?, date = ?, type = ?, budget = ?, parent_id = ?,
-                        start_date = ?, end_date = ?, updated_at = CURRENT_TIMESTAMP
+                    SET name = ?, implementation_date = ?, project_type = ?,
+                        parent_id = ?, program_id = ?,
+                        updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 """, (
                     project_data.get('name', ''),
-                    project_data.get('date', ''),
-                    project_data.get('type', '単発'),
-                    project_data.get('budget', 0.0),
+                    project_data.get('implementation_date', ''),
+                    project_data.get('project_type', 'イベント'),
                     project_data.get('parent_id'),
-                    project_data.get('start_date', ''),
-                    project_data.get('end_date', ''),
+                    project_data.get('program_id'),
                     project_data['id'],
                 ))
                 project_id = project_data['id']
@@ -329,7 +348,7 @@ class OrderManagementDB:
         try:
             # 元の案件データを取得
             cursor.execute("""
-                SELECT name, date, type, budget, parent_id, start_date, end_date
+                SELECT name, implementation_date, project_type, parent_id, program_id
                 FROM projects WHERE id = ?
             """, (project_id,))
 
@@ -339,16 +358,15 @@ class OrderManagementDB:
 
             # 新しい案件を作成（名前に「（コピー）」を追加）
             cursor.execute("""
-                INSERT INTO projects (name, date, type, budget, parent_id, start_date, end_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO projects (name, implementation_date, project_type,
+                                    parent_id, program_id)
+                VALUES (?, ?, ?, ?, ?)
             """, (
                 project[0] + "（コピー）",  # 名前
-                project[1],  # date
-                project[2],  # type
-                project[3],  # budget
-                project[4],  # parent_id
-                project[5],  # start_date
-                project[6],  # end_date
+                project[1],  # implementation_date
+                project[2],  # project_type
+                project[3],  # parent_id
+                project[4],  # program_id
             ))
 
             new_project_id = cursor.lastrowid
@@ -516,16 +534,14 @@ class OrderManagementDB:
     # ========================================
 
     def get_project_summary(self, project_id: int) -> dict:
-        """案件の予算・実績サマリーを取得"""
+        """案件の実績サマリーを取得
+
+        Note: budget カラム削除により、実績のみを返します
+        """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
-            # 案件情報取得
-            cursor.execute("SELECT budget FROM projects WHERE id = ?", (project_id,))
-            row = cursor.fetchone()
-            budget = row[0] if row else 0.0
-
             # 実績合計取得
             cursor.execute("""
                 SELECT SUM(amount) FROM expenses_order WHERE project_id = ?
@@ -534,9 +550,7 @@ class OrderManagementDB:
             actual = row[0] if row and row[0] else 0.0
 
             return {
-                'budget': budget,
                 'actual': actual,
-                'remaining': budget - actual,
             }
         finally:
             conn.close()
@@ -1801,18 +1815,17 @@ class OrderManagementDB:
             project_type: 案件種別フィルタ（'イベント'/'特別企画'/'通常'）
 
         Returns:
-            List[Tuple]: (id, name, date, type, budget, parent_id,
-                         start_date, end_date, project_type, program_id, program_name)
+            List[Tuple]: (id, name, implementation_date, project_type,
+                         parent_id, program_id, program_name)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             query = """
-                SELECT p.id, p.name, p.date, p.type, p.budget, p.parent_id,
-                       p.start_date, p.end_date,
+                SELECT p.id, p.name, p.implementation_date,
                        COALESCE(p.project_type, 'イベント') as project_type,
-                       p.program_id,
+                       p.parent_id, p.program_id,
                        prog.name as program_name
                 FROM projects p
                 LEFT JOIN programs prog ON p.program_id = prog.id
@@ -1824,7 +1837,7 @@ class OrderManagementDB:
                 query += " AND COALESCE(p.project_type, 'イベント') = ?"
                 params.append(project_type)
 
-            query += " ORDER BY p.start_date DESC, p.name"
+            query += " ORDER BY p.implementation_date DESC, p.name"
 
             cursor.execute(query, params)
             return cursor.fetchall()

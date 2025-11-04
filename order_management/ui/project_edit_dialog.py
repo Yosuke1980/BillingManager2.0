@@ -89,38 +89,13 @@ class ProjectEditDialog(QDialog):
         project_type_widget.setLayout(project_type_layout)
         form_layout.addRow("案件種別:", project_type_widget)
 
-        # 実施期間
-        date_layout = QHBoxLayout()
-        date_layout.addWidget(QLabel("開始日:"))
-        self.start_date_edit = QDateEdit()
-        self.start_date_edit.setCalendarPopup(True)
-        self.start_date_edit.setDate(QDate.currentDate())
-        self.start_date_edit.setDisplayFormat("yyyy-MM-dd")
-        date_layout.addWidget(self.start_date_edit)
-
-        date_layout.addWidget(QLabel("  終了日:"))
-        self.end_date_edit = QDateEdit()
-        self.end_date_edit.setCalendarPopup(True)
-        self.end_date_edit.setDate(QDate.currentDate())
-        self.end_date_edit.setDisplayFormat("yyyy-MM-dd")
-        date_layout.addWidget(self.end_date_edit)
-        date_layout.addStretch()
-
-        date_widget = QWidget()
-        date_widget.setLayout(date_layout)
-        form_layout.addRow("実施期間:", date_widget)
-
-        # 予算（オプション）
-        self.budget_edit = QLineEdit()
-        self.budget_edit.setPlaceholderText("例: 500000")
-        self.budget_edit.setMaximumWidth(200)
-        form_layout.addRow("予算（円）:", self.budget_edit)
-
-        # 備考
-        self.notes_edit = QTextEdit()
-        self.notes_edit.setMaximumHeight(100)
-        self.notes_edit.setPlaceholderText("案件に関する追加情報を入力...")
-        form_layout.addRow("備考:", self.notes_edit)
+        # 実施日
+        self.implementation_date_edit = QDateEdit()
+        self.implementation_date_edit.setCalendarPopup(True)
+        self.implementation_date_edit.setDate(QDate.currentDate())
+        self.implementation_date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.implementation_date_edit.setMaximumWidth(150)
+        form_layout.addRow("実施日:", self.implementation_date_edit)
 
         layout.addLayout(form_layout)
 
@@ -165,21 +140,21 @@ class ProjectEditDialog(QDialog):
         if not self.project:
             return
 
-        # project: (id, name, date, type, budget, parent_id,
-        #          start_date, end_date, project_type, program_id, program_name)
+        # project: (id, name, implementation_date, project_type,
+        #          parent_id, program_id, created_at, updated_at)
 
         self.name_edit.setText(self.project[1] or "")
 
         # 番組選択
-        if self.project[9]:  # program_id
+        if self.project[5]:  # program_id
             for i in range(self.program_combo.count()):
-                if self.program_combo.itemData(i) == self.project[9]:
+                if self.program_combo.itemData(i) == self.project[5]:
                     self.program_combo.setCurrentIndex(i)
                     break
 
         # 案件種別
-        if len(self.project) > 8 and self.project[8]:
-            project_type = self.project[8]
+        if self.project[3]:  # project_type
+            project_type = self.project[3]
             if project_type == "特別企画":
                 self.type_special.setChecked(True)
             elif project_type == "通常":
@@ -187,19 +162,9 @@ class ProjectEditDialog(QDialog):
             else:
                 self.type_event.setChecked(True)
 
-        # 実施期間
-        if self.project[6]:  # start_date
-            self.start_date_edit.setDate(QDate.fromString(self.project[6], "yyyy-MM-dd"))
-        if self.project[7]:  # end_date
-            self.end_date_edit.setDate(QDate.fromString(self.project[7], "yyyy-MM-dd"))
-
-        # 予算
-        if self.project[4] and self.project[4] > 0:  # budget
-            self.budget_edit.setText(str(int(self.project[4])))
-
-        # 備考（旧typeフィールドを備考として表示）
-        if self.project[3]:  # type (旧フィールド)
-            self.notes_edit.setPlainText(self.project[3])
+        # 実施日
+        if self.project[2]:  # implementation_date
+            self.implementation_date_edit.setDate(QDate.fromString(self.project[2], "yyyy-MM-dd"))
 
     def save(self):
         """保存"""
@@ -219,24 +184,11 @@ class ProjectEditDialog(QDialog):
         else:
             project_type = "イベント"
 
-        # 予算の取得
-        budget = 0.0
-        if self.budget_edit.text().strip():
-            try:
-                budget = float(self.budget_edit.text().strip())
-            except ValueError:
-                QMessageBox.warning(self, "入力エラー", "予算は数値で入力してください")
-                return
-
         project_data = {
             'name': self.name_edit.text().strip(),
             'program_id': self.program_combo.currentData(),
             'project_type': project_type,
-            'start_date': self.start_date_edit.date().toString("yyyy-MM-dd") if self.start_date_edit.date().isValid() else None,
-            'end_date': self.end_date_edit.date().toString("yyyy-MM-dd") if self.end_date_edit.date().isValid() else None,
-            'budget': budget,
-            'type': self.notes_edit.toPlainText().strip(),  # 旧フィールドを備考として使用
-            'date': self.start_date_edit.date().toString("yyyy-MM-dd") if self.start_date_edit.date().isValid() else QDate.currentDate().toString("yyyy-MM-dd"),
+            'implementation_date': self.implementation_date_edit.date().toString("yyyy-MM-dd"),
             'parent_id': None
         }
 

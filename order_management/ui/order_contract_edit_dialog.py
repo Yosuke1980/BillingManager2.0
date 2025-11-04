@@ -600,13 +600,13 @@ class OrderContractEditDialog(QDialog):
         self.project_combo.addItem("（案件を選択）", None)
 
         for project in projects:
-            # project: (id, name, date, type, budget, parent_id,
-            #          start_date, end_date, project_type, program_id, program_name)
+            # project: (id, name, implementation_date, project_type,
+            #          parent_id, program_id, program_name)
             display_text = f"{project[1]}"
-            if project[8]:  # project_type
-                display_text += f" ({project[8]})"
-            if project[6]:  # start_date
-                display_text += f" [{project[6]}]"
+            if project[3]:  # project_type
+                display_text += f" ({project[3]})"
+            if project[2]:  # implementation_date
+                display_text += f" [{project[2]}]"
             self.project_combo.addItem(display_text, project[0])
 
     def add_new_project(self):

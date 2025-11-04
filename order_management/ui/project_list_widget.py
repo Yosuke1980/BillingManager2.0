@@ -37,12 +37,13 @@ class ProjectListWidget(QWidget):
 
         # フィルター部分
         filter_layout = QHBoxLayout()
-        filter_layout.addWidget(QLabel("タイプ:"))
+        filter_layout.addWidget(QLabel("種別:"))
 
         self.type_filter = QComboBox()
         self.type_filter.addItem("全て", "")
-        self.type_filter.addItem("レギュラー", "レギュラー")
-        self.type_filter.addItem("単発", "単発")
+        self.type_filter.addItem("イベント", "イベント")
+        self.type_filter.addItem("特別企画", "特別企画")
+        self.type_filter.addItem("通常", "通常")
         self.type_filter.currentIndexChanged.connect(self.load_projects)
 
         filter_layout.addWidget(self.type_filter)
@@ -71,9 +72,9 @@ class ProjectListWidget(QWidget):
 
         # テーブル
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
+        self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels([
-            "ID", "実施日", "案件名", "タイプ", "予算", "実績", "残予算"
+            "ID", "実施日", "案件名", "種別"
         ])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.SingleSelection)
@@ -105,68 +106,26 @@ class ProjectListWidget(QWidget):
             project_ids = [p[0] for p in group]
 
             # グループ代表の情報を取得（最初のプロジェクト）
+            # project: (id, name, implementation_date, project_type, parent_id)
             first_project = group[0]
-            project_type_str = first_project[3] or ""
-
-            # グループ全体の予算・実績を合計
-            total_budget = 0
-            total_actual = 0
-            for project in group:
-                summary = self.db.get_project_summary(project[0])
-                total_budget += summary['budget']
-                total_actual += summary['actual']
-
-            total_remaining = total_budget - total_actual
-
-            # 日付表示（最初のプロジェクトの日付を使用）
-            if project_type_str == "レギュラー":
-                detail = self.db.get_project_by_id(first_project[0])
-                if detail:
-                    start_date = detail[6] or ""
-                    end_date = detail[7] or ""
-                    if start_date and end_date:
-                        date_display = f"{start_date} ～ {end_date}"
-                    elif start_date:
-                        date_display = start_date
-                    else:
-                        date_display = ""
-                else:
-                    date_display = ""
-            else:
-                date_display = first_project[2] or ""
+            implementation_date = first_project[2] or ""
+            project_type_str = first_project[3] or "イベント"
 
             # テーブルに設定
             # ID列には複数IDをカンマ区切りで保存
             id_str = ",".join(map(str, project_ids))
             self.table.setItem(row, 0, QTableWidgetItem(id_str))  # ID(複数)
-            self.table.setItem(row, 1, QTableWidgetItem(date_display))  # 日付
+            self.table.setItem(row, 1, QTableWidgetItem(implementation_date))  # 実施日
 
             # 案件名に件数を追加表示（2件以上の場合）
             display_name = project_name
             if len(group) > 1:
                 display_name += f" ({len(group)}件)"
             self.table.setItem(row, 2, QTableWidgetItem(display_name))  # 案件名
-            self.table.setItem(row, 3, QTableWidgetItem(project_type_str))  # タイプ
-
-            # 予算・実績・残予算
-            budget_item = QTableWidgetItem(f"{total_budget:,.0f}")
-            actual_item = QTableWidgetItem(f"{total_actual:,.0f}")
-            remaining_item = QTableWidgetItem(f"{total_remaining:,.0f}")
-
-            budget_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            actual_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            remaining_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-            # 予算超過時は赤字
-            if total_remaining < 0:
-                remaining_item.setForeground(Qt.red)
-
-            self.table.setItem(row, 4, budget_item)
-            self.table.setItem(row, 5, actual_item)
-            self.table.setItem(row, 6, remaining_item)
+            self.table.setItem(row, 3, QTableWidgetItem(project_type_str))  # 種別
 
             # 行全体を読み取り専用に
-            for col in range(7):
+            for col in range(4):
                 item = self.table.item(row, col)
                 if item:
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
