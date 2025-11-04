@@ -1,0 +1,480 @@
+"""プロジェクトタイムラインウィジェット
+
+プロジェクトを時系列に並べ、ツリー構造で費用項目を表示します。
+"""
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
+    QPushButton, QLabel, QDateEdit, QComboBox, QFileDialog, QMessageBox,
+    QHeaderView, QMenu, QAction
+)
+from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtGui import QFont, QColor, QBrush
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
+from datetime import datetime, timedelta
+import csv
+
+from order_management.database_manager import OrderManagementDB
+from order_management.ui.project_edit_dialog import ProjectEditDialog
+from order_management.ui.expense_edit_dialog import ExpenseEditDialog
+
+
+class ProjectTimelineWidget(QWidget):
+    """プロジェクトタイムラインウィジェット"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.db = OrderManagementDB()
+        self._setup_ui()
+        self.load_timeline()
+
+    def _setup_ui(self):
+        """UIセットアップ"""
+        layout = QVBoxLayout(self)
+
+        # ===== フィルターエリア =====
+        filter_group_layout = QVBoxLayout()
+
+        # 1行目: 期間フィルター
+        date_filter_layout = QHBoxLayout()
+        date_filter_layout.addWidget(QLabel("期間:"))
+
+        self.start_date_edit = QDateEdit()
+        self.start_date_edit.setCalendarPopup(True)
+        self.start_date_edit.setDate(QDate.currentDate().addMonths(-3))  # 3ヶ月前から
+        self.start_date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_filter_layout.addWidget(self.start_date_edit)
+
+        date_filter_layout.addWidget(QLabel("〜"))
+
+        self.end_date_edit = QDateEdit()
+        self.end_date_edit.setCalendarPopup(True)
+        self.end_date_edit.setDate(QDate.currentDate().addMonths(3))  # 3ヶ月後まで
+        self.end_date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_filter_layout.addWidget(self.end_date_edit)
+
+        date_filter_layout.addStretch()
+        filter_group_layout.addLayout(date_filter_layout)
+
+        # 2行目: 種別・番組フィルター
+        category_filter_layout = QHBoxLayout()
+        category_filter_layout.addWidget(QLabel("種別:"))
+
+        self.type_filter = QComboBox()
+        self.type_filter.addItem("全て", "")
+        self.type_filter.addItem("イベント", "イベント")
+        self.type_filter.addItem("特別企画", "特別企画")
+        self.type_filter.addItem("通常", "通常")
+        category_filter_layout.addWidget(self.type_filter)
+
+        category_filter_layout.addWidget(QLabel("  番組:"))
+
+        self.program_filter = QComboBox()
+        self._load_programs()
+        category_filter_layout.addWidget(self.program_filter)
+
+        category_filter_layout.addStretch()
+        filter_group_layout.addLayout(category_filter_layout)
+
+        # 3行目: アクションボタン
+        action_layout = QHBoxLayout()
+
+        self.refresh_btn = QPushButton("更新")
+        self.refresh_btn.clicked.connect(self.load_timeline)
+        action_layout.addWidget(self.refresh_btn)
+
+        self.csv_export_btn = QPushButton("CSV出力")
+        self.csv_export_btn.clicked.connect(self.export_to_csv)
+        action_layout.addWidget(self.csv_export_btn)
+
+        self.print_btn = QPushButton("印刷")
+        self.print_btn.clicked.connect(self.print_timeline)
+        action_layout.addWidget(self.print_btn)
+
+        self.expand_all_btn = QPushButton("全て展開")
+        self.expand_all_btn.clicked.connect(self.expand_all)
+        action_layout.addWidget(self.expand_all_btn)
+
+        self.collapse_all_btn = QPushButton("全て折りたたみ")
+        self.collapse_all_btn.clicked.connect(self.collapse_all)
+        action_layout.addWidget(self.collapse_all_btn)
+
+        action_layout.addStretch()
+        filter_group_layout.addLayout(action_layout)
+
+        layout.addLayout(filter_group_layout)
+
+        # ===== ツリーウィジェット =====
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(5)
+        self.tree.setHeaderLabels([
+            "実施日/支払予定日", "プロジェクト名/項目名", "種別", "金額（円）", "ステータス"
+        ])
+
+        # カラム幅設定
+        header = self.tree.header()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+
+        # ソート有効化
+        self.tree.setSortingEnabled(True)
+        self.tree.sortByColumn(0, Qt.AscendingOrder)  # デフォルトは古い順
+
+        # ダブルクリックイベント
+        self.tree.itemDoubleClicked.connect(self.on_item_double_clicked)
+
+        # 右クリックメニュー
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self.show_context_menu)
+
+        layout.addWidget(self.tree)
+
+        # ===== ステータスバー =====
+        self.status_label = QLabel("プロジェクト: 0件 | 総実績: 0円")
+        self.status_label.setStyleSheet("padding: 5px; background-color: #f0f0f0;")
+        layout.addWidget(self.status_label)
+
+    def _load_programs(self):
+        """番組一覧を読み込み"""
+        self.program_filter.clear()
+        self.program_filter.addItem("全て", None)
+
+        programs = self.db.get_programs()
+        for program in programs:
+            # program: (id, name, description, start_date, end_date,
+            #          broadcast_time, broadcast_days, status,
+            #          program_type, parent_program_id)
+            display_text = program[1]
+            if program[8]:  # program_type
+                display_text += f" ({program[8]})"
+            self.program_filter.addItem(display_text, program[0])
+
+    def load_timeline(self):
+        """タイムラインを読み込み"""
+        self.tree.clear()
+        self.tree.setSortingEnabled(False)  # ソートを一時無効化
+
+        # フィルター条件取得
+        start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
+        end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
+        project_type = self.type_filter.currentData()
+        program_id = self.program_filter.currentData()
+
+        # プロジェクト取得
+        projects = self.db.get_projects(project_type=project_type or "")
+
+        # フィルタリング
+        filtered_projects = []
+        for project in projects:
+            # project: (id, name, implementation_date, project_type, parent_id)
+            impl_date = project[2]
+
+            # 日付フィルター
+            if impl_date and (impl_date < start_date or impl_date > end_date):
+                continue
+
+            # 番組フィルター（プロジェクトに番組IDがあれば）
+            if program_id:
+                project_detail = self.db.get_project_by_id(project[0])
+                if project_detail and project_detail[5] != program_id:
+                    continue
+
+            filtered_projects.append(project)
+
+        # 統計用変数
+        total_projects = len(filtered_projects)
+        total_amount = 0
+
+        # ツリー構築
+        for project in filtered_projects:
+            project_id = project[0]
+            project_name = project[1]
+            implementation_date = project[2] or ""
+            project_type_str = project[3] or "イベント"
+
+            # 実績合計取得
+            summary = self.db.get_project_summary(project_id)
+            project_total = summary['actual']
+            total_amount += project_total
+
+            # プロジェクトノード作成
+            project_item = QTreeWidgetItem([
+                implementation_date,
+                project_name,
+                project_type_str,
+                f"{project_total:,.0f}",
+                ""
+            ])
+
+            # プロジェクトノードのスタイル
+            font = QFont()
+            font.setBold(True)
+            for col in range(5):
+                project_item.setFont(col, font)
+                project_item.setBackground(col, QBrush(QColor(240, 240, 240)))
+
+            # データを保存（編集用）
+            project_item.setData(0, Qt.UserRole, ("project", project_id))
+
+            # 費用項目取得
+            expenses = self.db.get_expenses_by_project(project_id)
+
+            for expense in expenses:
+                # expense: (id, project_id, item_name, amount, supplier_id,
+                #          contact_person, status, order_number,
+                #          implementation_date, invoice_received_date)
+                expense_id = expense[0]
+                item_name = expense[2]
+                amount = expense[3]
+                status = expense[6] or ""
+
+                # 支払予定日を取得（詳細情報が必要）
+                expense_detail = self.db.get_expense_order_by_id(expense_id)
+                payment_scheduled_date = ""
+                if expense_detail and expense_detail[11]:
+                    payment_scheduled_date = expense_detail[11]
+
+                # 費用項目ノード作成
+                expense_item = QTreeWidgetItem([
+                    payment_scheduled_date,
+                    item_name,
+                    "",
+                    f"{amount:,.0f}",
+                    status
+                ])
+
+                # ステータスに応じた色分け
+                if status == "支払済":
+                    expense_item.setForeground(4, QBrush(QColor(0, 128, 0)))  # 緑
+                elif status == "未払" or status == "発注済":
+                    expense_item.setForeground(4, QBrush(QColor(255, 0, 0)))  # 赤
+                elif status == "請求書待ち":
+                    expense_item.setForeground(4, QBrush(QColor(255, 165, 0)))  # オレンジ
+
+                # データを保存（編集用）
+                expense_item.setData(0, Qt.UserRole, ("expense", expense_id))
+
+                project_item.addChild(expense_item)
+
+            self.tree.addTopLevelItem(project_item)
+
+        # ソートを再有効化
+        self.tree.setSortingEnabled(True)
+
+        # 全て展開
+        self.tree.expandAll()
+
+        # ステータス更新
+        self.status_label.setText(
+            f"プロジェクト: {total_projects}件 | 総実績: {total_amount:,.0f}円"
+        )
+
+    def on_item_double_clicked(self, item, column):
+        """アイテムダブルクリック時の処理"""
+        data = item.data(0, Qt.UserRole)
+        if not data:
+            return
+
+        data_type, data_id = data
+
+        if data_type == "project":
+            # プロジェクト編集
+            project = self.db.get_project_by_id(data_id)
+            if project:
+                dialog = ProjectEditDialog(self, project=project)
+                if dialog.exec_():
+                    self.load_timeline()
+
+        elif data_type == "expense":
+            # 費用項目編集
+            dialog = ExpenseEditDialog(self, expense_id=data_id)
+            if dialog.exec_():
+                self.load_timeline()
+
+    def show_context_menu(self, position):
+        """右クリックメニュー表示"""
+        item = self.tree.itemAt(position)
+        if not item:
+            return
+
+        data = item.data(0, Qt.UserRole)
+        if not data:
+            return
+
+        data_type, data_id = data
+
+        menu = QMenu(self)
+
+        # 編集アクション
+        edit_action = QAction("編集", self)
+        edit_action.triggered.connect(lambda: self.on_item_double_clicked(item, 0))
+        menu.addAction(edit_action)
+
+        menu.addSeparator()
+
+        # 削除アクション
+        delete_action = QAction("削除", self)
+        delete_action.triggered.connect(lambda: self.delete_item(data_type, data_id))
+        menu.addAction(delete_action)
+
+        menu.exec_(self.tree.viewport().mapToGlobal(position))
+
+    def delete_item(self, data_type, data_id):
+        """アイテム削除"""
+        reply = QMessageBox.question(
+            self, "確認",
+            f"この{'プロジェクト' if data_type == 'project' else '費用項目'}を削除してもよろしいですか？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                if data_type == "project":
+                    self.db.delete_project(data_id)
+                    QMessageBox.information(self, "成功", "プロジェクトを削除しました")
+                elif data_type == "expense":
+                    self.db.delete_expense_order(data_id)
+                    QMessageBox.information(self, "成功", "費用項目を削除しました")
+
+                self.load_timeline()
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{str(e)}")
+
+    def expand_all(self):
+        """全て展開"""
+        self.tree.expandAll()
+
+    def collapse_all(self):
+        """全て折りたたみ"""
+        self.tree.collapseAll()
+
+    def export_to_csv(self):
+        """CSV出力"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "CSV出力", f"project_timeline_{datetime.now().strftime('%Y%m%d')}.csv",
+            "CSV Files (*.csv)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+
+                # ヘッダー
+                writer.writerow([
+                    "実施日/支払予定日", "プロジェクト名/項目名",
+                    "種別", "金額（円）", "ステータス"
+                ])
+
+                # データ
+                root = self.tree.invisibleRootItem()
+                for i in range(root.childCount()):
+                    project_item = root.child(i)
+
+                    # プロジェクト行
+                    writer.writerow([
+                        project_item.text(0),
+                        project_item.text(1),
+                        project_item.text(2),
+                        project_item.text(3),
+                        project_item.text(4)
+                    ])
+
+                    # 費用項目行（インデント付き）
+                    for j in range(project_item.childCount()):
+                        expense_item = project_item.child(j)
+                        writer.writerow([
+                            expense_item.text(0),
+                            "  " + expense_item.text(1),  # インデント
+                            expense_item.text(2),
+                            expense_item.text(3),
+                            expense_item.text(4)
+                        ])
+
+            QMessageBox.information(self, "成功", f"CSV出力が完了しました:\n{file_path}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV出力に失敗しました:\n{str(e)}")
+
+    def print_timeline(self):
+        """印刷"""
+        printer = QPrinter(QPrinter.HighResolution)
+        dialog = QPrintDialog(printer, self)
+
+        if dialog.exec_() == QPrintDialog.Accepted:
+            # 簡易的なHTML形式で印刷
+            html = self._generate_print_html()
+
+            from PyQt5.QtGui import QTextDocument
+            document = QTextDocument()
+            document.setHtml(html)
+            document.print_(printer)
+
+            QMessageBox.information(self, "成功", "印刷を開始しました")
+
+    def _generate_print_html(self):
+        """印刷用HTML生成"""
+        html = """
+        <html>
+        <head>
+            <style>
+                body { font-family: sans-serif; }
+                h2 { text-align: center; }
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                .project { font-weight: bold; background-color: #f9f9f9; }
+                .expense { padding-left: 20px; }
+            </style>
+        </head>
+        <body>
+            <h2>プロジェクトタイムライン</h2>
+            <table>
+                <tr>
+                    <th>実施日/支払予定日</th>
+                    <th>プロジェクト名/項目名</th>
+                    <th>種別</th>
+                    <th>金額（円）</th>
+                    <th>ステータス</th>
+                </tr>
+        """
+
+        root = self.tree.invisibleRootItem()
+        for i in range(root.childCount()):
+            project_item = root.child(i)
+
+            # プロジェクト行
+            html += f"""
+                <tr class="project">
+                    <td>{project_item.text(0)}</td>
+                    <td>{project_item.text(1)}</td>
+                    <td>{project_item.text(2)}</td>
+                    <td>{project_item.text(3)}</td>
+                    <td>{project_item.text(4)}</td>
+                </tr>
+            """
+
+            # 費用項目行
+            for j in range(project_item.childCount()):
+                expense_item = project_item.child(j)
+                html += f"""
+                    <tr class="expense">
+                        <td>{expense_item.text(0)}</td>
+                        <td>&nbsp;&nbsp;{expense_item.text(1)}</td>
+                        <td>{expense_item.text(2)}</td>
+                        <td>{expense_item.text(3)}</td>
+                        <td>{expense_item.text(4)}</td>
+                    </tr>
+                """
+
+        html += """
+            </table>
+        </body>
+        </html>
+        """
+
+        return html
