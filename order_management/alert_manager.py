@@ -34,7 +34,7 @@ class AlertManager:
 
             cursor.execute("""
                 SELECT e.id, e.item_name, e.implementation_date,
-                       p.name as project_name, p.date as project_date,
+                       p.name as project_name, p.implementation_date as project_date,
                        s.name as supplier_name, e.contact_person
                 FROM expenses_order e
                 JOIN projects p ON e.project_id = p.id
@@ -83,7 +83,7 @@ class AlertManager:
 
             cursor.execute("""
                 SELECT e.id, e.item_name, e.updated_at,
-                       p.name as project_name, p.date as project_date,
+                       p.name as project_name, p.implementation_date as project_date,
                        s.name as supplier_name, e.contact_person
                 FROM expenses_order e
                 JOIN projects p ON e.project_id = p.id
