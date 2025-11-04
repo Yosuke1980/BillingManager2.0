@@ -2560,3 +2560,46 @@ class OrderManagementDB:
             return enriched_results
         finally:
             conn.close()
+
+    def migrate_add_work_type(self) -> bool:
+        """業務種別カラムを追加
+
+        実行内容:
+        1. order_contractsテーブルにwork_typeカラムを追加
+
+        Returns:
+            bool: マイグレーション成功時True
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # order_contractsテーブルの拡張
+            cursor.execute("PRAGMA table_info(order_contracts)")
+            columns = [col[1] for col in cursor.fetchall()]
+
+            if 'work_type' not in columns:
+                log_message("order_contractsテーブルにwork_typeカラムを追加")
+
+                cursor.execute("""
+                    ALTER TABLE order_contracts
+                    ADD COLUMN work_type TEXT DEFAULT '制作'
+                """)
+
+                # 既存データのデフォルト値を設定
+                cursor.execute("""
+                    UPDATE order_contracts
+                    SET work_type = '制作'
+                    WHERE work_type IS NULL
+                """)
+
+            conn.commit()
+            log_message("業務種別カラムの追加が完了しました")
+            return True
+
+        except Exception as e:
+            conn.rollback()
+            log_message(f"マイグレーションエラー: {e}")
+            return False
+        finally:
+            conn.close()

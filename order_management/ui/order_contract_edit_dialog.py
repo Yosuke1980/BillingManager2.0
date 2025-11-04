@@ -68,6 +68,7 @@ class OrderContractEditDialog(QDialog):
         self.order_type_group.addButton(self.order_type_regular)
         self.order_type_group.addButton(self.order_type_spot)
         self.order_type_regular.setChecked(True)
+        self.order_type_regular.toggled.connect(self.on_order_configuration_changed)
         order_type_layout.addWidget(self.order_type_regular)
         order_type_layout.addWidget(self.order_type_spot)
         order_type_layout.addStretch()
@@ -78,31 +79,32 @@ class OrderContractEditDialog(QDialog):
         order_type_widget.setMinimumHeight(40)
         basic_layout.addRow("発注種別:", order_type_widget)
 
-        # 書類タイプ（契約書・発注書・発注メール）
-        doc_type_layout = QHBoxLayout()
-        doc_type_layout.setContentsMargins(0, 0, 0, 0)
-        self.doc_type_group = QButtonGroup()
-        self.doc_type_contract = QRadioButton("契約書")
-        self.doc_type_order = QRadioButton("発注書")
-        self.doc_type_email = QRadioButton("発注メール")
-        self.doc_type_contract.setMinimumWidth(80)
-        self.doc_type_order.setMinimumWidth(80)
-        self.doc_type_email.setMinimumWidth(100)
-        self.doc_type_group.addButton(self.doc_type_contract)
-        self.doc_type_group.addButton(self.doc_type_order)
-        self.doc_type_group.addButton(self.doc_type_email)
-        self.doc_type_order.setChecked(True)
-        self.doc_type_email.toggled.connect(self.on_doc_type_changed)
-        doc_type_layout.addWidget(self.doc_type_contract)
-        doc_type_layout.addWidget(self.doc_type_order)
-        doc_type_layout.addWidget(self.doc_type_email)
-        doc_type_layout.addStretch()
+        # 業務種別（制作・出演）
+        work_type_layout = QHBoxLayout()
+        work_type_layout.setContentsMargins(0, 0, 0, 0)
+        self.work_type_group = QButtonGroup()
+        self.work_type_production = QRadioButton("制作")
+        self.work_type_cast = QRadioButton("出演")
+        self.work_type_production.setMinimumWidth(100)
+        self.work_type_cast.setMinimumWidth(80)
+        self.work_type_group.addButton(self.work_type_production)
+        self.work_type_group.addButton(self.work_type_cast)
+        self.work_type_production.setChecked(True)
+        self.work_type_production.toggled.connect(self.on_order_configuration_changed)
+        work_type_layout.addWidget(self.work_type_production)
+        work_type_layout.addWidget(self.work_type_cast)
+        work_type_layout.addStretch()
 
-        doc_type_widget = QWidget()
-        doc_type_widget.setLayout(doc_type_layout)
-        doc_type_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        doc_type_widget.setMinimumHeight(40)
-        basic_layout.addRow("書類タイプ:", doc_type_widget)
+        work_type_widget = QWidget()
+        work_type_widget.setLayout(work_type_layout)
+        work_type_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        work_type_widget.setMinimumHeight(40)
+        basic_layout.addRow("業務種別:", work_type_widget)
+
+        # 書類タイプ（自動設定・表示のみ）
+        self.doc_type_label = QLabel("<b>発注書</b>")
+        self.doc_type_label.setStyleSheet("font-size: 13px; color: #1976d2;")
+        basic_layout.addRow("書類タイプ:", self.doc_type_label)
 
         # ファイル選択（契約書タイプの直下）
         file_layout = QHBoxLayout()
@@ -228,7 +230,7 @@ class OrderContractEditDialog(QDialog):
         contract_layout = QFormLayout()
         contract_layout.setVerticalSpacing(8)
 
-        # 契約期間
+        # 契約期間（レギュラー用）
         date_layout = QHBoxLayout()
         self.start_date = QDateEdit()
         self.start_date.setCalendarPopup(True)
@@ -243,16 +245,32 @@ class OrderContractEditDialog(QDialog):
         date_layout.addWidget(self.end_date)
         date_layout.addStretch()
 
-        contract_layout.addRow("開始日 〜 終了日:", date_layout)
+        self.date_range_widget = QWidget()
+        self.date_range_widget.setLayout(date_layout)
+        contract_layout.addRow("開始日 〜 終了日:", self.date_range_widget)
 
-        # 期間タイプ
+        # 実施日（単発用）
+        impl_date_layout = QHBoxLayout()
+        self.implementation_date = QDateEdit()
+        self.implementation_date.setCalendarPopup(True)
+        self.implementation_date.setDate(QDate.currentDate())
+        impl_date_layout.addWidget(self.implementation_date)
+        impl_date_layout.addStretch()
+
+        self.impl_date_widget = QWidget()
+        self.impl_date_widget.setLayout(impl_date_layout)
+        self.impl_date_widget.setVisible(False)  # デフォルト非表示
+        contract_layout.addRow("実施日:", self.impl_date_widget)
+
+        # 期間タイプ（レギュラー用）
         self.period_type = QComboBox()
         self.period_type.addItems(["3ヶ月", "半年", "1年"])
         self.period_type.setCurrentText("半年")
         self.period_type.currentTextChanged.connect(self.on_period_type_changed)
+        self.period_type_row_index = contract_layout.rowCount()
         contract_layout.addRow("期間タイプ:", self.period_type)
 
-        # 支払い方法と金額
+        # 支払い方法と金額（レギュラー用）
         payment_layout = QHBoxLayout()
         payment_layout.addWidget(QLabel("支払い方法:"))
         self.payment_type = QComboBox()
@@ -269,12 +287,29 @@ class OrderContractEditDialog(QDialog):
         payment_layout.addWidget(self.unit_price)
         payment_layout.addStretch()
 
-        contract_layout.addRow("", payment_layout)
+        self.regular_payment_widget = QWidget()
+        self.regular_payment_widget.setLayout(payment_layout)
+        contract_layout.addRow("", self.regular_payment_widget)
 
-        # ヘルプテキスト
+        # ヘルプテキスト（レギュラー用）
         payment_help = QLabel("<i><font color='#666'>ヒント: 月額固定は毎月同じ金額、回数ベースは放送回数×単価で計算</font></i>")
         payment_help.setWordWrap(True)
-        contract_layout.addRow("", payment_help)
+        self.regular_payment_help = payment_help
+        contract_layout.addRow("", self.regular_payment_help)
+
+        # スポット金額（単発用）
+        spot_amount_layout = QHBoxLayout()
+        spot_amount_layout.addWidget(QLabel("金額:"))
+        self.spot_amount = QLineEdit()
+        self.spot_amount.setPlaceholderText("例: 100000")
+        self.spot_amount.setMaximumWidth(150)
+        spot_amount_layout.addWidget(self.spot_amount)
+        spot_amount_layout.addStretch()
+
+        self.spot_payment_widget = QWidget()
+        self.spot_payment_widget.setLayout(spot_amount_layout)
+        self.spot_payment_widget.setVisible(False)  # デフォルト非表示
+        contract_layout.addRow("スポット金額:", self.spot_payment_widget)
 
         # 支払いタイミング
         self.payment_timing = QComboBox()
@@ -282,9 +317,12 @@ class OrderContractEditDialog(QDialog):
         self.payment_timing.setCurrentText("翌月末払い")
         contract_layout.addRow("支払いタイミング:", self.payment_timing)
 
-        # === 契約自動延長設定 ===
+        # === 契約自動延長設定（レギュラー出演契約書のみ） ===
+        self.renewal_section_widgets = []  # 自動延長関連ウィジェットを保存
+
         renewal_header = QLabel("<b>契約自動延長設定</b>")
         contract_layout.addRow("", renewal_header)
+        self.renewal_section_widgets.append((contract_layout.rowCount() - 1, renewal_header))
 
         # 自動延長有効チェックボックス
         renewal_enable_layout = QHBoxLayout()
@@ -293,7 +331,10 @@ class OrderContractEditDialog(QDialog):
         self.auto_renewal_checkbox.stateChanged.connect(self.on_auto_renewal_changed)
         renewal_enable_layout.addWidget(self.auto_renewal_checkbox)
         renewal_enable_layout.addStretch()
-        contract_layout.addRow("", renewal_enable_layout)
+        renewal_enable_widget = QWidget()
+        renewal_enable_widget.setLayout(renewal_enable_layout)
+        contract_layout.addRow("", renewal_enable_widget)
+        self.renewal_section_widgets.append((contract_layout.rowCount() - 1, renewal_enable_widget))
 
         # 延長期間
         renewal_period_layout = QHBoxLayout()
@@ -305,7 +346,10 @@ class OrderContractEditDialog(QDialog):
         renewal_period_layout.addWidget(self.renewal_period_spin)
         renewal_period_layout.addWidget(QLabel("ずつ自動延長"))
         renewal_period_layout.addStretch()
-        contract_layout.addRow("延長期間:", renewal_period_layout)
+        renewal_period_widget = QWidget()
+        renewal_period_widget.setLayout(renewal_period_layout)
+        contract_layout.addRow("延長期間:", renewal_period_widget)
+        self.renewal_section_widgets.append((contract_layout.rowCount() - 1, renewal_period_widget))
 
         # 終了通知受領日
         termination_notice_layout = QHBoxLayout()
@@ -320,7 +364,10 @@ class OrderContractEditDialog(QDialog):
         clear_notice_btn.setMaximumWidth(80)
         termination_notice_layout.addWidget(clear_notice_btn)
         termination_notice_layout.addStretch()
-        contract_layout.addRow("終了通知受領日:", termination_notice_layout)
+        termination_notice_widget = QWidget()
+        termination_notice_widget.setLayout(termination_notice_layout)
+        contract_layout.addRow("終了通知受領日:", termination_notice_widget)
+        self.renewal_section_widgets.append((contract_layout.rowCount() - 1, termination_notice_widget))
 
         # ヘルプテキスト
         renewal_help = QLabel(
@@ -328,6 +375,7 @@ class OrderContractEditDialog(QDialog):
         )
         renewal_help.setWordWrap(True)
         contract_layout.addRow("", renewal_help)
+        self.renewal_section_widgets.append((contract_layout.rowCount() - 1, renewal_help))
 
         contract_group.setLayout(contract_layout)
 
@@ -423,8 +471,8 @@ class OrderContractEditDialog(QDialog):
 
         self.setLayout(main_layout)
 
-        # 初期表示：発注書モードでメールフィールドを非表示
-        self.on_doc_type_changed()
+        # 初期表示：デフォルト設定に基づいて画面項目を調整
+        self.on_order_configuration_changed()
 
     def on_payment_type_changed(self, payment_type):
         """支払タイプが変更されたときの処理"""
@@ -438,6 +486,67 @@ class OrderContractEditDialog(QDialog):
         if not enabled:
             # 自動延長を無効にした場合、終了通知受領日もクリア推奨
             pass  # ユーザーの判断に任せる
+
+    def on_order_configuration_changed(self):
+        """発注種別・業務種別が変更されたときの処理
+
+        組み合わせに応じて画面項目を表示/非表示する:
+        - レギュラー出演: 契約書、期間、自動延長あり
+        - レギュラー制作: 発注書、期間、自動延長なし
+        - 単発出演: 発注書、実施日、スポット金額
+        - 単発制作: 発注書、実施日、スポット金額
+        """
+        is_regular = self.order_type_regular.isChecked()
+        is_cast = self.work_type_cast.isChecked()
+
+        # 書類タイプの自動設定
+        if is_regular and is_cast:
+            # レギュラー出演 → 契約書
+            doc_type_text = "<b>契約書</b>"
+            doc_type_color = "#d32f2f"  # 赤
+        else:
+            # その他 → 発注書
+            doc_type_text = "<b>発注書</b>"
+            doc_type_color = "#1976d2"  # 青
+
+        self.doc_type_label.setText(doc_type_text)
+        self.doc_type_label.setStyleSheet(f"font-size: 13px; color: {doc_type_color};")
+
+        # 日付フィールドの表示切り替え
+        if is_regular:
+            # レギュラー: 開始日〜終了日
+            self.date_range_widget.setVisible(True)
+            self.impl_date_widget.setVisible(False)
+            self.period_type.setVisible(True)
+        else:
+            # 単発: 実施日のみ
+            self.date_range_widget.setVisible(False)
+            self.impl_date_widget.setVisible(True)
+            self.period_type.setVisible(False)
+
+        # 支払いフィールドの表示切り替え
+        if is_regular:
+            # レギュラー: 月額固定 or 回数ベース
+            self.regular_payment_widget.setVisible(True)
+            self.regular_payment_help.setVisible(True)
+            self.spot_payment_widget.setVisible(False)
+        else:
+            # 単発: スポット金額
+            self.regular_payment_widget.setVisible(False)
+            self.regular_payment_help.setVisible(False)
+            self.spot_payment_widget.setVisible(True)
+
+        # 自動延長設定の表示切り替え（レギュラー出演契約書のみ）
+        show_renewal = is_regular and is_cast
+        for row_index, widget in self.renewal_section_widgets:
+            widget.setVisible(show_renewal)
+
+        # 単発の場合は案件指定を「特定案件」に固定
+        if not is_regular:
+            self.rb_project.setChecked(True)
+            self.rb_normal.setEnabled(False)
+        else:
+            self.rb_normal.setEnabled(True)
 
     def on_project_type_changed(self):
         """案件区分が変更されたときの処理"""
