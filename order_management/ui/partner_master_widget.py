@@ -6,7 +6,7 @@ Phase 6で実装。
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QMessageBox, QDialog, QLabel, QLineEdit,
-    QTextEdit, QDialogButtonBox, QFormLayout, QComboBox
+    QTextEdit, QDialogButtonBox, QFormLayout, QComboBox, QHeaderView
 )
 from PyQt5.QtCore import Qt
 from partner_manager import PartnerManager
@@ -73,6 +73,16 @@ class PartnerMasterWidget(QWidget):
         # ID列を非表示
         self.table.setColumnHidden(0, True)
 
+        # 列幅の自動調整
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 取引先名
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # コード
+        header.setSectionResizeMode(3, QHeaderView.Stretch)  # 担当者
+        header.setSectionResizeMode(4, QHeaderView.Stretch)  # メールアドレス
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 電話番号
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 取引先区分
+        header.setSectionResizeMode(7, QHeaderView.Stretch)  # 備考
+
         layout.addWidget(self.table)
 
     def load_partners(self):
@@ -92,8 +102,6 @@ class PartnerMasterWidget(QWidget):
                 item = QTableWidgetItem(str(value) if value else "")
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.table.setItem(row, display_col, item)
-
-        self.table.resizeColumnsToContents()
 
         # 統計情報を更新
         self._update_stats()

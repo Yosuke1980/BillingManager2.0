@@ -5,7 +5,7 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QMessageBox, QDialog, QLabel, QLineEdit,
-    QTextEdit, QDialogButtonBox, QFormLayout
+    QTextEdit, QDialogButtonBox, QFormLayout, QHeaderView
 )
 from PyQt5.QtCore import Qt
 from order_management.database_manager import OrderManagementDB
@@ -50,6 +50,17 @@ class SupplierMasterWidget(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.doubleClicked.connect(self.edit_supplier)
 
+        # ID列を非表示
+        self.table.setColumnHidden(0, True)
+
+        # 列幅の自動調整
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 発注先名
+        header.setSectionResizeMode(2, QHeaderView.Stretch)  # 担当者
+        header.setSectionResizeMode(3, QHeaderView.Stretch)  # メールアドレス
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 電話番号
+        header.setSectionResizeMode(5, QHeaderView.Stretch)  # 備考
+
         layout.addWidget(self.table)
 
     def load_suppliers(self):
@@ -62,8 +73,6 @@ class SupplierMasterWidget(QWidget):
                 item = QTableWidgetItem(str(value) if value else "")
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 self.table.setItem(row, col, item)
-
-        self.table.resizeColumnsToContents()
 
     def add_supplier(self):
         """新規発注先追加"""
