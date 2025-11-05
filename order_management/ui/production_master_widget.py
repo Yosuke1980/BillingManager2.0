@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
-    QTableWidgetItem, QMessageBox, QLabel, QLineEdit, QComboBox, QFileDialog
+    QTableWidgetItem, QMessageBox, QLabel, QLineEdit, QComboBox, QFileDialog, QHeaderView
 )
 from PyQt5.QtCore import Qt
 from order_management.database_manager import OrderManagementDB
@@ -98,6 +98,18 @@ class ProductionMasterWidget(QWidget):
 
         # ID列を非表示
         self.table.setColumnHidden(0, True)
+
+        # カラム幅の設定
+        header = self.table.horizontalHeader()
+        # 短い列は内容に合わせる
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 種別
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 開始日
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 終了日
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 放送時間
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 放送曜日
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # ステータス
+        # 番組名はStretch
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 番組・イベント名
 
         layout.addWidget(self.table)
 

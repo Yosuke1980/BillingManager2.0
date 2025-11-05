@@ -1,7 +1,7 @@
 """出演者マスターウィジェット"""
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
-    QMessageBox, QLabel, QLineEdit, QFileDialog
+    QMessageBox, QLabel, QLineEdit, QFileDialog, QHeaderView, QTableWidgetItem
 )
 from PyQt5.QtCore import Qt
 from order_management.database_manager import OrderManagementDB
@@ -70,6 +70,14 @@ class CastMasterWidget(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.doubleClicked.connect(self.edit_cast)
         self.table.setColumnHidden(0, True)
+
+        # カラム幅の設定
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 所属コード
+        # 名前系はStretch
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 出演者名
+        header.setSectionResizeMode(2, QHeaderView.Stretch)  # 所属事務所
+        header.setSectionResizeMode(4, QHeaderView.Stretch)  # 備考
 
         layout.addWidget(self.table)
 

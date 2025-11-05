@@ -126,9 +126,18 @@ class OrderContractWidget(QWidget):
 
         # カラム幅の設定
         header = self.table.horizontalHeader()
+        # 短い列は内容に合わせる
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 発注ステータス
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 発注種別
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 金額
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 支払タイプ
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # 開始日
+        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # 終了日
+        # 重要な長い列はStretch（均等に分配）
         header.setSectionResizeMode(2, QHeaderView.Stretch)  # 番組名
         header.setSectionResizeMode(3, QHeaderView.Stretch)  # 費用項目
         header.setSectionResizeMode(6, QHeaderView.Stretch)  # 取引先名
+        header.setSectionResizeMode(9, QHeaderView.Stretch)  # 備考
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)  # テーブルを編集不可に設定
