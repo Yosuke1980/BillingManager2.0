@@ -294,7 +294,7 @@ class ProductionMasterWidget(QWidget):
 
                 # ヘッダー行
                 writer.writerow([
-                    'ID', '番組・イベント名', '説明', '種別', '開始日', '終了日',
+                    'ID', '制作物名', '説明', '制作物種別', '開始日', '終了日',
                     '実施開始時間', '実施終了時間', '放送時間', '放送曜日', 'ステータス', '親制作物ID', '親制作物名'
                 ])
 
@@ -308,9 +308,9 @@ class ProductionMasterWidget(QWidget):
 
                     writer.writerow([
                         production[0],  # ID
-                        production[1] or '',  # 番組・イベント名
+                        production[1] or '',  # 制作物名
                         production[2] or '',  # 説明
-                        production[3] or 'レギュラー番組',  # 種別
+                        production[3] or 'レギュラー番組',  # 制作物種別
                         production[4] or '',  # 開始日
                         production[5] or '',  # 終了日
                         production[6] or '',  # 実施開始時間
