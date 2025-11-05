@@ -1069,7 +1069,7 @@ class OrderManagementDB:
                 # 新規追加
                 cursor.execute("""
                     INSERT INTO order_contracts (
-                        production_id, item_name, production_id, partner_id,
+                        production_id, item_name, partner_id,
                         contract_start_date, contract_end_date,
                         contract_period_type, order_type, order_status,
                         pdf_status, pdf_file_path,
@@ -1081,11 +1081,10 @@ class OrderManagementDB:
                         auto_renewal_enabled, renewal_period_months, termination_notice_date,
                         work_type,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    contract_data.get('production_id'),
-                    contract_data.get('item_name'),
                     contract_data['production_id'],  # NOT NULL制約があるため必須
+                    contract_data.get('item_name'),
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
                     contract_data.get('contract_end_date', ''),
@@ -2179,7 +2178,6 @@ class OrderManagementDB:
                     partner_id = partner_result[0]
 
                     # その他のデータ取得（全項目対応）
-                    project_name = row_data.get('制作物名', '').strip()
                     item_name = row_data.get('費用項目名', '').strip()
                     period_type = row_data.get('契約期間種別', '半年').strip()
                     order_type = row_data.get('発注種別', '発注書').strip()
@@ -2209,14 +2207,6 @@ class OrderManagementDB:
                     auto_renewal_enabled = 1 if auto_renewal_str == '有効' else 0
                     renewal_period_months = int(renewal_period_str) if renewal_period_str.isdigit() else 3
 
-                    # 制作物IDを取得（制作物名が指定されている場合）
-                    production_id = None
-                    if project_name:
-                        cursor.execute("SELECT id FROM productions WHERE name = ?", (project_name,))
-                        project_result = cursor.fetchone()
-                        if project_result:
-                            production_id = project_result[0]
-
                     contract_id_str = row_data.get('ID', '').strip()
                     now = datetime.now()
 
@@ -2241,7 +2231,7 @@ class OrderManagementDB:
                         existing_id = existing_contract[0]
                         cursor.execute("""
                             UPDATE order_contracts
-                            SET production_id=?, partner_id=?, production_id=?, item_name=?,
+                            SET production_id=?, partner_id=?, item_name=?,
                                 contract_start_date=?, contract_end_date=?, contract_period_type=?,
                                 order_type=?, order_status=?, pdf_status=?, pdf_file_path=?, pdf_distributed_date=?,
                                 payment_type=?, unit_price=?, payment_timing=?, contract_type=?,
@@ -2250,7 +2240,7 @@ class OrderManagementDB:
                                 auto_renewal_enabled=?, renewal_period_months=?, termination_notice_date=?,
                                 notes=?, updated_at=?
                             WHERE id=?
-                        """, (production_id, partner_id, production_id, item_name,
+                        """, (production_id, partner_id, item_name,
                               start_date, end_date, period_type,
                               order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
                               payment_type, unit_price, payment_timing, contract_type,
@@ -2264,7 +2254,7 @@ class OrderManagementDB:
                         # 新規追加（全項目対応）
                         cursor.execute("""
                             INSERT INTO order_contracts (
-                                production_id, partner_id, production_id, item_name,
+                                production_id, partner_id, item_name,
                                 contract_start_date, contract_end_date, contract_period_type,
                                 order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
                                 payment_type, unit_price, payment_timing, contract_type,
@@ -2272,8 +2262,8 @@ class OrderManagementDB:
                                 email_subject, email_body, email_to, email_sent_date,
                                 auto_renewal_enabled, renewal_period_months, termination_notice_date,
                                 notes, created_at, updated_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (production_id, partner_id, production_id, item_name,
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (production_id, partner_id, item_name,
                               start_date, end_date, period_type,
                               order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
                               payment_type, unit_price, payment_timing, contract_type,
