@@ -926,7 +926,7 @@ class OrderManagementDB:
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
                        COALESCE(oc.payment_timing, '翌月末払い') as payment_timing,
-                       oc.production_id, prod.name as project_name,
+                       oc.project_id, proj.name as project_name,
                        oc.item_name,
                        COALESCE(oc.contract_type, 'regular_fixed') as contract_type,
                        COALESCE(oc.project_name_type, 'program') as project_name_type,
@@ -944,6 +944,7 @@ class OrderManagementDB:
                        COALESCE(oc.work_type, '制作') as work_type
                 FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
+                LEFT JOIN productions proj ON oc.project_id = proj.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE oc.id = ?
             """, (contract_id,))
@@ -1008,6 +1009,7 @@ class OrderManagementDB:
                 cursor.execute("""
                     UPDATE order_contracts SET
                         production_id = ?,
+                        project_id = ?,
                         item_name = ?,
                         partner_id = ?,
                         contract_start_date = ?,
@@ -1036,6 +1038,7 @@ class OrderManagementDB:
                     WHERE id = ?
                 """, (
                     contract_data.get('production_id'),
+                    contract_data.get('project_id'),
                     contract_data.get('item_name'),
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
@@ -1067,7 +1070,7 @@ class OrderManagementDB:
                 # 新規追加
                 cursor.execute("""
                     INSERT INTO order_contracts (
-                        production_id, item_name, partner_id,
+                        production_id, project_id, item_name, partner_id,
                         contract_start_date, contract_end_date,
                         contract_period_type, order_type, order_status,
                         pdf_status, pdf_file_path,
@@ -1079,9 +1082,10 @@ class OrderManagementDB:
                         auto_renewal_enabled, renewal_period_months, termination_notice_date,
                         work_type,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     contract_data.get('production_id'),  # NULL許可
+                    contract_data.get('project_id'),  # NULL許可
                     contract_data.get('item_name'),
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
