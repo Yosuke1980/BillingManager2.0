@@ -686,13 +686,13 @@ class OrderContractEditDialog(QDialog):
 
             # 番組選択
             for i in range(self.program_combo.count()):
-                if self.program_dict[self.program_combo.itemText(i)] == contract[1]:
+                if self.program_combo.itemData(i) == contract[1]:
                     self.program_combo.setCurrentIndex(i)
                     break
 
             # 取引先選択
             for i in range(self.partner_combo.count()):
-                if self.partner_dict[self.partner_combo.itemText(i)] == contract[3]:
+                if self.partner_combo.itemData(i) == contract[3]:
                     self.partner_combo.setCurrentIndex(i)
                     break
 
