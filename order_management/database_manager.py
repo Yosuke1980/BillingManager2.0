@@ -1739,6 +1739,53 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def get_projects_by_program(self, program_id: int,
+                                project_type: str = "") -> List[Tuple]:
+        """指定番組(親制作物)に紐づく案件(子制作物)一覧を取得
+
+        このメソッドは後方互換性のために残されています。
+        内部的には get_productions_by_parent を呼び出します。
+
+        Args:
+            program_id: 番組ID(親制作物ID)
+            project_type: 案件種別フィルタ（'イベント'/'特別企画'/'通常'）
+
+        Returns:
+            List[Tuple]: (id, name, implementation_date, project_type,
+                         parent_id, program_id, program_name)
+        """
+        # get_productions_by_parent を使用して子制作物を取得
+        results = self.get_productions_by_parent(program_id, project_type)
+
+        # 返り値の形式を調整（program_id と program_name を追加）
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 親制作物（番組）の名前を取得
+            cursor.execute("SELECT name FROM productions WHERE id = ?", (program_id,))
+            program_result = cursor.fetchone()
+            program_name = program_result[0] if program_result else ""
+
+            # 結果を変換（start_date → implementation_date）
+            # (id, name, start_date, production_type, parent_production_id) →
+            # (id, name, implementation_date, project_type, parent_id, program_id, program_name)
+            formatted_results = []
+            for row in results:
+                formatted_results.append((
+                    row[0],  # id
+                    row[1],  # name
+                    row[2],  # start_date → implementation_date
+                    row[3],  # production_type → project_type
+                    row[4],  # parent_production_id → parent_id
+                    program_id,  # program_id
+                    program_name  # program_name
+                ))
+
+            return formatted_results
+        finally:
+            conn.close()
+
     def get_order_contracts_with_production_info(self, search_term: str = "",
                                                   production_id: int = None) -> List[Tuple]:
         """発注書一覧を制作物情報付きで取得
