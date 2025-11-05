@@ -628,10 +628,11 @@ class OrderManagementDB:
 
         try:
             cursor.execute("""
-                SELECT id, production_id, cast_name, role
-                FROM production_cast
-                WHERE production_id = ?
-                ORDER BY cast_name
+                SELECT pc.id, pc.production_id, p.name as cast_name, pc.role
+                FROM production_cast pc
+                LEFT JOIN partners p ON pc.cast_id = p.id
+                WHERE pc.production_id = ?
+                ORDER BY p.name
             """, (production_id,))
             return cursor.fetchall()
         finally:
@@ -642,7 +643,7 @@ class OrderManagementDB:
 
         Args:
             production_id: 制作物ID
-            cast_list: 出演者リスト [{'cast_name': '名前', 'role': '役割'}, ...]
+            cast_list: 出演者リスト [{'cast_id': 1, 'role': '役割'}, ...]
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -655,9 +656,9 @@ class OrderManagementDB:
             now = datetime.now()
             for cast in cast_list:
                 cursor.execute("""
-                    INSERT INTO production_cast (production_id, cast_name, role, created_at)
+                    INSERT INTO production_cast (production_id, cast_id, role, created_at)
                     VALUES (?, ?, ?, ?)
-                """, (production_id, cast['cast_name'], cast.get('role', ''), now))
+                """, (production_id, cast['cast_id'], cast.get('role', ''), now))
 
             conn.commit()
         except Exception as e:
