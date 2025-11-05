@@ -631,6 +631,13 @@ class OrderContractWidget(QWidget):
             message += f"  - 更新: {result['updated']}件\n"
             message += f"スキップ: {result['skipped']}件\n"
 
+            if result.get('warnings'):
+                message += f"\n警告: {len(result['warnings'])}件\n"
+                for warning in result['warnings'][:5]:  # 最初の5件のみ表示
+                    message += f"  - {warning['row']}行目: {warning['reason']}\n"
+                if len(result['warnings']) > 5:
+                    message += f"  ... 他{len(result['warnings']) - 5}件の警告\n"
+
             if result['errors']:
                 message += f"\nエラー詳細:\n"
                 for error in result['errors'][:10]:  # 最初の10件のみ表示

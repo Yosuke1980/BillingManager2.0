@@ -2103,7 +2103,8 @@ class OrderManagementDB:
             'updated': 0,
             'inserted': 0,
             'skipped': 0,
-            'errors': []
+            'errors': [],
+            'warnings': []
         }
 
         conn = self._get_connection()
@@ -2160,11 +2161,11 @@ class OrderManagementDB:
                     program_result = cursor.fetchone()
 
                     if not program_result:
-                        result['errors'].append({'row': row_num, 'reason': f'番組「{program_name}」が見つかりません'})
-                        result['skipped'] += 1
-                        continue
-
-                    production_id = program_result[0]
+                        # 番組が見つからない場合は警告のみでproduction_id=Nullで続行
+                        production_id = None
+                        result['warnings'].append({'row': row_num, 'reason': f'番組「{program_name}」が見つかりません（production_idはNULLで保存されます）'})
+                    else:
+                        production_id = program_result[0]
 
                     # 取引先IDを検索
                     cursor.execute("SELECT id FROM partners WHERE name = ?", (partner_name,))
