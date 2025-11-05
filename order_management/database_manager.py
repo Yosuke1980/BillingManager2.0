@@ -1009,7 +1009,6 @@ class OrderManagementDB:
                     UPDATE order_contracts SET
                         production_id = ?,
                         item_name = ?,
-                        production_id = ?,
                         partner_id = ?,
                         contract_start_date = ?,
                         contract_end_date = ?,
@@ -1038,7 +1037,6 @@ class OrderManagementDB:
                 """, (
                     contract_data.get('production_id'),
                     contract_data.get('item_name'),
-                    contract_data['production_id'],  # NOT NULL制約があるため必須
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
                     contract_data.get('contract_end_date', ''),
@@ -1083,7 +1081,7 @@ class OrderManagementDB:
                         created_at, updated_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    contract_data['production_id'],  # NOT NULL制約があるため必須
+                    contract_data.get('production_id'),  # NULL許可
                     contract_data.get('item_name'),
                     contract_data['partner_id'],
                     contract_data.get('contract_start_date', ''),
