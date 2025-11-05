@@ -216,15 +216,16 @@ class OrderContractWidget(QWidget):
         completed_count = 0 # ✅ 完了
 
         for row, contract in enumerate(contracts):
-            # データ構造: database_manager.py get_order_contracts() の返り値
-            # contract: (0:id, 1:production_id, 2:program_name, 3:partner_id, 4:partner_name,
-            #            5:contract_start_date, 6:contract_end_date, 7:contract_period_type,
-            #            8:pdf_status, 9:pdf_distributed_date, 10:pdf_file_path, 11:notes,
-            #            12:order_type, 13:order_status, 14:email_sent_date,
-            #            15:project_name, 16:item_name, 17:payment_type, 18:unit_price, ...)
+            # データ構造: database_manager.py get_order_contracts_with_production_info() の返り値
+            # contract: (0:id, 1:production_id, 2:production_name,
+            #            3:partner_id, 4:partner_name, 5:item_name,
+            #            6:contract_start_date, 7:contract_end_date,
+            #            8:order_type, 9:order_status, 10:pdf_status,
+            #            11:notes, 12:created_at, 13:updated_at,
+            #            14:payment_type, 15:unit_price)
 
-            order_status = contract[13] or "未"
-            end_date_str = contract[6]
+            order_status = contract[9] or "未"
+            end_date_str = contract[7]
 
             # Phase 1.3: 期限チェック
             days_until_expiry = None
@@ -259,9 +260,9 @@ class OrderContractWidget(QWidget):
                 row_color = QColor(245, 245, 245)
 
             # データを取得
-            item_name = contract[16] if len(contract) > 16 else ""
-            payment_type = contract[17] if len(contract) > 17 else ""
-            unit_price = contract[18] if len(contract) > 18 else 0
+            item_name = contract[5] if len(contract) > 5 else ""
+            payment_type = contract[14] if len(contract) > 14 else ""
+            unit_price = contract[15] if len(contract) > 15 else 0
 
             # 金額のフォーマット
             amount_text = f"¥{int(unit_price):,}" if unit_price else ""
@@ -270,13 +271,13 @@ class OrderContractWidget(QWidget):
             status_item = QTableWidgetItem(order_status)
             status_item.setData(Qt.UserRole, contract[0])  # IDを保存
             self.table.setItem(row, 0, status_item)  # 発注ステータス
-            self.table.setItem(row, 1, QTableWidgetItem(contract[12] or "発注書"))  # 発注種別
+            self.table.setItem(row, 1, QTableWidgetItem(contract[8] or "発注書"))  # 発注種別
             self.table.setItem(row, 2, QTableWidgetItem(contract[2] or ""))  # 番組名
             self.table.setItem(row, 3, QTableWidgetItem(item_name))  # 費用項目
             self.table.setItem(row, 4, QTableWidgetItem(amount_text))  # 金額
             self.table.setItem(row, 5, QTableWidgetItem(payment_type or ""))  # 支払タイプ
             self.table.setItem(row, 6, QTableWidgetItem(contract[4] or ""))  # 取引先名
-            self.table.setItem(row, 7, QTableWidgetItem(contract[5] or ""))  # 開始日
+            self.table.setItem(row, 7, QTableWidgetItem(contract[6] or ""))  # 開始日
 
             # 終了日に期限情報を追加
             deadline_text = self._format_deadline(end_date_str, days_until_expiry, is_expired)
