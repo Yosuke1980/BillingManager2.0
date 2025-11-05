@@ -628,6 +628,9 @@ class OrderContractEditDialog(QDialog):
         programs = self.db.get_productions()
         self.program_dict = {}
 
+        # プレースホルダーを追加
+        self.program_combo.addItem("（番組を選択）", None)
+
         for program in programs:
             # production: (id, name, description, production_type, start_date, end_date,
             #             start_time, end_time, broadcast_time, broadcast_days, status,
@@ -640,6 +643,9 @@ class OrderContractEditDialog(QDialog):
         """取引先一覧を読み込み"""
         partners = self.db.get_partners()
         self.partner_dict = {}
+
+        # プレースホルダーを追加
+        self.partner_combo.addItem("（取引先を選択）", None)
 
         for partner in partners:
             # partner: (id, name, code, contact_person, email, phone, address, partner_type, notes)
