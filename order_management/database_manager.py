@@ -944,7 +944,6 @@ class OrderManagementDB:
                 FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
-                LEFT JOIN productions prod ON oc.production_id = prod.id
                 WHERE oc.id = ?
             """, (contract_id,))
             return cursor.fetchone()
