@@ -424,6 +424,9 @@ class ProductionTimelineWidget(QWidget):
                 }
                 all_expenses.append(expense_info)
 
+            # 表示される費用項目の合計を計算
+            displayed_expenses_total = 0
+
             # 費用項目を表示
             for expense_info in all_expenses:
                 expense_id = expense_info['id']
@@ -448,6 +451,9 @@ class ProductionTimelineWidget(QWidget):
                         # 手動追加の費用項目は従来通り、支払予定日で判定
                         if not payment_scheduled_date or not payment_scheduled_date.startswith(year_month):
                             continue
+
+                # フィルターを通過した費用項目の金額を合計に加算
+                displayed_expenses_total += amount
 
                 # 費用項目ノード作成
                 expense_item = QTreeWidgetItem([
@@ -476,6 +482,9 @@ class ProductionTimelineWidget(QWidget):
                 expense_item.setData(0, Qt.UserRole, (data_type, expense_id))
 
                 production_item.addChild(expense_item)
+
+            # 番組の合計額を実際に表示された費用項目の合計で更新
+            production_item.setText(3, f"{displayed_expenses_total:,.0f}")
 
             self.tree.addTopLevelItem(production_item)
 
