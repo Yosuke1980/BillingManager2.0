@@ -365,7 +365,9 @@ class ProductionTimelineWidget(QWidget):
                         'item_name': f"🔗 {row[7] or ''}",
                         'amount': row[8] or 0,
                         'status': row[9] or "",
-                        'payment_date': row[10] or ""
+                        'payment_date': row[10] or "",
+                        'contract_start_date': row[11] or "",  # 契約開始日
+                        'contract_end_date': row[12] or ""     # 契約終了日
                     }
                     all_expenses.append(expense_info)
 
@@ -380,7 +382,9 @@ class ProductionTimelineWidget(QWidget):
                         'item_name': f"🔗 {row[4] or ''}",
                         'amount': row[5] or 0,
                         'status': row[6] or "",
-                        'payment_date': row[7] or ""
+                        'payment_date': row[7] or "",
+                        'contract_start_date': row[8] or "",   # 契約開始日
+                        'contract_end_date': row[9] or ""      # 契約終了日
                     }
                     all_expenses.append(expense_info)
 
@@ -412,10 +416,22 @@ class ProductionTimelineWidget(QWidget):
                 status = expense_info['status']
                 payment_scheduled_date = expense_info['payment_date']
 
-                # レギュラー番組の場合、支払予定日がその月に含まれるもののみ表示
+                # レギュラー番組の場合、月フィルタリングを適用
                 if production_type_str == "レギュラー番組":
-                    if not payment_scheduled_date or not payment_scheduled_date.startswith(year_month):
-                        continue
+                    # 契約由来の費用項目の場合
+                    if expense_info['type'] == 'contract':
+                        # 契約期間内かチェック
+                        contract_start = expense_info.get('contract_start_date', '')
+                        contract_end = expense_info.get('contract_end_date', '')
+                        if contract_start and contract_end:
+                            # year_month が契約期間内かチェック（YYYY-MM形式で比較）
+                            if year_month < contract_start[:7] or year_month > contract_end[:7]:
+                                continue
+                        # 契約期間が設定されていない場合は常に表示
+                    else:
+                        # 手動追加の費用項目は従来通り、支払予定日で判定
+                        if not payment_scheduled_date or not payment_scheduled_date.startswith(year_month):
+                            continue
 
                 # 費用項目ノード作成
                 expense_item = QTreeWidgetItem([
