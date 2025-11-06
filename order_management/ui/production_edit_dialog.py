@@ -275,17 +275,39 @@ class ProductionEditDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        # 制作会社リスト（フル画面使用）
-        self.producer_list = QListWidget()
-        layout.addWidget(self.producer_list)
+        # 制作会社テーブル（フル画面使用）
+        self.producer_table = QTableWidget()
+        self.producer_table.setColumnCount(6)
+        self.producer_table.setHorizontalHeaderLabels([
+            "制作会社名", "契約項目", "金額（円）", "ステータス", "支払サイト", "操作"
+        ])
+        self.producer_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.producer_table.doubleClicked.connect(self.edit_producer_contract)
+
+        # カラム幅の設定
+        header = self.producer_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 制作会社名
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 契約項目
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 金額
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # ステータス
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 支払サイト
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 操作
+
+        layout.addWidget(self.producer_table)
 
         # ボタン
         producer_button_layout = QHBoxLayout()
-        self.add_producer_button = QPushButton("制作会社追加")
-        self.delete_producer_button = QPushButton("制作会社削除")
+        self.add_producer_button = QPushButton("制作会社を追加")
+        self.add_producer_contract_button = QPushButton("契約を追加")
+        self.edit_producer_contract_button = QPushButton("編集")
+        self.delete_producer_button = QPushButton("削除")
         self.add_producer_button.clicked.connect(self.add_producer)
+        self.add_producer_contract_button.clicked.connect(self.add_producer_contract)
+        self.edit_producer_contract_button.clicked.connect(self.edit_producer_contract)
         self.delete_producer_button.clicked.connect(self.delete_producer)
         producer_button_layout.addWidget(self.add_producer_button)
+        producer_button_layout.addWidget(self.add_producer_contract_button)
+        producer_button_layout.addWidget(self.edit_producer_contract_button)
         producer_button_layout.addWidget(self.delete_producer_button)
         producer_button_layout.addStretch()
         layout.addLayout(producer_button_layout)
@@ -450,12 +472,7 @@ class ProductionEditDialog(QDialog):
         self._load_cast_data()
 
         # 制作会社を読み込み
-        producer_list = self.db.get_production_producers(production_id)
-        for producer in producer_list:
-            producer_data = {'id': producer[1], 'name': producer[2]}
-            self.producer_data.append(producer_data)
-            item = create_list_item(producer_data['name'], producer_data)
-            self.producer_list.addItem(item)
+        self._load_producer_data()
 
         # 費用項目を読み込み
         self._load_expenses()
@@ -633,6 +650,106 @@ class ProductionEditDialog(QDialog):
                 # 費用項目も更新
                 self._load_expenses()
 
+    def _load_producer_data(self):
+        """制作会社と契約情報を読み込んでテーブルに表示"""
+        if not self.is_edit:
+            return
+
+        production_id = self.production[0]
+        producer_with_contracts = self.db.get_production_producers_with_contracts(production_id)
+
+        self.producer_data = []
+        self.producer_table.setRowCount(0)
+
+        # 制作会社ごとにグループ化
+        producer_groups = {}
+        for row in producer_with_contracts:
+            # row: (production_producer_id, partner_id, partner_name,
+            #       contract_id, item_name, unit_price, order_status, payment_timing,
+            #       contract_start_date, contract_end_date)
+            production_producer_id = row[0]
+            partner_id = row[1]
+            partner_name = row[2]
+            contract_id = row[3]
+
+            if partner_id not in producer_groups:
+                producer_groups[partner_id] = {
+                    'production_producer_id': production_producer_id,
+                    'partner_id': partner_id,
+                    'partner_name': partner_name,
+                    'contracts': []
+                }
+                # producer_data用のデータも保存
+                self.producer_data.append({'id': partner_id, 'name': partner_name})
+
+            # 契約情報を追加
+            if contract_id:
+                contract_info = {
+                    'contract_id': contract_id,
+                    'item_name': row[4] or "",
+                    'unit_price': row[5] or 0,
+                    'order_status': row[6] or "",
+                    'payment_timing': row[7] or "",
+                }
+                producer_groups[partner_id]['contracts'].append(contract_info)
+
+        # テーブルに表示
+        for partner_id, producer_info in producer_groups.items():
+            contracts = producer_info['contracts']
+            if not contracts:
+                # 契約がない場合
+                row = self.producer_table.rowCount()
+                self.producer_table.insertRow(row)
+                self.producer_table.setItem(row, 0, QTableWidgetItem(producer_info['partner_name']))
+                self.producer_table.setItem(row, 1, QTableWidgetItem("(契約なし)"))
+                self.producer_table.setItem(row, 2, QTableWidgetItem(""))
+                self.producer_table.setItem(row, 3, QTableWidgetItem(""))
+                self.producer_table.setItem(row, 4, QTableWidgetItem(""))
+                self.producer_table.setItem(row, 5, QTableWidgetItem(""))
+
+                # データを保存
+                for col in range(6):
+                    item = self.producer_table.item(row, col)
+                    if item:
+                        item.setData(Qt.UserRole, {
+                            'production_producer_id': producer_info['production_producer_id'],
+                            'partner_id': producer_info['partner_id'],
+                            'contract_id': None
+                        })
+                        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            else:
+                # 契約がある場合
+                start_row = self.producer_table.rowCount()
+                for i, contract in enumerate(contracts):
+                    row = self.producer_table.rowCount()
+                    self.producer_table.insertRow(row)
+
+                    if i == 0:
+                        # 最初の行だけ制作会社名を表示
+                        self.producer_table.setItem(row, 0, QTableWidgetItem(producer_info['partner_name']))
+
+                    # 契約情報を表示
+                    self.producer_table.setItem(row, 1, QTableWidgetItem(contract['item_name']))
+                    self.producer_table.setItem(row, 2, QTableWidgetItem(f"{contract['unit_price']:,.0f}"))
+                    self.producer_table.setItem(row, 3, QTableWidgetItem(contract['order_status']))
+                    self.producer_table.setItem(row, 4, QTableWidgetItem(contract['payment_timing']))
+                    self.producer_table.setItem(row, 5, QTableWidgetItem(""))
+
+                    # データを保存
+                    for col in range(6):
+                        item = self.producer_table.item(row, col)
+                        if item:
+                            item.setData(Qt.UserRole, {
+                                'production_producer_id': producer_info['production_producer_id'],
+                                'partner_id': producer_info['partner_id'],
+                                'contract_id': contract['contract_id']
+                            })
+                            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                # rowSpanでマージ
+                if len(contracts) > 1:
+                    self.producer_table.setSpan(start_row, 0, len(contracts), 1)  # 制作会社名
+
     def add_cast_contract(self):
         """選択された出演者に契約を追加"""
         if not self.is_edit:
@@ -753,43 +870,227 @@ class ProductionEditDialog(QDialog):
 
     def add_producer(self):
         """制作会社追加"""
+        if not self.is_edit:
+            QMessageBox.warning(self, "警告", "番組を保存してから制作会社を追加してください")
+            return
+
         dialog = ProducerSelectDialog(self)
         if dialog.exec_():
             selected_partners = dialog.get_selected_partners()
             for partner in selected_partners:
                 already_added = any(p['id'] == partner['id'] for p in self.producer_data)
-                if not already_added:
-                    self.producer_data.append(partner)
-                    item = create_list_item(partner['name'], partner)
-                    self.producer_list.addItem(item)
+                if already_added:
+                    QMessageBox.warning(self, "警告", f"{partner['name']}は既に追加されています")
+                    continue
+
+                # 制作会社を保存
+                self.producer_data.append(partner)
+                production_id = self.production[0]
+                producer_ids = [p['id'] for p in self.producer_data]
+                self.db.save_production_producers(production_id, producer_ids)
+
+                # 契約作成確認
+                reply = QMessageBox.question(
+                    self, "契約の作成",
+                    f"制作会社「{partner['name']}」を追加しました。\n\nこの制作会社の契約も作成しますか？",
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+                )
+
+                if reply == QMessageBox.Yes:
+                    # 契約編集ダイアログを開く
+                    from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
+                    contract_dialog = OrderContractEditDialog(
+                        self,
+                        production_id=production_id,
+                        partner_id=partner['id'],
+                        work_type='制作'
+                    )
+                    if contract_dialog.exec_():
+                        QMessageBox.information(self, "成功", "契約を作成しました")
+                elif reply == QMessageBox.Cancel:
+                    # キャンセルの場合、制作会社も削除
+                    self.producer_data.remove(partner)
+                    producer_ids = [p['id'] for p in self.producer_data]
+                    self.db.save_production_producers(production_id, producer_ids)
+                    continue
+
+                # データを再読み込み
+                self._load_producer_data()
+                self._load_expenses()
+
+    def add_producer_contract(self):
+        """選択された制作会社に契約を追加"""
+        if not self.is_edit:
+            QMessageBox.warning(self, "警告", "番組を保存してから契約を追加してください")
+            return
+
+        current_row = self.producer_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "警告", "制作会社を選択してください")
+            return
+
+        item = self.producer_table.item(current_row, 0)
+        if not item:
+            return
+
+        data = item.data(Qt.UserRole)
+        production_id = self.production[0]
+        partner_id = data['partner_id']
+
+        # 契約編集ダイアログを開く
+        from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
+        contract_dialog = OrderContractEditDialog(
+            self,
+            production_id=production_id,
+            partner_id=partner_id,
+            work_type='制作'
+        )
+        if contract_dialog.exec_():
+            QMessageBox.information(self, "成功", "契約を作成しました")
+            # データを再読み込み
+            self._load_producer_data()
+            self._load_expenses()
+
+    def edit_producer_contract(self):
+        """選択された契約を編集"""
+        current_row = self.producer_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "警告", "編集する契約を選択してください")
+            return
+
+        item = self.producer_table.item(current_row, 0)
+        if not item:
+            return
+
+        data = item.data(Qt.UserRole)
+        contract_id = data.get('contract_id')
+
+        if not contract_id:
+            QMessageBox.warning(self, "警告", "契約が選択されていません")
+            return
+
+        # 契約編集ダイアログを開く
+        from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
+        contract_dialog = OrderContractEditDialog(self, contract_id=contract_id)
+        if contract_dialog.exec_():
+            QMessageBox.information(self, "成功", "契約を更新しました")
+            # データを再読み込み
+            self._load_producer_data()
+            self._load_expenses()
 
     def delete_producer(self):
-        """制作会社削除"""
-        selected_items = self.producer_list.selectedItems()
-        if not selected_items:
+        """制作会社削除（契約も削除）"""
+        if not self.is_edit:
+            return
+
+        current_row = self.producer_table.currentRow()
+        if current_row < 0:
             QMessageBox.warning(self, "警告", "削除する制作会社を選択してください")
             return
 
-        for item in selected_items:
-            producer_data = item.data(Qt.UserRole)
-            row = self.producer_list.row(item)
-            self.producer_list.takeItem(row)
-            self.producer_data.remove(producer_data)
+        item = self.producer_table.item(current_row, 0)
+        if not item:
+            return
+
+        data = item.data(Qt.UserRole)
+        production_producer_id = data['production_producer_id']
+        production_id = self.production[0]
+        partner_id = data['partner_id']
+
+        # 関連する契約を取得
+        contracts = self.db.get_contracts_by_production_and_partner(production_id, partner_id)
+
+        # 確認ダイアログ
+        producer_name = self.producer_table.item(current_row, 0).text() if self.producer_table.item(current_row, 0) else "この制作会社"
+        message = f"制作会社「{producer_name}」を削除すると、"
+        if contracts:
+            message += "以下の契約も削除されます：\n\n"
+            for contract in contracts:
+                # contract: (contract_id, item_name, unit_price, order_status, payment_timing)
+                message += f"・{contract[1]}: ¥{contract[2]:,.0f}\n"
+        else:
+            message += "契約はありません。\n"
+        message += "\n本当に削除してもよろしいですか？"
+
+        reply = QMessageBox.question(
+            self, "確認",
+            message,
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                self.db.delete_producer_from_production(production_producer_id, production_id, partner_id)
+                QMessageBox.information(self, "成功", "制作会社と契約を削除しました")
+                # データを再読み込み
+                self._load_producer_data()
+                self._load_expenses()
+                # producer_dataも更新
+                self.producer_data = [p for p in self.producer_data if p['id'] != partner_id]
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{str(e)}")
 
     def _load_expenses(self):
-        """費用項目を読み込んでテーブルに表示"""
+        """費用項目を読み込んでテーブルに表示（契約由来 + 手動追加）"""
         if not self.is_edit:
             return
 
         production_id = self.production[0]
-        expenses = self.db.get_expenses_by_production(production_id)
-
         self.expense_data = []
         self.expense_table.setRowCount(0)
 
+        # 1. 契約由来の費用項目を取得して表示
+        # 出演者の契約
+        cast_contracts = self.db.get_production_cast_with_contracts(production_id)
+        for row in cast_contracts:
+            contract_id = row[6]
+            if contract_id:
+                item_name = row[7] or ""
+                unit_price = row[8] or 0
+                order_status = row[9] or ""
+                payment_timing = row[10] or ""
+                partner_name = row[5]
+
+                expense_data = {
+                    'source': 'contract',  # 契約由来マーク
+                    'contract_id': contract_id,
+                    'item_name': f"🔗 {item_name}",
+                    'amount': unit_price,
+                    'supplier_name': partner_name,
+                    'status': order_status,
+                    'implementation_date': "",
+                    'payment_scheduled_date': payment_timing
+                }
+                self.expense_data.append(expense_data)
+                self._add_expense_to_table(expense_data, is_contract=True)
+
+        # 制作会社の契約
+        producer_contracts = self.db.get_production_producers_with_contracts(production_id)
+        for row in producer_contracts:
+            contract_id = row[3]
+            if contract_id:
+                item_name = row[4] or ""
+                unit_price = row[5] or 0
+                order_status = row[6] or ""
+                payment_timing = row[7] or ""
+                partner_name = row[2]
+
+                expense_data = {
+                    'source': 'contract',  # 契約由来マーク
+                    'contract_id': contract_id,
+                    'item_name': f"🔗 {item_name}",
+                    'amount': unit_price,
+                    'supplier_name': partner_name,
+                    'status': order_status,
+                    'implementation_date': "",
+                    'payment_scheduled_date': payment_timing
+                }
+                self.expense_data.append(expense_data)
+                self._add_expense_to_table(expense_data, is_contract=True)
+
+        # 2. 手動追加の費用項目を取得して表示
+        expenses = self.db.get_expenses_by_production(production_id)
         for expense in expenses:
-            # expense: (id, production_id, item_name, amount, supplier_id, contact_person,
-            #          status, order_number, implementation_date, invoice_received_date)
             expense_id = expense[0]
 
             # 詳細情報を取得
@@ -805,6 +1106,7 @@ class ProductionEditDialog(QDialog):
                     supplier_name = supplier[1]
 
             expense_data = {
+                'source': 'manual',  # 手動追加
                 'id': expense_id,
                 'item_name': expense_detail[2] or "",
                 'amount': expense_detail[3] or 0,
@@ -817,10 +1119,15 @@ class ProductionEditDialog(QDialog):
                 'notes': expense_detail[16] or ""
             }
             self.expense_data.append(expense_data)
-            self._add_expense_to_table(expense_data)
+            self._add_expense_to_table(expense_data, is_contract=False)
 
-    def _add_expense_to_table(self, expense_data):
-        """テーブルに費用項目を追加"""
+    def _add_expense_to_table(self, expense_data, is_contract=False):
+        """テーブルに費用項目を追加
+
+        Args:
+            expense_data: 費用項目データ
+            is_contract: 契約由来の場合True（編集・削除不可）
+        """
         row = self.expense_table.rowCount()
         self.expense_table.insertRow(row)
 
@@ -828,8 +1135,8 @@ class ProductionEditDialog(QDialog):
         self.expense_table.setItem(row, 1, QTableWidgetItem(f"{expense_data['amount']:,.0f}"))
         self.expense_table.setItem(row, 2, QTableWidgetItem(expense_data['supplier_name']))
         self.expense_table.setItem(row, 3, QTableWidgetItem(expense_data['status']))
-        self.expense_table.setItem(row, 4, QTableWidgetItem(expense_data['implementation_date']))
-        self.expense_table.setItem(row, 5, QTableWidgetItem(expense_data['payment_scheduled_date']))
+        self.expense_table.setItem(row, 4, QTableWidgetItem(expense_data.get('implementation_date', '')))
+        self.expense_table.setItem(row, 5, QTableWidgetItem(expense_data.get('payment_scheduled_date', '')))
 
         # 行にデータを保存
         for col in range(6):
@@ -837,6 +1144,11 @@ class ProductionEditDialog(QDialog):
             if item:
                 item.setData(Qt.UserRole, expense_data)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                # 契約由来の項目は背景色を変える
+                if is_contract:
+                    from PyQt5.QtGui import QColor
+                    item.setBackground(QColor(240, 248, 255))  # 薄い青色
 
         # 合計金額を更新
         self._update_expense_total()
@@ -888,7 +1200,7 @@ class ProductionEditDialog(QDialog):
                 QMessageBox.critical(self, "エラー", f"費用項目の追加に失敗しました:\n{str(e)}")
 
     def edit_expense(self):
-        """費用項目を編集"""
+        """費用項目を編集（契約由来の項目は編集不可）"""
         current_row = self.expense_table.currentRow()
         if current_row < 0:
             QMessageBox.warning(self, "警告", "編集する費用項目を選択してください")
@@ -899,7 +1211,19 @@ class ProductionEditDialog(QDialog):
             return
 
         expense_data = item.data(Qt.UserRole)
-        expense_id = expense_data['id']
+
+        # 契約由来の項目は編集不可
+        if expense_data.get('source') == 'contract':
+            QMessageBox.warning(
+                self, "編集不可",
+                "契約由来の費用項目は直接編集できません。\n"
+                "出演者タブまたは制作会社タブから契約を編集してください。"
+            )
+            return
+
+        expense_id = expense_data.get('id')
+        if not expense_id:
+            return
 
         dialog = ExpenseEditDialog(self, expense_id=expense_id)
         if dialog.exec_():
@@ -913,7 +1237,7 @@ class ProductionEditDialog(QDialog):
                 QMessageBox.critical(self, "エラー", f"費用項目の更新に失敗しました:\n{str(e)}")
 
     def delete_expense(self):
-        """費用項目を削除"""
+        """費用項目を削除（契約由来の項目は削除不可）"""
         current_row = self.expense_table.currentRow()
         if current_row < 0:
             QMessageBox.warning(self, "警告", "削除する費用項目を選択してください")
@@ -924,8 +1248,21 @@ class ProductionEditDialog(QDialog):
             return
 
         expense_data = item.data(Qt.UserRole)
-        expense_id = expense_data['id']
-        item_name = expense_data['item_name']
+
+        # 契約由来の項目は削除不可
+        if expense_data.get('source') == 'contract':
+            QMessageBox.warning(
+                self, "削除不可",
+                "契約由来の費用項目は直接削除できません。\n"
+                "出演者タブまたは制作会社タブから契約を削除してください。"
+            )
+            return
+
+        expense_id = expense_data.get('id')
+        item_name = expense_data.get('item_name', '')
+
+        if not expense_id:
+            return
 
         reply = QMessageBox.question(
             self, "確認",
@@ -937,7 +1274,7 @@ class ProductionEditDialog(QDialog):
             try:
                 self.db.delete_expense_order(expense_id)
                 self.expense_table.removeRow(current_row)
-                self.expense_data = [e for e in self.expense_data if e['id'] != expense_id]
+                self.expense_data = [e for e in self.expense_data if e.get('id') != expense_id]
                 self._update_expense_total()
                 QMessageBox.information(self, "成功", "費用項目を削除しました")
             except Exception as e:
