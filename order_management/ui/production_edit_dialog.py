@@ -226,19 +226,42 @@ class ProductionEditDialog(QDialog):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        # 出演者リスト（フル画面使用）
-        self.cast_list = QListWidget()
-        layout.addWidget(self.cast_list)
+        # 出演者テーブル（フル画面使用）
+        self.cast_table = QTableWidget()
+        self.cast_table.setColumnCount(7)
+        self.cast_table.setHorizontalHeaderLabels([
+            "出演者名", "役割", "事務所", "契約項目", "金額（円）", "ステータス", "支払サイト"
+        ])
+        self.cast_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.cast_table.doubleClicked.connect(self.edit_cast_contract)
+
+        # カラム幅の設定
+        header = self.cast_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 出演者名
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 役割
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 事務所
+        header.setSectionResizeMode(3, QHeaderView.Stretch)  # 契約項目
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 金額
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # ステータス
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 支払サイト
+
+        layout.addWidget(self.cast_table)
 
         # ボタン
         cast_button_layout = QHBoxLayout()
-        self.add_cast_button = QPushButton("出演者追加")
-        self.delete_cast_button = QPushButton("出演者削除")
+        self.add_cast_button = QPushButton("出演者を追加")
+        self.add_cast_contract_button = QPushButton("契約を追加")
+        self.edit_cast_contract_button = QPushButton("編集")
+        self.delete_cast_button = QPushButton("削除")
         self.new_cast_button = QPushButton("新規出演者登録")
         self.add_cast_button.clicked.connect(self.add_cast)
+        self.add_cast_contract_button.clicked.connect(self.add_cast_contract)
+        self.edit_cast_contract_button.clicked.connect(self.edit_cast_contract)
         self.delete_cast_button.clicked.connect(self.delete_cast)
         self.new_cast_button.clicked.connect(self.create_new_cast)
         cast_button_layout.addWidget(self.add_cast_button)
+        cast_button_layout.addWidget(self.add_cast_contract_button)
+        cast_button_layout.addWidget(self.edit_cast_contract_button)
         cast_button_layout.addWidget(self.delete_cast_button)
         cast_button_layout.addWidget(self.new_cast_button)
         cast_button_layout.addStretch()
@@ -424,16 +447,7 @@ class ProductionEditDialog(QDialog):
 
         # 出演者を読み込み
         production_id = self.production[0]
-        cast_list = self.db.get_production_cast(production_id)
-        for cast in cast_list:
-            # cast: (production_cast.id, cast_id, cast_name, partner_name, role)
-            cast_data = {'cast_id': cast[1], 'role': cast[4] or ""}
-            self.cast_data.append(cast_data)
-            display_text = f"{cast[2]} ({cast[3]})"
-            if cast[4]:
-                display_text += f" - {cast[4]}"
-            item = create_list_item(display_text, cast_data)
-            self.cast_list.addItem(item)
+        self._load_cast_data()
 
         # 制作会社を読み込み
         producer_list = self.db.get_production_producers(production_id)
@@ -446,8 +460,124 @@ class ProductionEditDialog(QDialog):
         # 費用項目を読み込み
         self._load_expenses()
 
+    def _load_cast_data(self):
+        """出演者と契約情報を読み込んでテーブルに表示"""
+        if not self.is_edit:
+            return
+
+        production_id = self.production[0]
+        cast_with_contracts = self.db.get_production_cast_with_contracts(production_id)
+
+        self.cast_data = []
+        self.cast_table.setRowCount(0)
+
+        # 出演者ごとにグループ化
+        cast_groups = {}
+        for row in cast_with_contracts:
+            # row: (production_cast_id, cast_id, cast_name, role, partner_id, partner_name,
+            #       contract_id, item_name, unit_price, order_status, payment_timing,
+            #       contract_start_date, contract_end_date)
+            production_cast_id = row[0]
+            cast_id = row[1]
+            cast_name = row[2]
+            role = row[3] or ""
+            partner_id = row[4]
+            partner_name = row[5]
+            contract_id = row[6]
+
+            if cast_id not in cast_groups:
+                cast_groups[cast_id] = {
+                    'production_cast_id': production_cast_id,
+                    'cast_id': cast_id,
+                    'cast_name': cast_name,
+                    'role': role,
+                    'partner_id': partner_id,
+                    'partner_name': partner_name,
+                    'contracts': []
+                }
+                # cast_data用のデータも保存
+                self.cast_data.append({'cast_id': cast_id, 'role': role})
+
+            # 契約情報を追加
+            if contract_id:
+                contract_info = {
+                    'contract_id': contract_id,
+                    'item_name': row[7] or "",
+                    'unit_price': row[8] or 0,
+                    'order_status': row[9] or "",
+                    'payment_timing': row[10] or "",
+                }
+                cast_groups[cast_id]['contracts'].append(contract_info)
+
+        # テーブルに表示
+        for cast_id, cast_info in cast_groups.items():
+            contracts = cast_info['contracts']
+            if not contracts:
+                # 契約がない場合
+                row = self.cast_table.rowCount()
+                self.cast_table.insertRow(row)
+                self.cast_table.setItem(row, 0, QTableWidgetItem(cast_info['cast_name']))
+                self.cast_table.setItem(row, 1, QTableWidgetItem(cast_info['role']))
+                self.cast_table.setItem(row, 2, QTableWidgetItem(cast_info['partner_name']))
+                self.cast_table.setItem(row, 3, QTableWidgetItem("(契約なし)"))
+                self.cast_table.setItem(row, 4, QTableWidgetItem(""))
+                self.cast_table.setItem(row, 5, QTableWidgetItem(""))
+                self.cast_table.setItem(row, 6, QTableWidgetItem(""))
+
+                # データを保存
+                for col in range(7):
+                    item = self.cast_table.item(row, col)
+                    if item:
+                        item.setData(Qt.UserRole, {
+                            'production_cast_id': cast_info['production_cast_id'],
+                            'cast_id': cast_info['cast_id'],
+                            'partner_id': cast_info['partner_id'],
+                            'contract_id': None
+                        })
+                        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            else:
+                # 契約がある場合
+                start_row = self.cast_table.rowCount()
+                for i, contract in enumerate(contracts):
+                    row = self.cast_table.rowCount()
+                    self.cast_table.insertRow(row)
+
+                    if i == 0:
+                        # 最初の行だけ出演者情報を表示
+                        self.cast_table.setItem(row, 0, QTableWidgetItem(cast_info['cast_name']))
+                        self.cast_table.setItem(row, 1, QTableWidgetItem(cast_info['role']))
+                        self.cast_table.setItem(row, 2, QTableWidgetItem(cast_info['partner_name']))
+
+                    # 契約情報を表示
+                    self.cast_table.setItem(row, 3, QTableWidgetItem(contract['item_name']))
+                    self.cast_table.setItem(row, 4, QTableWidgetItem(f"{contract['unit_price']:,.0f}"))
+                    self.cast_table.setItem(row, 5, QTableWidgetItem(contract['order_status']))
+                    self.cast_table.setItem(row, 6, QTableWidgetItem(contract['payment_timing']))
+
+                    # データを保存
+                    for col in range(7):
+                        item = self.cast_table.item(row, col)
+                        if item:
+                            item.setData(Qt.UserRole, {
+                                'production_cast_id': cast_info['production_cast_id'],
+                                'cast_id': cast_info['cast_id'],
+                                'partner_id': cast_info['partner_id'],
+                                'contract_id': contract['contract_id']
+                            })
+                            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+                # rowSpanでマージ
+                if len(contracts) > 1:
+                    self.cast_table.setSpan(start_row, 0, len(contracts), 1)  # 出演者名
+                    self.cast_table.setSpan(start_row, 1, len(contracts), 1)  # 役割
+                    self.cast_table.setSpan(start_row, 2, len(contracts), 1)  # 事務所
+
     def add_cast(self):
         """出演者追加（出演者マスタから選択）"""
+        if not self.is_edit:
+            QMessageBox.warning(self, "警告", "番組を保存してから出演者を追加してください")
+            return
+
         dialog = CastSelectDialog(self)
         if dialog.exec_():
             selected_casts = dialog.get_selected_casts()
@@ -455,32 +585,165 @@ class ProductionEditDialog(QDialog):
                 # 既に追加済みかチェック
                 already_added = any(c['cast_id'] == cast['id'] for c in self.cast_data)
                 if already_added:
+                    QMessageBox.warning(self, "警告", f"{cast['name']}は既に追加されています")
                     continue
 
                 # 役割を入力
                 from PyQt5.QtWidgets import QInputDialog
                 role, ok = QInputDialog.getText(self, "役割入力", f"{cast['name']}の役割（任意）:")
+                if not ok:
+                    continue
 
-                cast_data = {'cast_id': cast['id'], 'role': role if ok else ""}
+                # 出演者を保存
+                cast_data = {'cast_id': cast['id'], 'role': role}
                 self.cast_data.append(cast_data)
+                production_id = self.production[0]
+                self.db.save_production_cast(production_id, self.cast_data)
 
-                display_text = f"{cast['name']} ({cast['partner_name']})"
-                if role and ok:
-                    display_text += f" - {role}"
-                item = create_list_item(display_text, cast_data)
-                self.cast_list.addItem(item)
+                # 契約作成確認
+                reply = QMessageBox.question(
+                    self, "契約の作成",
+                    f"出演者「{cast['name']}」を追加しました。\n\nこの出演者の契約も作成しますか？",
+                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
+                )
+
+                if reply == QMessageBox.Yes:
+                    # 契約編集ダイアログを開く
+                    from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
+                    # 出演者の事務所（partner_id）を取得
+                    cast_info = self.db.get_cast_by_id(cast['id'])
+                    if cast_info:
+                        partner_id = cast_info[2]  # cast: (id, name, partner_id, notes, created_at, updated_at)
+                        contract_dialog = OrderContractEditDialog(
+                            self,
+                            production_id=production_id,
+                            partner_id=partner_id,
+                            work_type='出演'
+                        )
+                        if contract_dialog.exec_():
+                            QMessageBox.information(self, "成功", "契約を作成しました")
+                elif reply == QMessageBox.Cancel:
+                    # キャンセルの場合、出演者も削除
+                    self.cast_data.remove(cast_data)
+                    self.db.save_production_cast(production_id, self.cast_data)
+                    continue
+
+                # データを再読み込み
+                self._load_cast_data()
+                # 費用項目も更新
+                self._load_expenses()
+
+    def add_cast_contract(self):
+        """選択された出演者に契約を追加"""
+        if not self.is_edit:
+            QMessageBox.warning(self, "警告", "番組を保存してから契約を追加してください")
+            return
+
+        current_row = self.cast_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "警告", "出演者を選択してください")
+            return
+
+        item = self.cast_table.item(current_row, 0)
+        if not item:
+            return
+
+        data = item.data(Qt.UserRole)
+        production_id = self.production[0]
+        partner_id = data['partner_id']
+
+        # 契約編集ダイアログを開く
+        from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
+        contract_dialog = OrderContractEditDialog(
+            self,
+            production_id=production_id,
+            partner_id=partner_id,
+            work_type='出演'
+        )
+        if contract_dialog.exec_():
+            QMessageBox.information(self, "成功", "契約を作成しました")
+            # データを再読み込み
+            self._load_cast_data()
+            self._load_expenses()
+
+    def edit_cast_contract(self):
+        """選択された契約を編集"""
+        current_row = self.cast_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "警告", "編集する契約を選択してください")
+            return
+
+        item = self.cast_table.item(current_row, 0)
+        if not item:
+            return
+
+        data = item.data(Qt.UserRole)
+        contract_id = data.get('contract_id')
+
+        if not contract_id:
+            QMessageBox.warning(self, "警告", "契約が選択されていません")
+            return
+
+        # 契約編集ダイアログを開く
+        from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
+        contract_dialog = OrderContractEditDialog(self, contract_id=contract_id)
+        if contract_dialog.exec_():
+            QMessageBox.information(self, "成功", "契約を更新しました")
+            # データを再読み込み
+            self._load_cast_data()
+            self._load_expenses()
 
     def delete_cast(self):
-        """出演者削除"""
-        current_item = self.cast_list.currentItem()
-        if not current_item:
+        """出演者削除（契約も削除）"""
+        if not self.is_edit:
+            return
+
+        current_row = self.cast_table.currentRow()
+        if current_row < 0:
             QMessageBox.warning(self, "警告", "削除する出演者を選択してください")
             return
 
-        cast_data = current_item.data(Qt.UserRole)
-        row = self.cast_list.row(current_item)
-        self.cast_list.takeItem(row)
-        self.cast_data.remove(cast_data)
+        item = self.cast_table.item(current_row, 0)
+        if not item:
+            return
+
+        data = item.data(Qt.UserRole)
+        production_cast_id = data['production_cast_id']
+        production_id = self.production[0]
+        partner_id = data['partner_id']
+
+        # 関連する契約を取得
+        contracts = self.db.get_contracts_by_production_and_partner(production_id, partner_id)
+
+        # 確認ダイアログ
+        cast_name = self.cast_table.item(current_row, 0).text() if self.cast_table.item(current_row, 0) else "この出演者"
+        message = f"出演者「{cast_name}」を削除すると、"
+        if contracts:
+            message += "以下の契約も削除されます：\n\n"
+            for contract in contracts:
+                # contract: (contract_id, item_name, unit_price, order_status, payment_timing)
+                message += f"・{contract[1]}: ¥{contract[2]:,.0f}\n"
+        else:
+            message += "契約はありません。\n"
+        message += "\n本当に削除してもよろしいですか？"
+
+        reply = QMessageBox.question(
+            self, "確認",
+            message,
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                self.db.delete_cast_from_production(production_cast_id, production_id, partner_id)
+                QMessageBox.information(self, "成功", "出演者と契約を削除しました")
+                # データを再読み込み
+                self._load_cast_data()
+                self._load_expenses()
+                # cast_dataも更新
+                self.cast_data = [c for c in self.cast_data if c['cast_id'] != data['cast_id']]
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{str(e)}")
 
     def create_new_cast(self):
         """新規出演者登録"""

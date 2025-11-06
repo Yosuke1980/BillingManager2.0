@@ -22,13 +22,18 @@ from partner_manager import PartnerManager
 class OrderContractEditDialog(QDialog):
     """発注書編集ダイアログ"""
 
-    def __init__(self, parent=None, contract_id=None):
+    def __init__(self, parent=None, contract_id=None, production_id=None, partner_id=None, work_type=None):
         super().__init__(parent)
         self.db = OrderManagementDB()
         self.pm = PartnerManager()
         self.contract_id = contract_id
         self.pdf_file_path = ""
         self.pdf_dir = "order_pdfs"
+
+        # 番組詳細からの呼び出し用パラメータ
+        self.preset_production_id = production_id
+        self.preset_partner_id = partner_id
+        self.preset_work_type = work_type  # '出演' or '制作'
 
         self.setWindowTitle("発注書編集" if contract_id else "新規発注書")
 
@@ -42,6 +47,9 @@ class OrderContractEditDialog(QDialog):
 
         if contract_id:
             self.load_contract_data()
+        elif production_id and partner_id:
+            # 番組詳細から呼び出された場合、自動設定
+            self.apply_preset_values()
 
     def init_ui(self):
         """UIの初期化（グループボックスでセクション分け）"""
@@ -1051,3 +1059,31 @@ class OrderContractEditDialog(QDialog):
                 QMessageBox.information(self, "成功", "取引先を追加しました")
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"保存に失敗しました: {e}")
+
+    def apply_preset_values(self):
+        """番組詳細から呼び出された場合の自動設定"""
+        # 番組を自動選択
+        if self.preset_production_id:
+            for i in range(self.program_combo.count()):
+                if self.program_combo.itemData(i) == self.preset_production_id:
+                    self.program_combo.setCurrentIndex(i)
+                    self.program_combo.setEnabled(False)  # 編集不可
+                    break
+
+        # 取引先を自動選択
+        if self.preset_partner_id:
+            for i in range(self.partner_combo.count()):
+                if self.partner_combo.itemData(i) == self.preset_partner_id:
+                    self.partner_combo.setCurrentIndex(i)
+                    self.partner_combo.setEnabled(False)  # 編集不可
+                    break
+
+        # 業務種別を自動選択
+        if self.preset_work_type:
+            if self.preset_work_type == '出演':
+                self.work_type_cast.setChecked(True)
+            elif self.preset_work_type == '制作':
+                self.work_type_production.setChecked(True)
+            # 業務種別を固定（編集不可）
+            self.work_type_cast.setEnabled(False)
+            self.work_type_production.setEnabled(False)

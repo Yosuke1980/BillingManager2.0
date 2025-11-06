@@ -717,6 +717,176 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def get_production_cast_with_contracts(self, production_id: int) -> List[Tuple]:
+        """番組の出演者と契約情報を取得
+
+        Args:
+            production_id: 番組ID
+
+        Returns:
+            List[Tuple]: (production_cast_id, cast_id, cast_name, role, partner_id, partner_name,
+                         contract_id, item_name, unit_price, order_status, payment_timing,
+                         contract_start_date, contract_end_date)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT
+                    pc.id as production_cast_id,
+                    c.id as cast_id,
+                    c.name as cast_name,
+                    pc.role,
+                    p.id as partner_id,
+                    p.name as partner_name,
+                    oc.id as contract_id,
+                    oc.item_name,
+                    oc.unit_price,
+                    oc.order_status,
+                    oc.payment_timing,
+                    oc.contract_start_date,
+                    oc.contract_end_date
+                FROM production_cast pc
+                INNER JOIN cast c ON pc.cast_id = c.id
+                INNER JOIN partners p ON c.partner_id = p.id
+                LEFT JOIN order_contracts oc ON
+                    oc.production_id = pc.production_id
+                    AND oc.partner_id = p.id
+                WHERE pc.production_id = ?
+                ORDER BY c.name, oc.item_name
+            """, (production_id,))
+
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_production_producers_with_contracts(self, production_id: int) -> List[Tuple]:
+        """番組の制作会社と契約情報を取得
+
+        Args:
+            production_id: 番組ID
+
+        Returns:
+            List[Tuple]: (production_producer_id, partner_id, partner_name,
+                         contract_id, item_name, unit_price, order_status, payment_timing,
+                         contract_start_date, contract_end_date)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT
+                    pp.id as production_producer_id,
+                    p.id as partner_id,
+                    p.name as partner_name,
+                    oc.id as contract_id,
+                    oc.item_name,
+                    oc.unit_price,
+                    oc.order_status,
+                    oc.payment_timing,
+                    oc.contract_start_date,
+                    oc.contract_end_date
+                FROM production_producers pp
+                INNER JOIN partners p ON pp.partner_id = p.id
+                LEFT JOIN order_contracts oc ON
+                    oc.production_id = pp.production_id
+                    AND oc.partner_id = p.id
+                WHERE pp.production_id = ?
+                ORDER BY p.name, oc.item_name
+            """, (production_id,))
+
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_contracts_by_production_and_partner(self, production_id: int, partner_id: int) -> List[Tuple]:
+        """特定の番組と取引先の組み合わせで契約を取得
+
+        Args:
+            production_id: 番組ID
+            partner_id: 取引先ID
+
+        Returns:
+            List[Tuple]: (contract_id, item_name, unit_price, order_status, payment_timing)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT
+                    id, item_name, unit_price, order_status, payment_timing
+                FROM order_contracts
+                WHERE production_id = ? AND partner_id = ?
+                ORDER BY item_name
+            """, (production_id, partner_id))
+
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def delete_cast_from_production(self, production_cast_id: int, production_id: int, partner_id: int):
+        """出演者を番組から削除（関連契約も削除）
+
+        Args:
+            production_cast_id: production_castのID
+            production_id: 番組ID
+            partner_id: 取引先ID（出演者の事務所）
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # トランザクション開始
+            # 1. production_castから削除
+            cursor.execute("DELETE FROM production_cast WHERE id = ?", (production_cast_id,))
+
+            # 2. 関連する契約を削除
+            cursor.execute("""
+                DELETE FROM order_contracts
+                WHERE production_id = ? AND partner_id = ?
+            """, (production_id, partner_id))
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            log_message(f"出演者削除エラー: {e}")
+            raise e
+        finally:
+            conn.close()
+
+    def delete_producer_from_production(self, production_producer_id: int, production_id: int, partner_id: int):
+        """制作会社を番組から削除（関連契約も削除）
+
+        Args:
+            production_producer_id: production_producersのID
+            production_id: 番組ID
+            partner_id: 取引先ID（制作会社）
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # トランザクション開始
+            # 1. production_producersから削除
+            cursor.execute("DELETE FROM production_producers WHERE id = ?", (production_producer_id,))
+
+            # 2. 関連する契約を削除
+            cursor.execute("""
+                DELETE FROM order_contracts
+                WHERE production_id = ? AND partner_id = ?
+            """, (production_id, partner_id))
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            log_message(f"制作会社削除エラー: {e}")
+            raise e
+        finally:
+            conn.close()
+
     def import_productions_from_csv(self, csv_data: List[dict], overwrite: bool = False) -> dict:
         """CSVデータから番組・イベントをインポート
 
