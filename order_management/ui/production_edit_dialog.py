@@ -3,13 +3,14 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QTextEdit, QDateEdit, QPushButton, QMessageBox, QLabel,
     QRadioButton, QButtonGroup, QCheckBox, QListWidget, QComboBox, QWidget,
-    QSizePolicy, QTimeEdit
+    QSizePolicy, QTimeEdit, QTableWidget, QTableWidgetItem, QHeaderView
 )
 from PyQt5.QtCore import Qt, QDate, QTime
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_list_item
 from order_management.ui.cast_edit_dialog import CastEditDialog
 from order_management.ui.producer_select_dialog import ProducerSelectDialog
+from order_management.ui.expense_edit_dialog import ExpenseEditDialog
 
 
 class ProductionEditDialog(QDialog):
@@ -225,6 +226,44 @@ class ProductionEditDialog(QDialog):
         producer_button_layout.addStretch()
         layout.addLayout(producer_button_layout)
 
+        # 費用項目セクション
+        expense_label = QLabel("費用項目:")
+        expense_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        layout.addWidget(expense_label)
+
+        self.expense_table = QTableWidget()
+        self.expense_table.setColumnCount(6)
+        self.expense_table.setHorizontalHeaderLabels([
+            "項目名", "金額（円）", "発注先", "ステータス", "実施日", "支払予定日"
+        ])
+        self.expense_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.expense_table.setMaximumHeight(150)
+        self.expense_table.doubleClicked.connect(self.edit_expense)
+
+        # カラム幅の設定
+        header = self.expense_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)  # 項目名
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 金額
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 発注先
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # ステータス
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 実施日
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 支払予定日
+
+        layout.addWidget(self.expense_table)
+
+        expense_button_layout = QHBoxLayout()
+        self.add_expense_button = QPushButton("費用項目を追加")
+        self.edit_expense_button = QPushButton("編集")
+        self.delete_expense_button = QPushButton("削除")
+        self.add_expense_button.clicked.connect(self.add_expense)
+        self.edit_expense_button.clicked.connect(self.edit_expense)
+        self.delete_expense_button.clicked.connect(self.delete_expense)
+        expense_button_layout.addWidget(self.add_expense_button)
+        expense_button_layout.addWidget(self.edit_expense_button)
+        expense_button_layout.addWidget(self.delete_expense_button)
+        expense_button_layout.addStretch()
+        layout.addLayout(expense_button_layout)
+
         # ボタン
         button_layout = QHBoxLayout()
         self.save_button = QPushButton("保存")
@@ -239,6 +278,7 @@ class ProductionEditDialog(QDialog):
         # データ保持
         self.cast_data = []  # [{'cast_id': 1, 'role': 'MC'}, ...]
         self.producer_data = []  # [{'id': partner_id, 'name': '会社名'}, ...]
+        self.expense_data = []  # [{'id': expense_id, 'item_name': '制作費', ...}, ...]
 
     def on_production_type_changed(self):
         """種別変更時の処理"""
@@ -366,6 +406,9 @@ class ProductionEditDialog(QDialog):
             item = create_list_item(producer_data['name'], producer_data)
             self.producer_list.addItem(item)
 
+        # 費用項目を読み込み
+        self._load_expenses()
+
     def add_cast(self):
         """出演者追加（出演者マスタから選択）"""
         dialog = CastSelectDialog(self)
@@ -432,6 +475,164 @@ class ProductionEditDialog(QDialog):
             row = self.producer_list.row(item)
             self.producer_list.takeItem(row)
             self.producer_data.remove(producer_data)
+
+    def _load_expenses(self):
+        """費用項目を読み込んでテーブルに表示"""
+        if not self.is_edit:
+            return
+
+        production_id = self.production[0]
+        expenses = self.db.get_expenses_by_production(production_id)
+
+        self.expense_data = []
+        self.expense_table.setRowCount(0)
+
+        for expense in expenses:
+            # expense: (id, production_id, item_name, amount, supplier_id, contact_person,
+            #          status, order_number, implementation_date, invoice_received_date)
+            expense_id = expense[0]
+
+            # 詳細情報を取得
+            expense_detail = self.db.get_expense_order_by_id(expense_id)
+            if not expense_detail:
+                continue
+
+            # 発注先名を取得
+            supplier_name = ""
+            if expense_detail[4]:  # supplier_id
+                supplier = self.db.get_partner_by_id(expense_detail[4])
+                if supplier:
+                    supplier_name = supplier[1]
+
+            expense_data = {
+                'id': expense_id,
+                'item_name': expense_detail[2] or "",
+                'amount': expense_detail[3] or 0,
+                'supplier_id': expense_detail[4],
+                'supplier_name': supplier_name,
+                'contact_person': expense_detail[5] or "",
+                'status': expense_detail[6] or "",
+                'implementation_date': expense_detail[9] or "",
+                'payment_scheduled_date': expense_detail[11] or "",
+                'notes': expense_detail[16] or ""
+            }
+            self.expense_data.append(expense_data)
+            self._add_expense_to_table(expense_data)
+
+    def _add_expense_to_table(self, expense_data):
+        """テーブルに費用項目を追加"""
+        row = self.expense_table.rowCount()
+        self.expense_table.insertRow(row)
+
+        self.expense_table.setItem(row, 0, QTableWidgetItem(expense_data['item_name']))
+        self.expense_table.setItem(row, 1, QTableWidgetItem(f"{expense_data['amount']:,.0f}"))
+        self.expense_table.setItem(row, 2, QTableWidgetItem(expense_data['supplier_name']))
+        self.expense_table.setItem(row, 3, QTableWidgetItem(expense_data['status']))
+        self.expense_table.setItem(row, 4, QTableWidgetItem(expense_data['implementation_date']))
+        self.expense_table.setItem(row, 5, QTableWidgetItem(expense_data['payment_scheduled_date']))
+
+        # 行にデータを保存
+        for col in range(6):
+            item = self.expense_table.item(row, col)
+            if item:
+                item.setData(Qt.UserRole, expense_data)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+
+    def add_expense(self):
+        """費用項目を追加"""
+        if not self.is_edit:
+            QMessageBox.warning(self, "警告", "番組を保存してから費用項目を追加してください")
+            return
+
+        production_id = self.production[0]
+        dialog = ExpenseEditDialog(self, production_id=production_id)
+        if dialog.exec_():
+            # データを保存
+            expense_input = dialog.get_data()
+            try:
+                expense_id = self.db.save_expense_order(expense_input, is_new=True)
+
+                # テーブルに追加
+                expense_detail = self.db.get_expense_order_by_id(expense_id)
+                if expense_detail:
+                    supplier_name = ""
+                    if expense_detail[4]:
+                        supplier = self.db.get_partner_by_id(expense_detail[4])
+                        if supplier:
+                            supplier_name = supplier[1]
+
+                    expense_data = {
+                        'id': expense_id,
+                        'item_name': expense_detail[2] or "",
+                        'amount': expense_detail[3] or 0,
+                        'supplier_id': expense_detail[4],
+                        'supplier_name': supplier_name,
+                        'contact_person': expense_detail[5] or "",
+                        'status': expense_detail[6] or "",
+                        'implementation_date': expense_detail[9] or "",
+                        'payment_scheduled_date': expense_detail[11] or "",
+                        'notes': expense_detail[16] or ""
+                    }
+                    self.expense_data.append(expense_data)
+                    self._add_expense_to_table(expense_data)
+
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"費用項目の追加に失敗しました:\n{str(e)}")
+
+    def edit_expense(self):
+        """費用項目を編集"""
+        current_row = self.expense_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "警告", "編集する費用項目を選択してください")
+            return
+
+        item = self.expense_table.item(current_row, 0)
+        if not item:
+            return
+
+        expense_data = item.data(Qt.UserRole)
+        expense_id = expense_data['id']
+
+        dialog = ExpenseEditDialog(self, expense_id=expense_id)
+        if dialog.exec_():
+            # データを保存
+            expense_input = dialog.get_data()
+            try:
+                self.db.save_expense_order(expense_input, is_new=False)
+                # データを再読み込み
+                self._load_expenses()
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"費用項目の更新に失敗しました:\n{str(e)}")
+
+    def delete_expense(self):
+        """費用項目を削除"""
+        current_row = self.expense_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "警告", "削除する費用項目を選択してください")
+            return
+
+        item = self.expense_table.item(current_row, 0)
+        if not item:
+            return
+
+        expense_data = item.data(Qt.UserRole)
+        expense_id = expense_data['id']
+        item_name = expense_data['item_name']
+
+        reply = QMessageBox.question(
+            self, "確認",
+            f"費用項目「{item_name}」を削除してもよろしいですか？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                self.db.delete_expense_order(expense_id)
+                self.expense_table.removeRow(current_row)
+                self.expense_data = [e for e in self.expense_data if e['id'] != expense_id]
+                QMessageBox.information(self, "成功", "費用項目を削除しました")
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{str(e)}")
 
     def save(self):
         """保存"""

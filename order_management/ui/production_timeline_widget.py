@@ -456,6 +456,12 @@ class ProductionTimelineWidget(QWidget):
         edit_action.triggered.connect(lambda: self.on_item_double_clicked(item, 0))
         menu.addAction(edit_action)
 
+        # 番組・イベントの場合は費用項目追加メニューを追加
+        if data_type == "production":
+            add_expense_action = QAction("費用項目を追加", self)
+            add_expense_action.triggered.connect(lambda: self.add_expense_to_production(data_id))
+            menu.addAction(add_expense_action)
+
         menu.addSeparator()
 
         # 削除アクション
@@ -464,6 +470,19 @@ class ProductionTimelineWidget(QWidget):
         menu.addAction(delete_action)
 
         menu.exec_(self.tree.viewport().mapToGlobal(position))
+
+    def add_expense_to_production(self, production_id):
+        """番組・イベントに費用項目を追加"""
+        dialog = ExpenseEditDialog(self, production_id=production_id)
+        if dialog.exec_():
+            # データを保存
+            expense_input = dialog.get_data()
+            try:
+                self.db.save_expense_order(expense_input, is_new=True)
+                QMessageBox.information(self, "成功", "費用項目を追加しました")
+                self.load_timeline()
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"費用項目の追加に失敗しました:\n{str(e)}")
 
     def delete_item(self, data_type, data_id):
         """アイテム削除"""

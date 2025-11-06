@@ -15,17 +15,24 @@ from order_management.database_manager import OrderManagementDB
 class ExpenseEditDialog(QDialog):
     """費用項目編集ダイアログ"""
 
-    def __init__(self, parent=None, production_id=None, expense_data=None):
+    def __init__(self, parent=None, production_id=None, expense_data=None, expense_id=None):
         super().__init__(parent)
         self.production_id = production_id
         self.expense_data = expense_data
+        self.expense_id = expense_id
         self.db = OrderManagementDB()
 
-        self.setWindowTitle("費用項目編集" if expense_data else "費用項目追加")
+        # expense_idが指定されている場合はデータを取得
+        if expense_id and not expense_data:
+            self.expense_data = self.db.get_expense_order_by_id(expense_id)
+            if self.expense_data:
+                self.production_id = self.expense_data[1]
+
+        self.setWindowTitle("費用項目編集" if (expense_data or expense_id) else "費用項目追加")
         self.setMinimumWidth(600)
         self._setup_ui()
 
-        if expense_data:
+        if self.expense_data:
             self._load_data()
 
     def _setup_ui(self):
@@ -182,7 +189,7 @@ class ExpenseEditDialog(QDialog):
         """入力データを取得"""
         supplier_id = self.supplier_combo.currentData()
 
-        return {
+        data = {
             'production_id': self.production_id,
             'item_name': self.item_name_edit.text().strip(),
             'amount': self.amount_spin.value(),
@@ -193,3 +200,9 @@ class ExpenseEditDialog(QDialog):
             'payment_scheduled_date': self.payment_date_edit.date().toString("yyyy-MM-dd"),
             'notes': self.notes_edit.toPlainText(),
         }
+
+        # 編集モードの場合はIDも含める
+        if self.expense_id:
+            data['id'] = self.expense_id
+
+        return data
