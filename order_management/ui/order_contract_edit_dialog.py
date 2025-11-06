@@ -959,7 +959,7 @@ class OrderContractEditDialog(QDialog):
                 )
                 return
 
-        contract_data['program_id'] = program_id
+        contract_data['production_id'] = program_id  # データベースはproduction_idを使用
 
         # 案件の設定（特定案件が選択されている場合のみ）
         if self.rb_project.isChecked():
