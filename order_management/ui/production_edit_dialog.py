@@ -1,9 +1,10 @@
-"""番組・イベント編集ダイアログ（出演者マスタ連携版）"""
+"""番組・イベント編集ダイアログ（タブ形式）"""
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QTextEdit, QDateEdit, QPushButton, QMessageBox, QLabel,
     QRadioButton, QButtonGroup, QCheckBox, QListWidget, QComboBox, QWidget,
-    QSizePolicy, QTimeEdit, QTableWidget, QTableWidgetItem, QHeaderView
+    QSizePolicy, QTimeEdit, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
+    QScrollArea
 )
 from PyQt5.QtCore import Qt, QDate, QTime
 from order_management.database_manager import OrderManagementDB
@@ -23,7 +24,7 @@ class ProductionEditDialog(QDialog):
         self.is_edit = production is not None
 
         self.setWindowTitle("番組・イベント編集" if self.is_edit else "新規登録")
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(1000)
         self.setMinimumHeight(700)
 
         self._setup_ui()
@@ -37,6 +38,37 @@ class ProductionEditDialog(QDialog):
 
         # ダイアログ全体の背景色を設定
         self.setStyleSheet("QDialog { background-color: white; }")
+
+        # タブウィジェット作成
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+
+        # 各タブを作成
+        self._create_basic_info_tab()
+        self._create_cast_tab()
+        self._create_producer_tab()
+        self._create_expense_tab()
+
+        # 保存・キャンセルボタン
+        button_layout = QHBoxLayout()
+        self.save_button = QPushButton("保存")
+        self.cancel_button = QPushButton("キャンセル")
+        self.save_button.clicked.connect(self.save)
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addStretch()
+        button_layout.addWidget(self.save_button)
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+
+        # データ保持
+        self.cast_data = []
+        self.producer_data = []
+        self.expense_data = []
+
+    def _create_basic_info_tab(self):
+        """基本情報タブを作成"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
 
         # フォーム
         form_layout = QFormLayout()
@@ -184,16 +216,21 @@ class ProductionEditDialog(QDialog):
         form_layout.addRow("ステータス:", status_widget)
 
         layout.addLayout(form_layout)
+        layout.addStretch()
 
-        # 出演者セクション
-        cast_label = QLabel("出演者:")
-        cast_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
-        layout.addWidget(cast_label)
+        # タブに追加
+        self.tab_widget.addTab(tab, "📝 基本情報")
 
+    def _create_cast_tab(self):
+        """出演者タブを作成"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # 出演者リスト（フル画面使用）
         self.cast_list = QListWidget()
-        self.cast_list.setMaximumHeight(120)
         layout.addWidget(self.cast_list)
 
+        # ボタン
         cast_button_layout = QHBoxLayout()
         self.add_cast_button = QPushButton("出演者追加")
         self.delete_cast_button = QPushButton("出演者削除")
@@ -207,15 +244,19 @@ class ProductionEditDialog(QDialog):
         cast_button_layout.addStretch()
         layout.addLayout(cast_button_layout)
 
-        # 制作会社セクション
-        producer_label = QLabel("制作会社:")
-        producer_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
-        layout.addWidget(producer_label)
+        # タブに追加
+        self.tab_widget.addTab(tab, "👥 出演者")
 
+    def _create_producer_tab(self):
+        """制作会社タブを作成"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # 制作会社リスト（フル画面使用）
         self.producer_list = QListWidget()
-        self.producer_list.setMaximumHeight(120)
         layout.addWidget(self.producer_list)
 
+        # ボタン
         producer_button_layout = QHBoxLayout()
         self.add_producer_button = QPushButton("制作会社追加")
         self.delete_producer_button = QPushButton("制作会社削除")
@@ -226,18 +267,21 @@ class ProductionEditDialog(QDialog):
         producer_button_layout.addStretch()
         layout.addLayout(producer_button_layout)
 
-        # 費用項目セクション
-        expense_label = QLabel("費用項目:")
-        expense_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
-        layout.addWidget(expense_label)
+        # タブに追加
+        self.tab_widget.addTab(tab, "🏢 制作会社")
 
+    def _create_expense_tab(self):
+        """費用項目タブを作成"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # 費用項目テーブル（フル画面使用）
         self.expense_table = QTableWidget()
         self.expense_table.setColumnCount(6)
         self.expense_table.setHorizontalHeaderLabels([
             "項目名", "金額（円）", "発注先", "ステータス", "実施日", "支払予定日"
         ])
         self.expense_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.expense_table.setMaximumHeight(150)
         self.expense_table.doubleClicked.connect(self.edit_expense)
 
         # カラム幅の設定
@@ -251,6 +295,12 @@ class ProductionEditDialog(QDialog):
 
         layout.addWidget(self.expense_table)
 
+        # 合計金額表示
+        self.expense_total_label = QLabel("合計金額: ¥0")
+        self.expense_total_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(self.expense_total_label)
+
+        # ボタン
         expense_button_layout = QHBoxLayout()
         self.add_expense_button = QPushButton("費用項目を追加")
         self.edit_expense_button = QPushButton("編集")
@@ -264,21 +314,8 @@ class ProductionEditDialog(QDialog):
         expense_button_layout.addStretch()
         layout.addLayout(expense_button_layout)
 
-        # ボタン
-        button_layout = QHBoxLayout()
-        self.save_button = QPushButton("保存")
-        self.cancel_button = QPushButton("キャンセル")
-        self.save_button.clicked.connect(self.save)
-        self.cancel_button.clicked.connect(self.reject)
-        button_layout.addStretch()
-        button_layout.addWidget(self.save_button)
-        button_layout.addWidget(self.cancel_button)
-        layout.addLayout(button_layout)
-
-        # データ保持
-        self.cast_data = []  # [{'cast_id': 1, 'role': 'MC'}, ...]
-        self.producer_data = []  # [{'id': partner_id, 'name': '会社名'}, ...]
-        self.expense_data = []  # [{'id': expense_id, 'item_name': '制作費', ...}, ...]
+        # タブに追加
+        self.tab_widget.addTab(tab, "💰 費用項目")
 
     def on_production_type_changed(self):
         """種別変更時の処理"""
@@ -538,6 +575,14 @@ class ProductionEditDialog(QDialog):
                 item.setData(Qt.UserRole, expense_data)
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
+        # 合計金額を更新
+        self._update_expense_total()
+
+    def _update_expense_total(self):
+        """費用項目の合計金額を更新"""
+        total = sum(expense['amount'] for expense in self.expense_data)
+        self.expense_total_label.setText(f"合計金額: ¥{total:,.0f}")
+
     def add_expense(self):
         """費用項目を追加"""
         if not self.is_edit:
@@ -630,6 +675,7 @@ class ProductionEditDialog(QDialog):
                 self.db.delete_expense_order(expense_id)
                 self.expense_table.removeRow(current_row)
                 self.expense_data = [e for e in self.expense_data if e['id'] != expense_id]
+                self._update_expense_total()
                 QMessageBox.information(self, "成功", "費用項目を削除しました")
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{str(e)}")
