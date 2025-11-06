@@ -559,11 +559,10 @@ class ProductionEditDialog(QDialog):
                     row = self.cast_table.rowCount()
                     self.cast_table.insertRow(row)
 
-                    if i == 0:
-                        # 最初の行だけ出演者情報を表示
-                        self.cast_table.setItem(row, 0, QTableWidgetItem(cast_info['cast_name']))
-                        self.cast_table.setItem(row, 1, QTableWidgetItem(cast_info['role']))
-                        self.cast_table.setItem(row, 2, QTableWidgetItem(cast_info['partner_name']))
+                    # すべての行に出演者情報を設定（rowSpanで表示は統合される）
+                    self.cast_table.setItem(row, 0, QTableWidgetItem(cast_info['cast_name']))
+                    self.cast_table.setItem(row, 1, QTableWidgetItem(cast_info['role']))
+                    self.cast_table.setItem(row, 2, QTableWidgetItem(cast_info['partner_name']))
 
                     # 契約情報を表示
                     self.cast_table.setItem(row, 3, QTableWidgetItem(contract['item_name']))
@@ -583,7 +582,7 @@ class ProductionEditDialog(QDialog):
                             })
                             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
-                # rowSpanでマージ
+                # rowSpanでマージ（表示上は統合されるが、データはすべての行に保存されている）
                 if len(contracts) > 1:
                     self.cast_table.setSpan(start_row, 0, len(contracts), 1)  # 出演者名
                     self.cast_table.setSpan(start_row, 1, len(contracts), 1)  # 役割
@@ -724,9 +723,8 @@ class ProductionEditDialog(QDialog):
                     row = self.producer_table.rowCount()
                     self.producer_table.insertRow(row)
 
-                    if i == 0:
-                        # 最初の行だけ制作会社名を表示
-                        self.producer_table.setItem(row, 0, QTableWidgetItem(producer_info['partner_name']))
+                    # すべての行に制作会社名を設定（rowSpanで表示は統合される）
+                    self.producer_table.setItem(row, 0, QTableWidgetItem(producer_info['partner_name']))
 
                     # 契約情報を表示
                     self.producer_table.setItem(row, 1, QTableWidgetItem(contract['item_name']))
@@ -746,7 +744,7 @@ class ProductionEditDialog(QDialog):
                             })
                             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
-                # rowSpanでマージ
+                # rowSpanでマージ（表示上は統合されるが、データはすべての行に保存されている）
                 if len(contracts) > 1:
                     self.producer_table.setSpan(start_row, 0, len(contracts), 1)  # 制作会社名
 
