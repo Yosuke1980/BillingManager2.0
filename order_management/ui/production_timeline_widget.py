@@ -19,6 +19,7 @@ from order_management.database_manager import OrderManagementDB
 from order_management.ui.custom_date_edit import ImprovedDateEdit
 from order_management.ui.production_edit_dialog import ProductionEditDialog
 from order_management.ui.expense_edit_dialog import ExpenseEditDialog
+from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
 
 
 class ProductionTimelineWidget(QWidget):
@@ -350,23 +351,66 @@ class ProductionTimelineWidget(QWidget):
             # データを保存（編集用）
             production_item.setData(0, Qt.UserRole, ("production", production_id))
 
-            # 費用項目取得
+            # 費用項目取得（契約由来 + 手動追加）
+            all_expenses = []
+
+            # 1. 契約由来の費用項目 - 出演者の契約
+            cast_contracts = self.db.get_production_cast_with_contracts(production_id)
+            for row in cast_contracts:
+                contract_id = row[6]
+                if contract_id:
+                    expense_info = {
+                        'type': 'contract',
+                        'id': contract_id,
+                        'item_name': f"🔗 {row[7] or ''}",
+                        'amount': row[8] or 0,
+                        'status': row[9] or "",
+                        'payment_date': row[10] or ""
+                    }
+                    all_expenses.append(expense_info)
+
+            # 2. 契約由来の費用項目 - 制作会社の契約
+            producer_contracts = self.db.get_production_producers_with_contracts(production_id)
+            for row in producer_contracts:
+                contract_id = row[3]
+                if contract_id:
+                    expense_info = {
+                        'type': 'contract',
+                        'id': contract_id,
+                        'item_name': f"🔗 {row[4] or ''}",
+                        'amount': row[5] or 0,
+                        'status': row[6] or "",
+                        'payment_date': row[7] or ""
+                    }
+                    all_expenses.append(expense_info)
+
+            # 3. 手動追加の費用項目
             expenses = self.db.get_expenses_by_production(production_id)
-
             for expense in expenses:
-                # expense: (id, production_id, item_name, amount, supplier_id,
-                #          contact_person, status, order_number,
-                #          implementation_date, invoice_received_date)
                 expense_id = expense[0]
-                item_name = expense[2]
-                amount = expense[3]
-                status = expense[6] or ""
-
-                # 支払予定日を取得（詳細情報が必要）
+                # 詳細情報を取得
                 expense_detail = self.db.get_expense_order_by_id(expense_id)
                 payment_scheduled_date = ""
                 if expense_detail and expense_detail[11]:
                     payment_scheduled_date = expense_detail[11]
+
+                expense_info = {
+                    'type': 'manual',
+                    'id': expense_id,
+                    'item_name': expense[2],
+                    'amount': expense[3],
+                    'status': expense[6] or "",
+                    'payment_date': payment_scheduled_date
+                }
+                all_expenses.append(expense_info)
+
+            # 費用項目を表示
+            for expense_info in all_expenses:
+                expense_id = expense_info['id']
+                item_name = expense_info['item_name']
+                amount = expense_info['amount']
+                status = expense_info['status']
+                payment_scheduled_date = expense_info['payment_date']
 
                 # レギュラー番組の場合、支払予定日がその月に含まれるもののみ表示
                 if production_type_str == "レギュラー番組":
@@ -395,7 +439,9 @@ class ProductionTimelineWidget(QWidget):
                     expense_item.setForeground(4, QBrush(QColor(255, 165, 0)))  # オレンジ
 
                 # データを保存（編集用）
-                expense_item.setData(0, Qt.UserRole, ("expense", expense_id))
+                # 契約由来の場合は契約ID、手動の場合は費用項目IDを保存
+                data_type = "contract" if expense_info['type'] == 'contract' else "expense"
+                expense_item.setData(0, Qt.UserRole, (data_type, expense_id))
 
                 production_item.addChild(expense_item)
 
@@ -427,6 +473,12 @@ class ProductionTimelineWidget(QWidget):
                 dialog = ProductionEditDialog(self, production=production)
                 if dialog.exec_():
                     self.load_timeline()
+
+        elif data_type == "contract":
+            # 契約編集
+            dialog = OrderContractEditDialog(self, contract_id=data_id)
+            if dialog.exec_():
+                self.load_timeline()
 
         elif data_type == "expense":
             # 費用項目編集
@@ -461,10 +513,11 @@ class ProductionTimelineWidget(QWidget):
 
         menu.addSeparator()
 
-        # 削除アクション
-        delete_action = QAction("削除", self)
-        delete_action.triggered.connect(lambda: self.delete_item(data_type, data_id))
-        menu.addAction(delete_action)
+        # 削除アクション（契約由来の費用項目は削除不可）
+        if data_type != "contract":
+            delete_action = QAction("削除", self)
+            delete_action.triggered.connect(lambda: self.delete_item(data_type, data_id))
+            menu.addAction(delete_action)
 
         menu.exec_(self.tree.viewport().mapToGlobal(position))
 
