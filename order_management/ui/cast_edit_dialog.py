@@ -1,7 +1,7 @@
 """出演者編集ダイアログ"""
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit, QTextEdit,
-    QPushButton, QMessageBox, QHBoxLayout, QLabel
+    QPushButton, QMessageBox, QHBoxLayout, QLabel, QWidget
 )
 from PyQt5.QtCore import Qt
 from order_management.database_manager import OrderManagementDB
@@ -50,7 +50,7 @@ class CastEditDialog(QDialog):
         partner_layout.addWidget(self.select_partner_button)
         partner_layout.addStretch()
 
-        partner_widget = QLabel()
+        partner_widget = QWidget()
         partner_widget.setLayout(partner_layout)
         form_layout.addRow("所属事務所/個人 *:", partner_widget)
 
