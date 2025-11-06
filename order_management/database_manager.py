@@ -213,7 +213,7 @@ class OrderManagementDB:
 
 
     def get_expenses_by_production(self, production_id: int) -> List[Tuple]:
-        """制作物IDで費用項目を取得"""
+        """番組・イベントIDで費用項目を取得"""
         conn = self._get_connection()
         cursor = conn.cursor()
 
@@ -2273,7 +2273,7 @@ class OrderManagementDB:
 
         Args:
             csv_data: CSVから読み込んだ辞書のリスト
-                     期待されるキー: ID, 制作物名, 取引先名, 委託開始日, 委託終了日,
+                     期待されるキー: ID, 番組・イベント名, 取引先名, 委託開始日, 委託終了日,
                                     発注種別, 発注ステータス, PDFステータス, 備考
             overwrite: True=上書き（既存データ削除）、False=追記/更新
 
@@ -2300,13 +2300,13 @@ class OrderManagementDB:
             for row_num, row_data in enumerate(csv_data, start=2):
                 try:
                     # 必須項目チェック
-                    program_name = row_data.get('制作物名', '').strip()
+                    program_name = row_data.get('番組・イベント名', '').strip()
                     partner_name = row_data.get('取引先名', '').strip()
                     start_date_raw = row_data.get('委託開始日', '').strip()
                     end_date_raw = row_data.get('委託終了日', '').strip()
 
                     if not program_name:
-                        result['errors'].append({'row': row_num, 'reason': '制作物名が空です'})
+                        result['errors'].append({'row': row_num, 'reason': '番組・イベント名が空です'})
                         result['skipped'] += 1
                         continue
 

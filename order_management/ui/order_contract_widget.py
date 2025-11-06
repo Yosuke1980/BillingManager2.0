@@ -527,7 +527,7 @@ class OrderContractWidget(QWidget):
 
                 # ヘッダー行（全項目対応）
                 writer.writerow([
-                    'ID', '制作物名', '費用項目名', '取引先名',
+                    'ID', '番組・イベント名', '費用項目名', '取引先名',
                     '委託開始日', '委託終了日', '契約期間種別',
                     '発注種別', '発注ステータス', 'PDFステータス', 'PDFファイルパス', 'PDF配布日',
                     '支払タイプ', '単価', '支払タイミング', '契約種別',
@@ -551,7 +551,7 @@ class OrderContractWidget(QWidget):
                     #            29:termination_notice_date, 30:renewal_count)
                     writer.writerow([
                         contract[0],  # ID
-                        contract[2] or '',  # 制作物名（番組名）
+                        contract[2] or '',  # 番組・イベント名
                         contract[16] or '',  # 費用項目名
                         contract[4] or '',  # 取引先名
                         contract[5] or '',  # 委託開始日
