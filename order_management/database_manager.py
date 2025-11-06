@@ -788,6 +788,8 @@ class OrderManagementDB:
                         'parent_production_id': parent_production_id
                     }
 
+                    now = datetime.now()
+
                     if production_id and str(production_id).strip().isdigit():
                         # 更新モード
                         production_data['id'] = int(production_id)
@@ -795,17 +797,87 @@ class OrderManagementDB:
                         # 既存データが存在するか確認
                         cursor.execute("SELECT id FROM productions WHERE id = ?", (production_data['id'],))
                         if cursor.fetchone():
-                            self.save_production(production_data, is_new=False)
+                            # 更新
+                            cursor.execute("""
+                                UPDATE productions SET
+                                    name = ?,
+                                    description = ?,
+                                    production_type = ?,
+                                    start_date = ?,
+                                    end_date = ?,
+                                    start_time = ?,
+                                    end_time = ?,
+                                    broadcast_time = ?,
+                                    broadcast_days = ?,
+                                    status = ?,
+                                    parent_production_id = ?,
+                                    updated_at = ?
+                                WHERE id = ?
+                            """, (
+                                production_data['name'],
+                                production_data['description'],
+                                production_data['production_type'],
+                                production_data['start_date'],
+                                production_data['end_date'],
+                                production_data['start_time'],
+                                production_data['end_time'],
+                                production_data['broadcast_time'],
+                                production_data['broadcast_days'],
+                                production_data['status'],
+                                production_data['parent_production_id'],
+                                now,
+                                production_data['id']
+                            ))
                             result['updated'] += 1
                             result['success'] += 1
                         else:
                             # IDが指定されているが存在しない場合は新規追加
-                            self.save_production(production_data, is_new=True)
+                            cursor.execute("""
+                                INSERT INTO productions (
+                                    name, description, production_type, start_date, end_date,
+                                    start_time, end_time, broadcast_time, broadcast_days, status,
+                                    parent_production_id, created_at, updated_at
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                production_data['name'],
+                                production_data['description'],
+                                production_data['production_type'],
+                                production_data['start_date'],
+                                production_data['end_date'],
+                                production_data['start_time'],
+                                production_data['end_time'],
+                                production_data['broadcast_time'],
+                                production_data['broadcast_days'],
+                                production_data['status'],
+                                production_data['parent_production_id'],
+                                now,
+                                now
+                            ))
                             result['inserted'] += 1
                             result['success'] += 1
                     else:
                         # 新規追加モード
-                        self.save_production(production_data, is_new=True)
+                        cursor.execute("""
+                            INSERT INTO productions (
+                                name, description, production_type, start_date, end_date,
+                                start_time, end_time, broadcast_time, broadcast_days, status,
+                                parent_production_id, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            production_data['name'],
+                            production_data['description'],
+                            production_data['production_type'],
+                            production_data['start_date'],
+                            production_data['end_date'],
+                            production_data['start_time'],
+                            production_data['end_time'],
+                            production_data['broadcast_time'],
+                            production_data['broadcast_days'],
+                            production_data['status'],
+                            production_data['parent_production_id'],
+                            now,
+                            now
+                        ))
                         result['inserted'] += 1
                         result['success'] += 1
 
