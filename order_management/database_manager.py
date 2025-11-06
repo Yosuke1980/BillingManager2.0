@@ -717,6 +717,114 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def import_productions_from_csv(self, csv_data: List[dict], overwrite: bool = False) -> dict:
+        """CSVデータから番組・イベントをインポート
+
+        Args:
+            csv_data: CSVから読み込んだデータのリスト（辞書形式）
+            overwrite: Trueの場合は既存データを削除してから挿入
+
+        Returns:
+            dict: インポート結果 {'success': 成功件数, 'inserted': 新規追加件数,
+                                  'updated': 更新件数, 'skipped': スキップ件数,
+                                  'errors': エラーリスト}
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        result = {
+            'success': 0,
+            'inserted': 0,
+            'updated': 0,
+            'skipped': 0,
+            'errors': []
+        }
+
+        try:
+            # 上書きモードの場合は既存データを削除
+            if overwrite:
+                # 費用項目が関連付けられている番組は削除できないため、
+                # 関連データがない番組のみ削除
+                cursor.execute("""
+                    DELETE FROM productions
+                    WHERE id NOT IN (SELECT DISTINCT production_id FROM expenses_order)
+                """)
+
+            for idx, row in enumerate(csv_data, start=2):  # CSVの2行目から（ヘッダー除く）
+                try:
+                    # 必須項目のチェック
+                    if not row.get('制作物名'):
+                        result['errors'].append({
+                            'row': idx,
+                            'reason': '制作物名が空です'
+                        })
+                        result['skipped'] += 1
+                        continue
+
+                    # IDがある場合は更新、ない場合は新規追加
+                    production_id = row.get('ID')
+
+                    # 日付フィールドのパース
+                    start_date = parse_flexible_date(row.get('開始日', ''))
+                    end_date = parse_flexible_date(row.get('終了日', ''))
+
+                    # 親制作物IDの処理
+                    parent_production_id = None
+                    parent_id_str = row.get('親制作物ID', '').strip()
+                    if parent_id_str and parent_id_str.isdigit():
+                        parent_production_id = int(parent_id_str)
+
+                    production_data = {
+                        'name': row.get('制作物名', '').strip(),
+                        'description': row.get('説明', '').strip(),
+                        'production_type': row.get('制作物種別', 'レギュラー番組').strip(),
+                        'start_date': start_date,
+                        'end_date': end_date,
+                        'start_time': row.get('実施開始時間', '').strip() or None,
+                        'end_time': row.get('実施終了時間', '').strip() or None,
+                        'broadcast_time': row.get('放送時間', '').strip() or None,
+                        'broadcast_days': row.get('放送曜日', '').strip() or None,
+                        'status': row.get('ステータス', '放送中').strip(),
+                        'parent_production_id': parent_production_id
+                    }
+
+                    if production_id and str(production_id).strip().isdigit():
+                        # 更新モード
+                        production_data['id'] = int(production_id)
+
+                        # 既存データが存在するか確認
+                        cursor.execute("SELECT id FROM productions WHERE id = ?", (production_data['id'],))
+                        if cursor.fetchone():
+                            self.save_production(production_data, is_new=False)
+                            result['updated'] += 1
+                            result['success'] += 1
+                        else:
+                            # IDが指定されているが存在しない場合は新規追加
+                            self.save_production(production_data, is_new=True)
+                            result['inserted'] += 1
+                            result['success'] += 1
+                    else:
+                        # 新規追加モード
+                        self.save_production(production_data, is_new=True)
+                        result['inserted'] += 1
+                        result['success'] += 1
+
+                except Exception as e:
+                    result['errors'].append({
+                        'row': idx,
+                        'reason': str(e)
+                    })
+                    result['skipped'] += 1
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+        return result
+
     # ========================================
     # 出演者マスター操作
     # ========================================
