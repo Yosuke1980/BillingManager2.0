@@ -38,19 +38,24 @@ class ProductionTimelineWidget(QWidget):
         # ===== フィルターエリア =====
         filter_group_layout = QVBoxLayout()
 
-        # 1行目: 期間フィルター
+        # 1行目: 月選択フィルター
         date_filter_layout = QHBoxLayout()
-        date_filter_layout.addWidget(QLabel("期間:"))
+        date_filter_layout.addWidget(QLabel("表示月:"))
 
-        self.start_date_edit = ImprovedDateEdit()
-        self.start_date_edit.setDate(QDate.currentDate().addMonths(-3))  # 3ヶ月前から
-        date_filter_layout.addWidget(self.start_date_edit)
+        # 年選択
+        self.year_combo = QComboBox()
+        current_year = QDate.currentDate().year()
+        for year in range(current_year - 2, current_year + 3):  # 前後2年
+            self.year_combo.addItem(f"{year}年", year)
+        self.year_combo.setCurrentText(f"{current_year}年")
+        date_filter_layout.addWidget(self.year_combo)
 
-        date_filter_layout.addWidget(QLabel("〜"))
-
-        self.end_date_edit = ImprovedDateEdit()
-        self.end_date_edit.setDate(QDate.currentDate().addMonths(3))  # 3ヶ月後まで
-        date_filter_layout.addWidget(self.end_date_edit)
+        # 月選択
+        self.month_combo = QComboBox()
+        for month in range(1, 13):
+            self.month_combo.addItem(f"{month}月", month)
+        self.month_combo.setCurrentIndex(QDate.currentDate().month() - 1)
+        date_filter_layout.addWidget(self.month_combo)
 
         date_filter_layout.addStretch()
         filter_group_layout.addLayout(date_filter_layout)
@@ -262,8 +267,19 @@ class ProductionTimelineWidget(QWidget):
         self.tree.setSortingEnabled(False)  # ソートを一時無効化
 
         # フィルター条件取得
-        start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
-        end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
+        year = self.year_combo.currentData()
+        month = self.month_combo.currentData()
+
+        # 選択された月の開始日と終了日を計算
+        start_date = f"{year:04d}-{month:02d}-01"
+        # 月末日を計算
+        if month == 12:
+            end_date = f"{year:04d}-{month:02d}-31"
+        else:
+            from datetime import date
+            last_day = (date(year, month + 1, 1) - timedelta(days=1)).day
+            end_date = f"{year:04d}-{month:02d}-{last_day:02d}"
+
         production_type = self.type_filter.currentData()
         program_id = self.program_filter.currentData()
 
