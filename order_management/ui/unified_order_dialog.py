@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
-                             QDateEdit, QTextEdit, QFileDialog, QMessageBox, QWidget,
+                             QTextEdit, QFileDialog, QMessageBox, QWidget,
                              QRadioButton, QButtonGroup, QScrollArea, QApplication)
 from PyQt5.QtCore import QDate, Qt
 from datetime import datetime, timedelta
@@ -13,6 +13,7 @@ import shutil
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 from order_management.ui.production_edit_dialog import ProductionEditDialog
 from order_management.ui.partner_master_widget import PartnerEditDialog
 from partner_manager import PartnerManager
@@ -141,16 +142,14 @@ class UnifiedOrderDialog(QDialog):
         # === レギュラー契約用フィールド ===
         # 委託開始日
         self.start_date_label = QLabel("委託開始日:")
-        self.start_date = QDateEdit()
-        self.start_date.setCalendarPopup(True)
+        self.start_date = ImprovedDateEdit()
         self.start_date.setDate(QDate.currentDate())
         self.start_date.dateChanged.connect(self.on_start_date_changed)
         form_layout.addRow(self.start_date_label, self.start_date)
 
         # 委託終了日
         self.end_date_label = QLabel("委託終了日:")
-        self.end_date = QDateEdit()
-        self.end_date.setCalendarPopup(True)
+        self.end_date = ImprovedDateEdit()
         self.end_date.setDate(QDate.currentDate().addMonths(6))
         form_layout.addRow(self.end_date_label, self.end_date)
 
@@ -186,8 +185,7 @@ class UnifiedOrderDialog(QDialog):
         # === 単発発注用フィールド ===
         # 実施日
         self.implementation_date_label = QLabel("実施日:")
-        self.implementation_date = QDateEdit()
-        self.implementation_date.setCalendarPopup(True)
+        self.implementation_date = ImprovedDateEdit()
         self.implementation_date.setDate(QDate.currentDate())
         form_layout.addRow(self.implementation_date_label, self.implementation_date)
 
@@ -217,16 +215,14 @@ class UnifiedOrderDialog(QDialog):
 
         # PDF配布日
         self.distributed_date_label = QLabel("PDF配布日:")
-        self.distributed_date = QDateEdit()
-        self.distributed_date.setCalendarPopup(True)
+        self.distributed_date = ImprovedDateEdit()
         self.distributed_date.setDate(QDate.currentDate())
         form_layout.addRow(self.distributed_date_label, self.distributed_date)
 
         # === メール関連フィールド（メール発注用） ===
         # メール送信日
         self.email_sent_date_label = QLabel("送信日:")
-        self.email_sent_date = QDateEdit()
-        self.email_sent_date.setCalendarPopup(True)
+        self.email_sent_date = ImprovedDateEdit()
         self.email_sent_date.setDate(QDate.currentDate())
         form_layout.addRow(self.email_sent_date_label, self.email_sent_date)
 

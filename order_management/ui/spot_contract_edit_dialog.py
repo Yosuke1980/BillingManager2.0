@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
-                             QDateEdit, QTextEdit, QFileDialog, QMessageBox,
+                             QTextEdit, QFileDialog, QMessageBox,
                              QRadioButton, QButtonGroup, QWidget)
 from PyQt5.QtCore import QDate, Qt
 from datetime import datetime
@@ -13,6 +13,7 @@ import shutil
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 from order_management.ui.production_edit_dialog import ProductionEditDialog
 from order_management.ui.partner_master_widget import PartnerEditDialog
 from partner_manager import PartnerManager
@@ -129,8 +130,7 @@ class SpotContractEditDialog(QDialog):
         form_layout.addRow("取引先名:", partner_layout)
 
         # 実施日
-        self.implementation_date = QDateEdit()
-        self.implementation_date.setCalendarPopup(True)
+        self.implementation_date = ImprovedDateEdit()
         self.implementation_date.setDate(QDate.currentDate())
         form_layout.addRow("実施日:", self.implementation_date)
 
@@ -158,8 +158,7 @@ class SpotContractEditDialog(QDialog):
 
         # PDF配布日
         self.distributed_date_label = QLabel("PDF配布日:")
-        self.distributed_date = QDateEdit()
-        self.distributed_date.setCalendarPopup(True)
+        self.distributed_date = ImprovedDateEdit()
         self.distributed_date.setDate(QDate.currentDate())
         form_layout.addRow(self.distributed_date_label, self.distributed_date)
 
@@ -179,8 +178,7 @@ class SpotContractEditDialog(QDialog):
         form_layout.addRow(self.email_body_label, self.email_body)
 
         self.email_sent_date_label = QLabel("メール送信日:")
-        self.email_sent_date = QDateEdit()
-        self.email_sent_date.setCalendarPopup(True)
+        self.email_sent_date = ImprovedDateEdit()
         self.email_sent_date.setDate(QDate.currentDate())
         form_layout.addRow(self.email_sent_date_label, self.email_sent_date)
 

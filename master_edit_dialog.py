@@ -4,12 +4,13 @@
 """
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox,
-    QDateEdit, QPushButton, QGroupBox, QGridLayout, QMessageBox,
+    QPushButton, QGroupBox, QGridLayout, QMessageBox,
     QTabWidget, QWidget, QScrollArea, QCheckBox
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QKeySequence
 from utils import log_message, format_payee_code
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 
 
 class MasterEditDialog(QDialog):
@@ -135,10 +136,8 @@ class MasterEditDialog(QDialog):
                 widget.setStyleSheet("background-color: #f8f9fa;")
                 widget.setMaximumWidth(150)
             elif field_type == "date":
-                widget = QDateEdit()
-                widget.setCalendarPopup(True)
+                widget = ImprovedDateEdit()
                 widget.setDate(QDate.currentDate())
-                widget.setDisplayFormat("yyyy-MM-dd")
                 widget.setMaximumWidth(200)
             elif field_type == "combo":
                 widget = QComboBox()
@@ -231,10 +230,8 @@ class MasterEditDialog(QDialog):
 
             # 入力ウィジェット
             if field_type == "date":
-                widget = QDateEdit()
-                widget.setCalendarPopup(True)
+                widget = ImprovedDateEdit()
                 widget.setDate(QDate.currentDate())
-                widget.setDisplayFormat("yyyy-MM-dd")
                 widget.setSpecialValueText("未設定")
             elif field_type == "combo":
                 widget = QComboBox()

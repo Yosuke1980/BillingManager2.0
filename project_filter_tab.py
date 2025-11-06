@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QLineEdit,
     QComboBox,
-    QDateEdit,
     QMessageBox,
     QSplitter,
     QCheckBox,
@@ -22,6 +21,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QBrush
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 from utils import format_amount, log_message
 
 
@@ -322,9 +322,8 @@ class ProjectFilterTab(QWidget):
                 field_widget = QComboBox()
                 field_widget.addItems(["通常", "重要", "緊急"])
             elif field in ["project_start_date", "project_end_date"]:
-                field_widget = QDateEdit()
+                field_widget = ImprovedDateEdit()
                 field_widget.setDate(QDate.currentDate())
-                field_widget.setCalendarPopup(True)
             elif field == "budget":
                 field_widget = QLineEdit()
                 field_widget.setPlaceholderText("0")

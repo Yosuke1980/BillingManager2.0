@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QPushButton, QLabel,
-                             QDateEdit, QTextEdit, QFileDialog, QMessageBox, QWidget,
+                             QTextEdit, QFileDialog, QMessageBox, QWidget,
                              QRadioButton, QButtonGroup, QScrollArea, QApplication, QGroupBox,
                              QSizePolicy, QCheckBox, QSpinBox)
 from PyQt5.QtCore import QDate, Qt
@@ -14,6 +14,7 @@ import shutil
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 from order_management.ui.production_edit_dialog import ProductionEditDialog
 from order_management.ui.partner_master_widget import PartnerEditDialog
 from partner_manager import PartnerManager
@@ -240,15 +241,13 @@ class OrderContractEditDialog(QDialog):
 
         # 契約期間（レギュラー用）
         date_layout = QHBoxLayout()
-        self.start_date = QDateEdit()
-        self.start_date.setCalendarPopup(True)
+        self.start_date = ImprovedDateEdit()
         self.start_date.setDate(QDate.currentDate())
         self.start_date.dateChanged.connect(self.on_start_date_changed)
         date_layout.addWidget(self.start_date)
 
         date_layout.addWidget(QLabel("  〜  "))
-        self.end_date = QDateEdit()
-        self.end_date.setCalendarPopup(True)
+        self.end_date = ImprovedDateEdit()
         self.end_date.setDate(QDate.currentDate().addMonths(6))
         date_layout.addWidget(self.end_date)
         date_layout.addStretch()
@@ -259,8 +258,7 @@ class OrderContractEditDialog(QDialog):
 
         # 実施日（単発用）
         impl_date_layout = QHBoxLayout()
-        self.implementation_date = QDateEdit()
-        self.implementation_date.setCalendarPopup(True)
+        self.implementation_date = ImprovedDateEdit()
         self.implementation_date.setDate(QDate.currentDate())
         impl_date_layout.addWidget(self.implementation_date)
         impl_date_layout.addStretch()
@@ -361,8 +359,7 @@ class OrderContractEditDialog(QDialog):
 
         # 終了通知受領日
         termination_notice_layout = QHBoxLayout()
-        self.termination_notice_date = QDateEdit()
-        self.termination_notice_date.setCalendarPopup(True)
+        self.termination_notice_date = ImprovedDateEdit()
         self.termination_notice_date.setSpecialValueText("未受領")
         self.termination_notice_date.setDate(QDate(2000, 1, 1))  # 最小値
         self.termination_notice_date.setMinimumDate(QDate(2000, 1, 1))
@@ -416,8 +413,7 @@ class OrderContractEditDialog(QDialog):
         email_layout.addRow("送信先:", self.email_to)
 
         # メール送信日
-        self.email_sent_date = QDateEdit()
-        self.email_sent_date.setCalendarPopup(True)
+        self.email_sent_date = ImprovedDateEdit()
         self.email_sent_date.setDate(QDate.currentDate())
         email_layout.addRow("送信日:", self.email_sent_date)
 

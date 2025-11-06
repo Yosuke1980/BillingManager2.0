@@ -4,12 +4,13 @@
 """
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit, QComboBox,
-    QDateEdit, QDoubleSpinBox, QTextEdit, QDialogButtonBox,
+    QDoubleSpinBox, QTextEdit, QDialogButtonBox,
     QMessageBox, QLabel, QPushButton, QHBoxLayout
 )
 from PyQt5.QtCore import QDate
 from order_management.models import STATUS_LIST
 from order_management.database_manager import OrderManagementDB
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 
 
 class ExpenseEditDialog(QDialog):
@@ -74,16 +75,12 @@ class ExpenseEditDialog(QDialog):
         self.status_combo.addItems(STATUS_LIST)
 
         # 実施日
-        self.impl_date_edit = QDateEdit()
-        self.impl_date_edit.setCalendarPopup(True)
+        self.impl_date_edit = ImprovedDateEdit()
         self.impl_date_edit.setDate(QDate.currentDate())
-        self.impl_date_edit.setDisplayFormat("yyyy-MM-dd")
 
         # 支払予定日
-        self.payment_date_edit = QDateEdit()
-        self.payment_date_edit.setCalendarPopup(True)
+        self.payment_date_edit = ImprovedDateEdit()
         self.payment_date_edit.setDate(QDate.currentDate().addMonths(1))
-        self.payment_date_edit.setDisplayFormat("yyyy-MM-dd")
 
         # 備考
         self.notes_edit = QTextEdit()

@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QLineEdit,
     QComboBox,
-    QDateEdit,
     QFileDialog,
     QMessageBox,
     QCompleter,
@@ -23,6 +22,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, pyqtSlot, QStringListModel
 from PyQt5.QtGui import QColor, QFont, QBrush
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 import csv
 import os
 from datetime import datetime, timedelta
@@ -419,8 +419,7 @@ class ExpenseTab(QWidget):
                 widget = QComboBox()
                 widget.addItems(["翌月末払い", "当月末払い"])
             elif field_key == "payment_date":
-                widget = QDateEdit()
-                widget.setCalendarPopup(True)
+                widget = ImprovedDateEdit()
                 widget.setDate(QDate.currentDate())
             else:
                 widget = QLineEdit()
@@ -464,8 +463,7 @@ class ExpenseTab(QWidget):
                 widget = QComboBox()
                 widget.addItems(["通常", "重要", "緊急"])
             elif field_key in ["project_start_date", "project_end_date"]:
-                widget = QDateEdit()
-                widget.setCalendarPopup(True)
+                widget = ImprovedDateEdit()
                 widget.setDate(QDate.currentDate())
                 widget.setSpecialValueText("未設定")
             elif field_key == "budget":

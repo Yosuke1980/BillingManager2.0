@@ -13,13 +13,13 @@ from PyQt5.QtWidgets import (
     QGroupBox,
     QLineEdit,
     QComboBox,
-    QDateEdit,
     QFileDialog,
     QMessageBox,
     QCheckBox,
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor, QFont, QBrush
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 import csv
 import os
 from datetime import datetime
@@ -253,8 +253,7 @@ class MasterTab(QWidget):
                 entry.addItems(["翌月末払い", "当月末払い"])
             elif field_name in ["start_date", "end_date"]:
                 # 日付選択
-                entry = QDateEdit()
-                entry.setCalendarPopup(True)
+                entry = ImprovedDateEdit()
                 entry.setDate(QDate.currentDate())
             else:
                 # 通常のテキスト入力
@@ -295,8 +294,7 @@ class MasterTab(QWidget):
                 entry = QComboBox()
                 entry.addItems(["通常", "重要", "緊急"])
             elif field_name in ["project_start_date", "project_end_date"]:
-                entry = QDateEdit()
-                entry.setCalendarPopup(True)
+                entry = ImprovedDateEdit()
                 entry.setDate(QDate.currentDate())
             else:
                 entry = QLineEdit()

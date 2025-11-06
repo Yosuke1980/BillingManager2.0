@@ -4,7 +4,7 @@
 """
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
-    QPushButton, QLabel, QDateEdit, QComboBox, QFileDialog, QMessageBox,
+    QPushButton, QLabel, QComboBox, QFileDialog, QMessageBox,
     QHeaderView, QMenu, QAction
 )
 from PyQt5.QtCore import Qt, QDate
@@ -16,6 +16,7 @@ import calendar
 import csv
 
 from order_management.database_manager import OrderManagementDB
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 from order_management.ui.production_edit_dialog import ProductionEditDialog
 from order_management.ui.expense_edit_dialog import ExpenseEditDialog
 
@@ -40,18 +41,14 @@ class ProductionTimelineWidget(QWidget):
         date_filter_layout = QHBoxLayout()
         date_filter_layout.addWidget(QLabel("期間:"))
 
-        self.start_date_edit = QDateEdit()
-        self.start_date_edit.setCalendarPopup(True)
+        self.start_date_edit = ImprovedDateEdit()
         self.start_date_edit.setDate(QDate.currentDate().addMonths(-3))  # 3ヶ月前から
-        self.start_date_edit.setDisplayFormat("yyyy-MM-dd")
         date_filter_layout.addWidget(self.start_date_edit)
 
         date_filter_layout.addWidget(QLabel("〜"))
 
-        self.end_date_edit = QDateEdit()
-        self.end_date_edit.setCalendarPopup(True)
+        self.end_date_edit = ImprovedDateEdit()
         self.end_date_edit.setDate(QDate.currentDate().addMonths(3))  # 3ヶ月後まで
-        self.end_date_edit.setDisplayFormat("yyyy-MM-dd")
         date_filter_layout.addWidget(self.end_date_edit)
 
         date_filter_layout.addStretch()

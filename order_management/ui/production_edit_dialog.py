@@ -1,7 +1,7 @@
 """番組・イベント編集ダイアログ（タブ形式）"""
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
-    QTextEdit, QDateEdit, QPushButton, QMessageBox, QLabel,
+    QTextEdit, QPushButton, QMessageBox, QLabel,
     QRadioButton, QButtonGroup, QCheckBox, QListWidget, QComboBox, QWidget,
     QSizePolicy, QTimeEdit, QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
     QScrollArea
@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, QTime
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_list_item
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 from order_management.ui.cast_edit_dialog import CastEditDialog
 from order_management.ui.producer_select_dialog import ProducerSelectDialog
 from order_management.ui.expense_edit_dialog import ExpenseEditDialog
@@ -137,17 +138,13 @@ class ProductionEditDialog(QDialog):
         form_layout.addRow("備考:", self.description_edit)
 
         # 開始日
-        self.start_date_edit = QDateEdit()
-        self.start_date_edit.setCalendarPopup(True)
+        self.start_date_edit = ImprovedDateEdit()
         self.start_date_edit.setDate(QDate.currentDate())
-        self.start_date_edit.setDisplayFormat("yyyy-MM-dd")
         form_layout.addRow("開始日:", self.start_date_edit)
 
         # 終了日
-        self.end_date_edit = QDateEdit()
-        self.end_date_edit.setCalendarPopup(True)
+        self.end_date_edit = ImprovedDateEdit()
         self.end_date_edit.setDate(QDate.currentDate())
-        self.end_date_edit.setDisplayFormat("yyyy-MM-dd")
         form_layout.addRow("終了日:", self.end_date_edit)
 
         # 実施開始時間（レギュラー以外用）

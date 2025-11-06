@@ -3,12 +3,13 @@
 PDF配布ステータスを更新します。
 """
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QComboBox,
-                             QPushButton, QDateEdit, QLineEdit, QHBoxLayout,
+                             QPushButton, QLineEdit, QHBoxLayout,
                              QMessageBox)
 from PyQt5.QtCore import QDate
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 
 
 class StatusUpdateDialog(QDialog):
@@ -45,8 +46,7 @@ class StatusUpdateDialog(QDialog):
         form_layout.addRow("PDFステータス:", self.pdf_status)
 
         # 配布日
-        self.distributed_date = QDateEdit()
-        self.distributed_date.setCalendarPopup(True)
+        self.distributed_date = ImprovedDateEdit()
         self.distributed_date.setDate(QDate.currentDate())
         form_layout.addRow("配布日:", self.distributed_date)
 

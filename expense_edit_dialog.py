@@ -4,13 +4,14 @@
 """
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QComboBox,
-    QDateEdit, QPushButton, QGroupBox, QGridLayout, QMessageBox,
+    QPushButton, QGroupBox, QGridLayout, QMessageBox,
     QTabWidget, QWidget, QScrollArea
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QKeySequence
 from utils import log_message, format_payee_code
 from payee_line_edit import PayeeLineEdit
+from order_management.ui.custom_date_edit import ImprovedDateEdit
 
 
 class ExpenseEditDialog(QDialog):
@@ -131,7 +132,7 @@ class ExpenseEditDialog(QDialog):
                 widget = PayeeLineEdit(self.db_manager)
                 # 支払い先コードとの連動を後で設定
             elif field_type == "date":
-                widget = QDateEdit()
+                widget = ImprovedDateEdit()
                 widget.setCalendarPopup(True)
                 widget.setDate(QDate.currentDate())
                 widget.setDisplayFormat("yyyy-MM-dd")
@@ -213,7 +214,7 @@ class ExpenseEditDialog(QDialog):
 
             # 入力ウィジェット
             if field_type == "date":
-                widget = QDateEdit()
+                widget = ImprovedDateEdit()
                 widget.setCalendarPopup(True)
                 widget.setDate(QDate.currentDate())
                 widget.setDisplayFormat("yyyy-MM-dd")
