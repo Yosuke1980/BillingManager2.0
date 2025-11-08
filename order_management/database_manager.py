@@ -1212,8 +1212,8 @@ class OrderManagementDB:
                        oc.contract_period_type, oc.pdf_status,
                        oc.pdf_distributed_date,
                        oc.pdf_file_path, oc.notes,
-                       COALESCE(oc.order_type, '発注書') as order_type,
-                       COALESCE(oc.order_status, '未') as order_status,
+                       COALESCE(oc.document_type, '発注書') as document_type,
+                       COALESCE(oc.document_status, '未') as document_status,
                        oc.email_sent_date,
                        prod.name as project_name,
                        oc.item_name,
@@ -1248,11 +1248,11 @@ class OrderManagementDB:
                 params.append(pdf_status)
 
             if order_type:
-                query += " AND COALESCE(oc.order_type, '発注書') = ?"
+                query += " AND COALESCE(oc.document_type, '発注書') = ?"
                 params.append(order_type)
 
             if order_status:
-                query += " AND COALESCE(oc.order_status, '未') = ?"
+                query += " AND COALESCE(oc.document_status, '未') = ?"
                 params.append(order_status)
 
             query += " ORDER BY oc.contract_end_date DESC"
@@ -1276,8 +1276,8 @@ class OrderManagementDB:
                        oc.pdf_distributed_date,
                        oc.pdf_file_path, oc.notes,
                        oc.created_at, oc.updated_at,
-                       COALESCE(oc.order_type, '発注書') as order_type,
-                       COALESCE(oc.order_status, '未完了') as order_status,
+                       COALESCE(oc.document_type, '発注書') as document_type,
+                       COALESCE(oc.document_status, '未完了') as document_status,
                        oc.email_sent_date,
                        COALESCE(oc.payment_type, '月額固定') as payment_type,
                        oc.unit_price,
@@ -1615,29 +1615,29 @@ class OrderManagementDB:
 
             cursor.execute("""
                 SELECT
-                    eo.id,
-                    eo.order_number,
-                    eo.production_id,
+                    ei.id,
+                    ei.order_number,
+                    ei.production_id,
                     p.name as project_name,
                     p.broadcast_days,
-                    eo.item_name,
-                    eo.supplier_id,
-                    eo.expected_payment_amount,
-                    eo.expected_payment_date,
-                    eo.payment_status,
-                    eo.payment_matched_id,
-                    eo.payment_difference,
-                    COALESCE(oc.order_type, '発注書') as order_type,
-                    COALESCE(oc.payment_type, '月額固定') as payment_type,
-                    oc.unit_price,
-                    COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
-                FROM expense_items eo
-                LEFT JOIN productions p ON eo.production_id = p.id
-                LEFT JOIN order_contracts oc ON (
-                    eo.production_id = oc.production_id AND eo.item_name = oc.item_name
-                ) AND eo.supplier_id = oc.partner_id
-                WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
-                ORDER BY eo.supplier_id, eo.expected_payment_date
+                    ei.item_name,
+                    ei.partner_id,
+                    ei.expected_payment_amount,
+                    ei.expected_payment_date,
+                    ei.payment_status,
+                    ei.payment_matched_id,
+                    ei.payment_difference,
+                    COALESCE(c.document_type, '発注書') as document_type,
+                    COALESCE(c.payment_type, '月額固定') as payment_type,
+                    c.unit_price,
+                    COALESCE(c.payment_timing, '翌月末払い') as payment_timing
+                FROM expense_items ei
+                LEFT JOIN productions p ON ei.production_id = p.id
+                LEFT JOIN contracts c ON (
+                    ei.production_id = c.production_id AND ei.item_name = c.item_name
+                ) AND ei.partner_id = c.partner_id
+                WHERE strftime('%Y-%m', ei.expected_payment_date) = ?
+                ORDER BY ei.partner_id, ei.expected_payment_date
             """, (target_month,))
 
             orders = cursor.fetchall()
@@ -2158,7 +2158,7 @@ class OrderManagementDB:
                 SELECT oc.id, oc.production_id, prod.name as production_name,
                        oc.partner_id, part.name as partner_name,
                        oc.item_name, oc.contract_start_date, oc.contract_end_date,
-                       oc.order_type, oc.order_status, oc.pdf_status,
+                       oc.document_type, oc.document_status, oc.pdf_status,
                        oc.notes, oc.created_at, oc.updated_at,
                        oc.payment_type, oc.unit_price
                 FROM contracts oc

@@ -272,7 +272,7 @@ class DatabaseManager:
 
             # 3. 費用項目テーブル
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS expenses_order (
+                CREATE TABLE IF NOT EXISTS expense_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     production_id INTEGER NOT NULL,
                     item_name TEXT NOT NULL,
@@ -310,7 +310,7 @@ class DatabaseManager:
                     gmail_message_id TEXT,
                     sent_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (expense_id) REFERENCES expenses_order(id)
+                    FOREIGN KEY (expense_id) REFERENCES expense_items(id)
                 )
             """)
 
@@ -323,7 +323,7 @@ class DatabaseManager:
                     new_status TEXT,
                     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     notes TEXT,
-                    FOREIGN KEY (expense_id) REFERENCES expenses_order(id)
+                    FOREIGN KEY (expense_id) REFERENCES expense_items(id)
                 )
             """)
 
@@ -1950,7 +1950,7 @@ class DatabaseManager:
             conn.close()
 
     def match_orders_with_payments(self, year, month):
-        """発注と支払を照合（order_management.db の expenses_order と billing.db の payments）
+        """発注と支払を照合（order_management.db の expense_items と billing.db の payments）
 
         照合条件:
         1. 取引先コード（partner code = payee_code）
@@ -1984,25 +1984,25 @@ class DatabaseManager:
             # 指定月の発注データを取得（未照合のもののみ）
             # 契約情報（payment_type, unit_price, payment_timing）も取得
             order_cursor.execute("""
-                SELECT eo.id, eo.order_number, eo.production_id, prod.name as production_name,
-                       eo.supplier_id, part.code as partner_code, part.name as partner_name,
-                       eo.expected_payment_amount, eo.expected_payment_date,
-                       eo.payment_status,
+                SELECT ei.id, ei.order_number, ei.production_id, prod.name as production_name,
+                       ei.partner_id, part.code as partner_code, part.name as partner_name,
+                       ei.expected_payment_amount, ei.expected_payment_date,
+                       ei.payment_status,
                        prod.broadcast_days,
-                       COALESCE(oc.payment_type, '月額固定') as payment_type,
-                       oc.unit_price,
-                       COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
-                FROM expenses_order eo
-                LEFT JOIN productions prod ON eo.production_id = prod.id
-                LEFT JOIN partners part ON eo.supplier_id = part.id
-                LEFT JOIN order_contracts oc ON (
-                    (oc.production_id IS NOT NULL AND eo.production_id = oc.production_id AND eo.item_name = oc.item_name)
-                    OR (oc.production_id IS NULL AND prod.production_id = oc.production_id)
-                ) AND eo.supplier_id = oc.partner_id
-                WHERE strftime('%Y-%m', eo.expected_payment_date) = ?
-                  AND (eo.payment_status = '未払い' OR eo.payment_status IS NULL)
+                       COALESCE(c.payment_type, '月額固定') as payment_type,
+                       c.unit_price,
+                       COALESCE(c.payment_timing, '翌月末払い') as payment_timing
+                FROM expense_items ei
+                LEFT JOIN productions prod ON ei.production_id = prod.id
+                LEFT JOIN partners part ON ei.partner_id = part.id
+                LEFT JOIN contracts c ON (
+                    (c.production_id IS NOT NULL AND ei.production_id = c.production_id AND ei.item_name = c.item_name)
+                    OR (c.production_id IS NULL AND prod.production_id = c.production_id)
+                ) AND ei.partner_id = c.partner_id
+                WHERE strftime('%Y-%m', ei.expected_payment_date) = ?
+                  AND (ei.payment_status = '未払い' OR ei.payment_status IS NULL)
                   AND part.code IS NOT NULL AND part.code != ''
-                ORDER BY eo.id
+                ORDER BY ei.id
             """, (target_month,))
 
             order_rows = order_cursor.fetchall()
@@ -2114,7 +2114,7 @@ class DatabaseManager:
                         # 照合成功
                         # 発注テーブルを更新
                         order_cursor.execute("""
-                            UPDATE expenses_order
+                            UPDATE expense_items
                             SET payment_status = '支払済',
                                 payment_matched_id = ?,
                                 payment_verified_date = ?,
@@ -2258,18 +2258,18 @@ class DatabaseManager:
                 # 番組名と費用項目を分離
                 program_name, item_name = self._split_program_and_item(project_name_full)
 
-                # order_contractsで照合
+                # contractsで照合
                 # 照合条件:
                 # 1. productions.name = 抽出した制作物名
-                # 2. order_contracts.item_name = 抽出した費用項目
+                # 2. contracts.item_name = 抽出した費用項目
                 # 3. partners.name = 取引先名
                 order_cursor.execute("""
-                    SELECT oc.id
-                    FROM order_contracts oc
-                    LEFT JOIN productions prod ON oc.production_id = prod.id
-                    LEFT JOIN partners p ON oc.partner_id = p.id
+                    SELECT c.id
+                    FROM contracts c
+                    LEFT JOIN productions prod ON c.production_id = prod.id
+                    LEFT JOIN partners p ON c.partner_id = p.id
                     WHERE prod.name = ?
-                      AND (oc.item_name = ? OR oc.item_name IS NULL)
+                      AND (c.item_name = ? OR c.item_name IS NULL)
                       AND p.name = ?
                     LIMIT 1
                 """, (program_name, item_name, payee))
@@ -2326,31 +2326,31 @@ class DatabaseManager:
         schedule = []
 
         try:
-            # order_contractsから全レコードを取得
+            # contractsから全レコードを取得
             order_cursor.execute("""
                 SELECT
-                    oc.id as order_contract_id,
-                    oc.production_id,
+                    c.id as order_contract_id,
+                    c.production_id,
                     prod.name as production_name,
-                    oc.partner_id,
+                    c.partner_id,
                     p.name as partner_name,
                     p.code as partner_code,
-                    oc.item_name,
-                    oc.contract_start_date,
-                    oc.contract_end_date,
-                    oc.implementation_date,
-                    COALESCE(oc.payment_type, '月額固定') as payment_type,
-                    oc.unit_price,
-                    oc.spot_amount,
-                    COALESCE(oc.order_category, 'レギュラー制作発注書') as order_category,
-                    COALESCE(oc.order_type, '発注書') as order_type,
-                    COALESCE(oc.order_status, '未完了') as order_status,
-                    oc.pdf_status,
-                    oc.pdf_distributed_date,
-                    oc.email_sent_date
-                FROM order_contracts oc
-                LEFT JOIN productions prod ON oc.production_id = prod.id
-                LEFT JOIN partners p ON oc.partner_id = p.id
+                    c.item_name,
+                    c.contract_start_date,
+                    c.contract_end_date,
+                    c.implementation_date,
+                    COALESCE(c.payment_type, '月額固定') as payment_type,
+                    c.unit_price,
+                    c.spot_amount,
+                    COALESCE(c.order_category, 'レギュラー制作発注書') as order_category,
+                    COALESCE(c.document_type, '発注書') as document_type,
+                    COALESCE(c.document_status, '未完了') as document_status,
+                    c.pdf_status,
+                    c.pdf_distributed_date,
+                    c.email_sent_date
+                FROM contracts c
+                LEFT JOIN productions prod ON c.production_id = prod.id
+                LEFT JOIN partners p ON c.partner_id = p.id
             """)
 
             contracts = order_cursor.fetchall()
@@ -2377,8 +2377,8 @@ class DatabaseManager:
                             'amount': amount,
                             'order_contract_id': contract['order_contract_id'],
                             'order_category': contract['order_category'],
-                            'order_type': contract['order_type'],
-                            'order_status': contract['order_status'],
+                            'document_type': contract['document_type'],
+                            'document_status': contract['document_status'],
                             'pdf_status': contract['pdf_status'],
                             'pdf_distributed_date': contract['pdf_distributed_date'],
                             'email_sent_date': contract['email_sent_date'],
@@ -2426,8 +2426,8 @@ class DatabaseManager:
                             'amount': amount,
                             'order_contract_id': contract['order_contract_id'],
                             'order_category': contract['order_category'],
-                            'order_type': contract['order_type'],
-                            'order_status': contract['order_status'],
+                            'document_type': contract['document_type'],
+                            'document_status': contract['document_status'],
                             'pdf_status': contract['pdf_status'],
                             'pdf_distributed_date': contract['pdf_distributed_date'],
                             'email_sent_date': contract['email_sent_date'],
@@ -2516,16 +2516,16 @@ class DatabaseManager:
                     missing_items.append("発注なし")
                     status_color = "red"
                 else:
-                    # 2. 受領確認チェック（発注ステータスが「完了」なら受領確認不要）
-                    order_status = sched.get('order_status', '未完了')
-                    if order_status != '完了':
-                        # 発注ステータスが未完了の場合のみ、PDFまたはメールをチェック
-                        order_type = sched['order_type']
+                    # 2. 受領確認チェック（書類ステータスが「完了」なら受領確認不要）
+                    document_status = sched.get('document_status', '未完了')
+                    if document_status != '完了':
+                        # 書類ステータスが未完了の場合のみ、PDFまたはメールをチェック
+                        document_type = sched['document_type']
                         has_pdf = sched['pdf_status'] == '配布済'
                         has_email = bool(sched['email_sent_date'])
 
                         if not has_pdf and not has_email:
-                            if order_type == 'メール発注':
+                            if document_type == 'メール発注':
                                 missing_items.append("メール未送信")
                             else:
                                 missing_items.append("PDF未配布")
@@ -2538,10 +2538,10 @@ class DatabaseManager:
                     if status_color == "green":
                         status_color = "yellow"
 
-                # 受領ステータスの判定（発注ステータスが「完了」ならOK）
+                # 受領ステータスの判定（書類ステータスが「完了」ならOK）
                 if has_order:
-                    order_status = sched.get('order_status', '未完了')
-                    if order_status == '完了':
+                    document_status = sched.get('document_status', '未完了')
+                    if document_status == '完了':
                         receipt_status = "✓"
                     else:
                         has_pdf = sched['pdf_status'] == '配布済'
@@ -2563,8 +2563,8 @@ class DatabaseManager:
                     'has_order': has_order,
                     'order_contract_id': sched['order_contract_id'],
                     'order_category': sched['order_category'],
-                    'order_type': sched['order_type'],
-                    'order_status': sched.get('order_status', '未完了'),
+                    'document_type': sched['document_type'],
+                    'document_status': sched.get('document_status', '未完了'),
                     'receipt_status': receipt_status,
                     'payment_status': payment_status,
                     'missing_items': missing_items,
@@ -2588,8 +2588,8 @@ class DatabaseManager:
                         'has_order': False,
                         'order_contract_id': None,
                         'order_category': '',
-                        'order_type': '',
-                        'order_status': '未完了',
+                        'document_type': '',
+                        'document_status': '未完了',
                         'receipt_status': '-',
                         'payment_status': '✓',
                         'missing_items': ['発注なし'],
