@@ -25,32 +25,40 @@ class OrderContractEditDialog(QDialog):
 
     def __init__(self, parent=None, contract_id=None, production_id=None, partner_id=None, work_type=None):
         super().__init__(parent)
-        self.db = OrderManagementDB()
-        self.pm = PartnerManager()
-        self.contract_id = contract_id
-        self.pdf_file_path = ""
-        self.pdf_dir = "order_pdfs"
+        try:
+            self.db = OrderManagementDB()
+            self.pm = PartnerManager()
+            self.contract_id = contract_id
+            self.pdf_file_path = ""
+            self.pdf_dir = "order_pdfs"
 
-        # 番組詳細からの呼び出し用パラメータ
-        self.preset_production_id = production_id
-        self.preset_partner_id = partner_id
-        self.preset_work_type = work_type  # '出演' or '制作'
+            # 番組詳細からの呼び出し用パラメータ
+            self.preset_production_id = production_id
+            self.preset_partner_id = partner_id
+            self.preset_work_type = work_type  # '出演' or '制作'
 
-        self.setWindowTitle("発注書編集" if contract_id else "新規発注書")
+            self.setWindowTitle("発注書編集" if contract_id else "新規発注書")
 
-        # 画面サイズを取得して適切なダイアログサイズを設定
-        screen = QApplication.primaryScreen().geometry()
-        dialog_height = min(800, int(screen.height() * 0.8))  # 画面の80%または800pxの小さい方
-        self.setMinimumSize(650, 600)
-        self.resize(700, dialog_height)
+            # 画面サイズを取得して適切なダイアログサイズを設定
+            screen = QApplication.primaryScreen().geometry()
+            dialog_height = min(800, int(screen.height() * 0.8))  # 画面の80%または800pxの小さい方
+            self.setMinimumSize(650, 600)
+            self.resize(700, dialog_height)
 
-        self.init_ui()
+            self.init_ui()
 
-        if contract_id:
-            self.load_contract_data()
-        elif production_id and partner_id:
-            # 番組詳細から呼び出された場合、自動設定
-            self.apply_preset_values()
+            if contract_id:
+                self.load_contract_data()
+            elif production_id and partner_id:
+                # 番組詳細から呼び出された場合、自動設定
+                self.apply_preset_values()
+        except Exception as e:
+            from utils import log_message
+            import traceback
+            log_message(f"OrderContractEditDialog 初期化エラー: {e}")
+            log_message(traceback.format_exc())
+            QMessageBox.critical(self, "エラー", f"契約編集ダイアログの初期化に失敗しました:\n{str(e)}")
+            raise
 
     def init_ui(self):
         """UIの初期化（グループボックスでセクション分け）"""
@@ -261,7 +269,7 @@ class OrderContractEditDialog(QDialog):
         cast_layout_main = QVBoxLayout()
 
         # 出演者テーブル
-        from PyQt5.QtWidgets import QTableWidget, QHeaderView
+        from PyQt5.QtWidgets import QHeaderView
         self.cast_table = QTableWidget()
         self.cast_table.setColumnCount(4)
         self.cast_table.setHorizontalHeaderLabels(["出演者名", "所属", "役割", ""])
@@ -1152,11 +1160,18 @@ class OrderContractEditDialog(QDialog):
         """番組詳細から呼び出された場合の自動設定"""
         # 番組を自動選択
         if self.preset_production_id:
+            found = False
             for i in range(self.program_combo.count()):
                 if self.program_combo.itemData(i) == self.preset_production_id:
                     self.program_combo.setCurrentIndex(i)
                     self.program_combo.setEnabled(False)  # 編集不可
+                    found = True
                     break
+
+            if not found:
+                # デバッグ用: 番組が見つからない場合は警告
+                from utils import log_message
+                log_message(f"警告: 番組ID {self.preset_production_id} が番組コンボボックスに見つかりません")
 
         # 取引先を自動選択
         if self.preset_partner_id:
