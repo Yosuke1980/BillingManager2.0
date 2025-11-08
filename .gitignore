@@ -1,37 +1,63 @@
-# Database files
-billing.db
-expense_master.db
-expenses.db
-payee_master.db
+# ========================================
+# Database files - managed by migrations
+# ========================================
+*.db
+!migrations/**/*.db  # マイグレーション用のテンプレートDBは許可（もしあれば）
 
+# Database backups
+*.db.backup*
+*.db.old
+*.db.emergency_backup
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ========================================
 # Log files
+# ========================================
 logs/*.log
 
+# ========================================
 # Python cache files
+# ========================================
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
 
+# Migration cache
+migrations/.cache/
+migrations/__pycache__/
+
+# ========================================
 # Data files (CSV imports)
+# ========================================
 data/AccountingApprovalList_*.csv
 
+# ========================================
 # Test outputs
+# ========================================
 tests/__pycache__/
 tests/*.pyc
 
+# ========================================
 # IDE files
+# ========================================
 .vscode/
 .idea/
 *.swp
 *.swo
 
+# ========================================
 # OS files
+# ========================================
 .DS_Store
 Thumbs.db
 
+# ========================================
 # Temporary files
+# ========================================
 *.tmp
 *.bak
 *~

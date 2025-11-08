@@ -51,12 +51,60 @@ class OrderManagementDB:
 
     def __init__(self, db_path="order_management.db"):
         self.db_path = db_path
+        # テーブル存在チェックと自動作成
+        self._ensure_tables_exist()
         # 起動時に自動マイグレーションを実行
         self._auto_migrate()
 
     def _get_connection(self):
         """データベース接続を取得"""
         return sqlite3.connect(self.db_path)
+
+    def _ensure_tables_exist(self):
+        """必須テーブルが存在することを保証"""
+        import os
+
+        # DBファイルが存在しない場合は作成
+        if not os.path.exists(self.db_path):
+            open(self.db_path, 'a').close()
+            print(f"📝 新規データベースファイルを作成: {self.db_path}")
+
+        # 必須テーブルの存在確認
+        required_tables = ['contracts', 'expense_items', 'productions', 'partners']
+        missing_tables = []
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            for table in required_tables:
+                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                if not cursor.fetchone():
+                    missing_tables.append(table)
+        finally:
+            conn.close()
+
+        # 不足テーブルがある場合はマイグレーション実行
+        if missing_tables:
+            print(f"⚠️  不足しているテーブル: {', '.join(missing_tables)}")
+            print(f"📝 マイグレーションを実行してテーブルを作成します...")
+
+            try:
+                from migration_manager import MigrationManager
+
+                mm = MigrationManager(self.db_path, "migrations")
+                result = mm.run_migrations()
+
+                if result['applied'] > 0:
+                    print(f"✓ {result['applied']}件のマイグレーションを適用しました")
+
+                if result['errors']:
+                    print(f"⚠️  エラー: {result['errors']}")
+                    raise Exception(f"マイグレーション実行に失敗しました: {result['errors']}")
+
+            except Exception as e:
+                print(f"❌ マイグレーションエラー: {e}")
+                print(f"💡 手動で修復してください: python fix_windows_complete.py")
+                raise
 
     def _check_column_exists(self, table_name, column_name):
         """テーブルに指定したカラムが存在するかチェック"""

@@ -201,14 +201,52 @@ class DatabaseManager:
         self._create_order_management_tables()
 
     def _create_order_management_tables(self):
-        """発注管理用の新規テーブルを作成"""
+        """発注管理用の新規テーブルを作成（マイグレーションシステム使用）"""
         # 発注管理専用DBファイルを使用
+        order_db = "order_management.db"
+
+        # マイグレーションシステムで統合管理
+        try:
+            from migration_manager import MigrationManager
+
+            mm = MigrationManager(order_db, "migrations")
+            result = mm.run_migrations()
+
+            if result['applied'] > 0:
+                log_message(f"発注管理用テーブルを初期化しました（{result['applied']}件のマイグレーションを適用）")
+            elif result['errors']:
+                log_message(f"⚠️  一部のマイグレーションでエラーが発生: {result['errors']}")
+                # エラーがあってもフォールバックで継続
+                raise Exception("マイグレーションエラー")
+
+        except Exception as e:
+            # マイグレーションシステムが利用できない場合や失敗した場合はフォールバック
+            log_message(f"マイグレーション実行エラー（フォールバック処理を実行）: {e}")
+            self._create_order_management_tables_fallback()
+            return
+
+        # データマイグレーション（partners統合）のみ実行
+        conn = sqlite3.connect(order_db)
+        cursor = conn.cursor()
+        try:
+            # データマイグレーション: 既存マスタからpartnersへ移行
+            self._migrate_to_partners(cursor)
+            conn.commit()
+
+        except sqlite3.Error as e:
+            log_message(f"データマイグレーションエラー: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+
+    def _create_order_management_tables_fallback(self):
+        """マイグレーションシステムが利用できない場合のフォールバック処理"""
         order_db = "order_management.db"
         conn = sqlite3.connect(order_db)
         cursor = conn.cursor()
 
         try:
-            # 0. 統合取引先マスターテーブル (Phase 6)
+            # 0. 統合取引先マスターテーブル
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS partners (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -224,9 +262,8 @@ class DatabaseManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            log_message("partners テーブルを作成しました（統合取引先マスタ）")
 
-            # 1. 発注先マスターテーブル (将来的にpartnersに統合予定)
+            # 1. 発注先マスター
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS suppliers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -241,7 +278,7 @@ class DatabaseManager:
                 )
             """)
 
-            # 2. 制作物マスターテーブル
+            # 2. 制作物マスター
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS productions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -257,18 +294,6 @@ class DatabaseManager:
                     FOREIGN KEY (parent_id) REFERENCES productions(id)
                 )
             """)
-
-            # start_date, end_dateカラムが存在しない場合は追加
-            cursor.execute("PRAGMA table_info(productions)")
-            columns = [column[1] for column in cursor.fetchall()]
-
-            if "start_date" not in columns:
-                cursor.execute("ALTER TABLE productions ADD COLUMN start_date DATE")
-                log_message("productions テーブルに start_date カラムを追加しました")
-
-            if "end_date" not in columns:
-                cursor.execute("ALTER TABLE productions ADD COLUMN end_date DATE")
-                log_message("productions テーブルに end_date カラムを追加しました")
 
             # 3. 費用項目テーブル
             cursor.execute("""
@@ -297,7 +322,7 @@ class DatabaseManager:
                 )
             """)
 
-            # 4. 発注履歴テーブル
+            # 4. 発注履歴
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS order_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -314,7 +339,7 @@ class DatabaseManager:
                 )
             """)
 
-            # 5. ステータス履歴テーブル
+            # 5. ステータス履歴
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS status_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -328,14 +353,14 @@ class DatabaseManager:
             """)
 
             conn.commit()
-            log_message("発注管理用テーブルを初期化しました")
+            log_message("発注管理用テーブルを初期化しました（フォールバックモード）")
 
-            # データマイグレーション: 既存マスタからpartnersへ移行
+            # データマイグレーション
             self._migrate_to_partners(cursor)
             conn.commit()
 
         except sqlite3.Error as e:
-            log_message(f"発注管理テーブル作成エラー: {e}")
+            log_message(f"フォールバックテーブル作成エラー: {e}")
             conn.rollback()
         finally:
             conn.close()
