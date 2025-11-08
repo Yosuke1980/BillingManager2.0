@@ -37,7 +37,7 @@ def parse_amount(amount_str):
         return None
 
 def get_or_create_production(cursor, production_name):
-    """番組名からproduction_idを取得、存在しなければ作成"""
+    """番組名からproduction_idを取得、存在しなければデフォルト番組を返す"""
     if not production_name or production_name.strip() == '':
         # デフォルトの番組を作成または取得
         cursor.execute("SELECT id FROM productions WHERE name = '未設定'")
@@ -45,7 +45,7 @@ def get_or_create_production(cursor, production_name):
         if result:
             return result[0]
         else:
-            cursor.execute("INSERT INTO productions (name) VALUES ('未設定')")
+            cursor.execute("INSERT INTO productions (name, status) VALUES ('未設定', 'active')")
             return cursor.lastrowid
 
     production_name = production_name.strip()
@@ -57,10 +57,15 @@ def get_or_create_production(cursor, production_name):
     if result:
         return result[0]
     else:
-        # 新規作成
-        print(f"  新規番組を作成: {production_name}")
-        cursor.execute("INSERT INTO productions (name) VALUES (?)", (production_name,))
-        return cursor.lastrowid
+        # 新規作成しない - デフォルト番組を返す
+        print(f"  警告: 番組が見つかりません: {production_name} → '未設定'に紐付けます")
+        cursor.execute("SELECT id FROM productions WHERE name = '未設定'")
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+        else:
+            cursor.execute("INSERT INTO productions (name, status) VALUES ('未設定', 'active')")
+            return cursor.lastrowid
 
 def get_or_create_partner(cursor, partner_name):
     """取引先名からpartner_idを取得、存在しなければ作成"""
