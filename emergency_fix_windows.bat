@@ -1,53 +1,54 @@
 @echo off
-REM Windows緊急修復バッチファイル
-REM データベース同期問題を強制的に修正
+chcp 65001 > nul
+REM Windows Emergency Database Repair Batch File
+REM Force fix database synchronization issues
 
 echo ========================================
-echo Windows データベース緊急修復
+echo Windows Database Emergency Repair
 echo ========================================
 echo.
 
 cd /d %~dp0
 
-echo [1/5] 現在のディレクトリを確認
+echo [1/5] Check current directory
 cd
 echo.
 
-echo [2/5] データベースをバックアップ
+echo [2/5] Backup database
 if exist order_management.db (
-    echo バックアップを作成: order_management.db.emergency_backup
+    echo Creating backup: order_management.db.emergency_backup
     copy /Y order_management.db order_management.db.emergency_backup
 ) else (
-    echo order_management.db が見つかりません（新規取得します）
+    echo order_management.db not found (will fetch new one)
 )
 echo.
 
-echo [3/5] Gitの状態を確認
+echo [3/5] Check Git status
 git status
 echo.
 
-echo [4/5] GitHubから強制的に最新版を取得
-echo リモートから最新版を取得中...
+echo [4/5] Force fetch latest version from GitHub
+echo Fetching from remote...
 git fetch origin
 
-echo ローカルをリモートに合わせます...
+echo Resetting local to match remote...
 git reset --hard origin/main
 echo.
 
-echo [5/5] データベースファイルを確認
+echo [5/5] Verify database file
 if exist order_management.db (
-    echo ✓ order_management.db が存在します
+    echo [OK] order_management.db exists
     dir order_management.db
 ) else (
-    echo ✗ order_management.db が見つかりません！
+    echo [ERROR] order_management.db not found!
 )
 echo.
 
 echo ========================================
-echo 修復完了
+echo Repair Complete
 echo ========================================
 echo.
-echo アプリケーションを起動してください:
+echo Start the application:
 echo   python app.py
 echo.
 pause
