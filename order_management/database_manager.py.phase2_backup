@@ -213,15 +213,15 @@ class OrderManagementDB:
 
 
     def get_expenses_by_production(self, production_id: int) -> List[Tuple]:
-        """番組・イベントIDで費用項目を取得（新テーブル: expense_items）"""
+        """番組・イベントIDで費用項目を取得"""
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT id, production_id, item_name, amount, partner_id, contact_person,
+                SELECT id, production_id, item_name, amount, supplier_id, contact_person,
                        status, order_number, implementation_date, invoice_received_date
-                FROM expense_items
+                FROM expenses_order
                 WHERE production_id = ?
                 ORDER BY implementation_date, id
             """, (production_id,))
@@ -230,38 +230,32 @@ class OrderManagementDB:
             conn.close()
 
     def get_expense_order_by_id(self, expense_id: int) -> Optional[Tuple]:
-        """IDで費用項目を取得（新テーブル: expense_items）"""
+        """IDで費用項目を取得"""
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT id, production_id, item_name, amount, partner_id, contact_person,
+                SELECT id, production_id, item_name, amount, supplier_id, contact_person,
                        status, order_number, order_date, implementation_date,
                        invoice_received_date, payment_scheduled_date, payment_date,
                        gmail_draft_id, gmail_message_id, email_sent_at, notes
-                FROM expense_items WHERE id = ?
+                FROM expenses_order WHERE id = ?
             """, (expense_id,))
             return cursor.fetchone()
         finally:
             conn.close()
 
     def save_expense_order(self, expense_data: dict, is_new: bool = False) -> int:
-        """費用項目を保存（新テーブル: expense_items）
-
-        注意: supplier_id は partner_id として保存されます
-        """
+        """費用項目を保存"""
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
-            # supplier_idがあればpartner_idとして扱う（後方互換性）
-            partner_id = expense_data.get('partner_id') or expense_data.get('supplier_id')
-
             if is_new:
                 cursor.execute("""
-                    INSERT INTO expense_items (
-                        production_id, item_name, amount, partner_id, contact_person,
+                    INSERT INTO expenses_order (
+                        production_id, item_name, amount, supplier_id, contact_person,
                         status, order_number, order_date, implementation_date,
                         invoice_received_date, payment_scheduled_date, payment_date,
                         gmail_draft_id, gmail_message_id, notes
@@ -270,7 +264,7 @@ class OrderManagementDB:
                     expense_data.get('production_id', 0),
                     expense_data.get('item_name', ''),
                     expense_data.get('amount', 0.0),
-                    partner_id,
+                    expense_data.get('supplier_id'),
                     expense_data.get('contact_person', ''),
                     expense_data.get('status', '発注予定'),
                     expense_data.get('order_number', ''),
@@ -286,8 +280,8 @@ class OrderManagementDB:
                 expense_id = cursor.lastrowid
             else:
                 cursor.execute("""
-                    UPDATE expense_items
-                    SET production_id = ?, item_name = ?, amount = ?, partner_id = ?,
+                    UPDATE expenses_order
+                    SET production_id = ?, item_name = ?, amount = ?, supplier_id = ?,
                         contact_person = ?, status = ?, order_number = ?, order_date = ?,
                         implementation_date = ?, invoice_received_date = ?,
                         payment_scheduled_date = ?, payment_date = ?, gmail_draft_id = ?,
@@ -297,7 +291,7 @@ class OrderManagementDB:
                     expense_data.get('production_id', 0),
                     expense_data.get('item_name', ''),
                     expense_data.get('amount', 0.0),
-                    partner_id,
+                    expense_data.get('supplier_id'),
                     expense_data.get('contact_person', ''),
                     expense_data.get('status', '発注予定'),
                     expense_data.get('order_number', ''),
@@ -329,7 +323,7 @@ class OrderManagementDB:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("DELETE FROM expense_items WHERE id = ?", (expense_id,))
+            cursor.execute("DELETE FROM expenses_order WHERE id = ?", (expense_id,))
             conn.commit()
             return cursor.rowcount
         finally:
@@ -350,7 +344,7 @@ class OrderManagementDB:
         try:
             # 実績合計取得
             cursor.execute("""
-                SELECT SUM(amount) FROM expense_items WHERE production_id = ?
+                SELECT SUM(amount) FROM expenses_order WHERE production_id = ?
             """, (production_id,))
             row = cursor.fetchone()
             actual = row[0] if row and row[0] else 0.0
@@ -523,7 +517,7 @@ class OrderManagementDB:
         try:
             # 関連する費用項目が存在するかチェック
             cursor.execute("""
-                SELECT COUNT(*) FROM expense_items WHERE production_id = ?
+                SELECT COUNT(*) FROM expenses_order WHERE production_id = ?
             """, (production_id,))
             count = cursor.fetchone()[0]
 
@@ -590,13 +584,13 @@ class OrderManagementDB:
             cursor.execute("""
                 SELECT item_name, amount, supplier_id, contact_person, status,
                        implementation_date, payment_scheduled_date, notes
-                FROM expense_items WHERE production_id = ?
+                FROM expenses_order WHERE production_id = ?
             """, (production_id,))
 
             expenses = cursor.fetchall()
             for expense in expenses:
                 cursor.execute("""
-                    INSERT INTO expense_items (
+                    INSERT INTO expenses_order (
                         production_id, item_name, amount, supplier_id, contact_person,
                         status, implementation_date, payment_scheduled_date, notes
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -824,7 +818,7 @@ class OrderManagementDB:
             cursor.execute("""
                 SELECT
                     id, item_name, unit_price, order_status, payment_timing
-                FROM contracts
+                FROM order_contracts
                 WHERE production_id = ? AND partner_id = ?
                 ORDER BY item_name
             """, (production_id, partner_id))
@@ -851,7 +845,7 @@ class OrderManagementDB:
 
             # 2. 関連する契約を削除
             cursor.execute("""
-                DELETE FROM contracts
+                DELETE FROM order_contracts
                 WHERE production_id = ? AND partner_id = ?
             """, (production_id, partner_id))
 
@@ -881,7 +875,7 @@ class OrderManagementDB:
 
             # 2. 関連する契約を削除
             cursor.execute("""
-                DELETE FROM contracts
+                DELETE FROM order_contracts
                 WHERE production_id = ? AND partner_id = ?
             """, (production_id, partner_id))
 
@@ -923,7 +917,7 @@ class OrderManagementDB:
                 # 関連データがない番組のみ削除
                 cursor.execute("""
                     DELETE FROM productions
-                    WHERE id NOT IN (SELECT DISTINCT production_id FROM expense_items)
+                    WHERE id NOT IN (SELECT DISTINCT production_id FROM expenses_order)
                 """)
 
             for idx, row in enumerate(csv_data, start=2):  # CSVの2行目から（ヘッダー除く）
@@ -1232,7 +1226,7 @@ class OrderManagementDB:
                        oc.termination_notice_date,
                        COALESCE(oc.renewal_count, 0) as renewal_count,
                        COALESCE(oc.work_type, '制作') as work_type
-                FROM contracts oc
+                FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE 1=1
@@ -1298,7 +1292,7 @@ class OrderManagementDB:
                        oc.last_renewal_date,
                        COALESCE(oc.renewal_count, 0) as renewal_count,
                        COALESCE(oc.work_type, '制作') as work_type
-                FROM contracts oc
+                FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN productions proj ON oc.project_id = proj.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
@@ -1321,7 +1315,7 @@ class OrderManagementDB:
                        oc.contract_period_type, oc.pdf_status,
                        oc.pdf_distributed_date,
                        oc.pdf_file_path, oc.notes
-                FROM contracts oc
+                FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE oc.production_id = ?
@@ -1558,7 +1552,7 @@ class OrderManagementDB:
                        oc.contract_start_date, oc.contract_end_date,
                        oc.contract_period_type, oc.pdf_status,
                        oc.pdf_distributed_date
-                FROM contracts oc
+                FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE DATE(oc.contract_end_date) BETWEEN DATE('now')
@@ -1631,7 +1625,7 @@ class OrderManagementDB:
                     COALESCE(oc.payment_type, '月額固定') as payment_type,
                     oc.unit_price,
                     COALESCE(oc.payment_timing, '翌月末払い') as payment_timing
-                FROM expense_items eo
+                FROM expenses_order eo
                 LEFT JOIN productions p ON eo.production_id = p.id
                 LEFT JOIN order_contracts oc ON (
                     eo.production_id = oc.production_id AND eo.item_name = oc.item_name
@@ -1756,7 +1750,7 @@ class OrderManagementDB:
                 SELECT
                     COUNT(*) as total_orders,
                     COALESCE(SUM(expected_payment_amount), 0) as total_amount
-                FROM expense_items
+                FROM expenses_order
                 WHERE strftime('%Y-%m', expected_payment_date) = ?
             """, (target_month,))
 
@@ -1767,7 +1761,7 @@ class OrderManagementDB:
                 SELECT
                     COUNT(*) as paid_count,
                     COALESCE(SUM(expected_payment_amount), 0) as paid_amount
-                FROM expense_items
+                FROM expenses_order
                 WHERE strftime('%Y-%m', expected_payment_date) = ?
                   AND payment_status = '支払済'
             """, (target_month,))
@@ -1779,7 +1773,7 @@ class OrderManagementDB:
                 SELECT
                     COUNT(*) as unpaid_count,
                     COALESCE(SUM(expected_payment_amount), 0) as unpaid_amount
-                FROM expense_items
+                FROM expenses_order
                 WHERE strftime('%Y-%m', expected_payment_date) = ?
                   AND payment_status = '未払い'
             """, (target_month,))
@@ -1791,7 +1785,7 @@ class OrderManagementDB:
                 SELECT
                     COUNT(*) as mismatch_count,
                     COALESCE(SUM(ABS(payment_difference)), 0) as mismatch_amount
-                FROM expense_items
+                FROM expenses_order
                 WHERE strftime('%Y-%m', expected_payment_date) = ?
                   AND payment_status = '金額相違'
             """, (target_month,))
@@ -2161,7 +2155,7 @@ class OrderManagementDB:
                        oc.order_type, oc.order_status, oc.pdf_status,
                        oc.notes, oc.created_at, oc.updated_at,
                        oc.payment_type, oc.unit_price
-                FROM contracts oc
+                FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners part ON oc.partner_id = part.id
                 WHERE 1=1
@@ -2464,7 +2458,7 @@ class OrderManagementDB:
         try:
             # 上書きモードの場合は既存データを削除
             if overwrite:
-                cursor.execute("DELETE FROM contracts")
+                cursor.execute("DELETE FROM order_contracts")
                 conn.commit()
             for row_num, row_data in enumerate(csv_data, start=2):
                 try:
@@ -2567,12 +2561,12 @@ class OrderManagementDB:
                     if contract_id_str and contract_id_str.isdigit():
                         # IDが指定されている場合はIDで検索
                         contract_id = int(contract_id_str)
-                        cursor.execute("SELECT id FROM contracts WHERE id = ?", (contract_id,))
+                        cursor.execute("SELECT id FROM order_contracts WHERE id = ?", (contract_id,))
                         existing_contract = cursor.fetchone()
                     else:
                         # IDがない場合は番組+取引先+期間で検索
                         cursor.execute("""
-                            SELECT id FROM contracts
+                            SELECT id FROM order_contracts
                             WHERE production_id = ? AND partner_id = ?
                             AND contract_start_date = ? AND contract_end_date = ?
                         """, (production_id, partner_id, start_date, end_date))
@@ -2582,7 +2576,7 @@ class OrderManagementDB:
                         # 既存発注を更新（全項目対応）
                         existing_id = existing_contract[0]
                         cursor.execute("""
-                            UPDATE contracts
+                            UPDATE order_contracts
                             SET production_id=?, partner_id=?, item_name=?,
                                 contract_start_date=?, contract_end_date=?, contract_period_type=?,
                                 order_type=?, order_status=?, pdf_status=?, pdf_file_path=?, pdf_distributed_date=?,
@@ -2605,7 +2599,7 @@ class OrderManagementDB:
                     else:
                         # 新規追加（全項目対応）
                         cursor.execute("""
-                            INSERT INTO contracts (
+                            INSERT INTO order_contracts (
                                 production_id, partner_id, item_name,
                                 contract_start_date, contract_end_date, contract_period_type,
                                 order_type, order_status, pdf_status, pdf_file_path, pdf_distributed_date,
@@ -2663,7 +2657,7 @@ class OrderManagementDB:
             # 現在の契約情報を取得
             cursor.execute("""
                 SELECT contract_end_date, renewal_period_months, renewal_count
-                FROM contracts
+                FROM order_contracts
                 WHERE id = ?
             """, (contract_id,))
 
@@ -2684,7 +2678,7 @@ class OrderManagementDB:
             # 契約を更新
             now = datetime.now()
             cursor.execute("""
-                UPDATE contracts
+                UPDATE order_contracts
                 SET contract_end_date = ?,
                     last_renewal_date = ?,
                     renewal_count = ?,
@@ -2734,7 +2728,7 @@ class OrderManagementDB:
                 SELECT oc.id, prod.name as program_name, p.name as partner_name,
                        oc.contract_end_date, oc.renewal_period_months,
                        oc.renewal_count, oc.item_name
-                FROM contracts oc
+                FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE oc.auto_renewal_enabled = 1
@@ -2839,7 +2833,7 @@ class OrderManagementDB:
                        oc.contract_end_date, oc.auto_renewal_enabled,
                        oc.termination_notice_date, oc.renewal_count,
                        oc.item_name
-                FROM contracts oc
+                FROM order_contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN partners p ON oc.partner_id = p.id
                 WHERE oc.contract_end_date BETWEEN ? AND ?
@@ -2887,7 +2881,7 @@ class OrderManagementDB:
 
                 # 既存データのデフォルト値を設定
                 cursor.execute("""
-                    UPDATE contracts
+                    UPDATE order_contracts
                     SET work_type = '制作'
                     WHERE work_type IS NULL
                 """)
