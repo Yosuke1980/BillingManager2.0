@@ -229,11 +229,11 @@ class OrderContractWidget(QWidget):
             # contract: (0:id, 1:production_id, 2:production_name,
             #            3:partner_id, 4:partner_name, 5:item_name,
             #            6:contract_start_date, 7:contract_end_date,
-            #            8:order_type, 9:order_status, 10:pdf_status,
+            #            8:document_type, 9:document_status, 10:pdf_status,
             #            11:notes, 12:created_at, 13:updated_at,
             #            14:payment_type, 15:unit_price)
 
-            order_status = contract[9] or "未"
+            document_status = contract[9] or "未"
             end_date_str = contract[7]
 
             # Phase 1.3: 期限チェック
@@ -257,11 +257,11 @@ class OrderContractWidget(QWidget):
                 # 🟡 黄: 8-30日以内
                 row_color = QColor(255, 255, 200)
                 warning_count += 1
-            elif order_status in ["完了", "済"]:
+            elif document_status in ["完了", "済"]:
                 # 🟢 緑: 完了
                 row_color = QColor(220, 255, 220)
                 completed_count += 1
-            elif order_status in ["未", "未完了"]:
+            elif document_status in ["未", "未完了"]:
                 # 📝 未完了
                 row_color = QColor(245, 245, 245)
                 pending_count += 1
@@ -277,10 +277,10 @@ class OrderContractWidget(QWidget):
             amount_text = f"¥{int(unit_price):,}" if unit_price else ""
 
             # 新しい列構成に合わせてデータを設定
-            status_item = QTableWidgetItem(order_status)
+            status_item = QTableWidgetItem(document_status)
             status_item.setData(Qt.UserRole, contract[0])  # IDを保存
-            self.table.setItem(row, 0, status_item)  # 発注ステータス
-            self.table.setItem(row, 1, QTableWidgetItem(contract[8] or "発注書"))  # 発注種別
+            self.table.setItem(row, 0, status_item)  # 書類ステータス
+            self.table.setItem(row, 1, QTableWidgetItem(contract[8] or "発注書"))  # 書類種別
             self.table.setItem(row, 2, QTableWidgetItem(contract[2] or ""))  # 番組名
             self.table.setItem(row, 3, QTableWidgetItem(item_name))  # 費用項目
             self.table.setItem(row, 4, QTableWidgetItem(amount_text))  # 金額
@@ -306,17 +306,17 @@ class OrderContractWidget(QWidget):
         # Phase 2: ダッシュボードを更新
         self._update_dashboard(urgent_count, warning_count, pending_count, completed_count, len(contracts))
 
-    def _get_detailed_status(self, order_status, pdf_status):
+    def _get_detailed_status(self, document_status, pdf_status):
         """Phase 1.2: ステータスを詳細化"""
-        if order_status in ["完了", "済"]:
+        if document_status in ["完了", "済"]:
             if pdf_status == "受領確認済":
                 return "✅ 完了"
             elif pdf_status == "配布済":
                 return "📄 配布済"
             else:
-                return "⚠️ 発注済・未配布"
+                return "⚠️ 書類完了・未配布"
         else:
-            return "❌ 未発注"
+            return "❌ 未完了"
 
     def _format_deadline(self, date_str, days_until, is_expired):
         """Phase 1.3: 期限情報をフォーマット"""
