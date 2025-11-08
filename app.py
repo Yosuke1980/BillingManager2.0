@@ -26,6 +26,7 @@ from order_management.database_manager import OrderManagementDB
 from payment_tab import PaymentTab
 from payment_order_check_tab import PaymentOrderCheckTab
 from order_management.ui.order_contract_widget import OrderContractWidget
+from order_management.ui.expense_items_widget import ExpenseItemsWidget
 from master_management_tab import MasterManagementTab
 from data_management_tab import DataManagementTab
 from utils import get_latest_csv_file, log_message
@@ -139,15 +140,19 @@ class RadioBillingApp(QMainWindow):
         self.payment_order_check_tab = PaymentOrderCheckTab()
         self.payment_check_tab_index = tab_control.addTab(self.payment_order_check_tab, self.config.TAB_NAMES['payment_order_check'])
 
-        # メインタブ3: 発注管理（旧「発注書マスタ」を独立）
+        # メインタブ3: 発注管理（契約一覧）
         self.order_contract_widget = OrderContractWidget()
         self.order_management_tab_index = tab_control.addTab(self.order_contract_widget, self.config.TAB_NAMES['order_management'])
 
-        # メインタブ4: マスター管理（新設）
+        # メインタブ4: 費用項目管理（新設）
+        self.expense_items_widget = ExpenseItemsWidget()
+        self.expense_items_tab_index = tab_control.addTab(self.expense_items_widget, "費用項目管理")
+
+        # メインタブ5: マスター管理
         self.master_management_tab = MasterManagementTab(tab_control, self)
         tab_control.addTab(self.master_management_tab, self.config.TAB_NAMES['master_management'])
 
-        # メインタブ5: データ管理（たまに使う、サブタブあり）
+        # メインタブ6: データ管理（たまに使う、サブタブあり）
         self.data_management_tab = DataManagementTab(tab_control, self)
         tab_control.addTab(self.data_management_tab, self.config.TAB_NAMES['data_management'])
 

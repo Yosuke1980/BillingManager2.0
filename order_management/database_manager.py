@@ -2902,3 +2902,71 @@ class OrderManagementDB:
             return False
         finally:
             conn.close()
+
+    # ========================================
+    # 費用項目管理
+    # ========================================
+
+    def get_expense_items_with_details(self, search_term=None, payment_status=None, status=None):
+        """費用項目を詳細情報付きで取得
+
+        Args:
+            search_term: 検索キーワード（番組名、取引先名、項目名）
+            payment_status: 支払状態フィルタ
+            status: 状態フィルタ
+
+        Returns:
+            list: (id, production_id, production_name, partner_id, partner_name,
+                   item_name, amount, implementation_date, expected_payment_date,
+                   status, payment_status, contract_id, notes)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT ei.id, ei.production_id, prod.name as production_name,
+                       ei.partner_id, part.name as partner_name,
+                       ei.item_name, ei.amount, ei.implementation_date,
+                       ei.expected_payment_date, ei.status, ei.payment_status,
+                       ei.contract_id, ei.notes
+                FROM expense_items ei
+                LEFT JOIN productions prod ON ei.production_id = prod.id
+                LEFT JOIN partners part ON ei.partner_id = part.id
+                WHERE 1=1
+            """
+            params = []
+
+            if search_term:
+                query += """ AND (prod.name LIKE ? OR part.name LIKE ? OR ei.item_name LIKE ?)"""
+                params.extend([f"%{search_term}%"] * 3)
+
+            if payment_status:
+                query += " AND ei.payment_status = ?"
+                params.append(payment_status)
+
+            if status:
+                query += " AND ei.status = ?"
+                params.append(status)
+
+            query += " ORDER BY ei.expected_payment_date DESC, ei.id DESC"
+
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def delete_expense_item(self, expense_id):
+        """費用項目を削除
+
+        Args:
+            expense_id: 費用項目ID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("DELETE FROM expense_items WHERE id = ?", (expense_id,))
+            conn.commit()
+        finally:
+            conn.close()

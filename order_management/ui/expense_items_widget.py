@@ -1,0 +1,266 @@
+"""費用項目管理ウィジェット
+
+費用項目（expense_items）の一覧表示と管理機能を提供します。
+"""
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+                             QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
+                             QComboBox, QMessageBox, QHeaderView, QGroupBox, QGridLayout)
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
+from datetime import datetime
+
+from order_management.database_manager import OrderManagementDB
+from order_management.ui.ui_helpers import create_button
+
+
+class ExpenseItemsWidget(QWidget):
+    """費用項目管理ウィジェット"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.db = OrderManagementDB()
+
+        self.init_ui()
+        self.load_expense_items()
+
+    def init_ui(self):
+        """UIの初期化"""
+        layout = QVBoxLayout()
+
+        # ===== ダッシュボード統計パネル =====
+        dashboard_group = QGroupBox("📊 費用項目サマリー")
+        dashboard_group.setStyleSheet("QGroupBox { font-weight: bold; font-size: 14px; }")
+        dashboard_layout = QGridLayout()
+
+        self.total_label = QLabel("総件数: 0件")
+        self.total_label.setStyleSheet("font-size: 13px; font-weight: bold;")
+        dashboard_layout.addWidget(self.total_label, 0, 0)
+
+        self.amount_label = QLabel("総額: ¥0")
+        self.amount_label.setStyleSheet("font-size: 13px; font-weight: bold;")
+        dashboard_layout.addWidget(self.amount_label, 0, 1)
+
+        self.unpaid_label = QLabel("未払い: 0件")
+        self.unpaid_label.setStyleSheet("font-size: 13px; color: #d32f2f;")
+        dashboard_layout.addWidget(self.unpaid_label, 1, 0)
+
+        self.paid_label = QLabel("支払済: 0件")
+        self.paid_label.setStyleSheet("font-size: 13px; color: #388e3c;")
+        dashboard_layout.addWidget(self.paid_label, 1, 1)
+
+        dashboard_group.setLayout(dashboard_layout)
+        layout.addWidget(dashboard_group)
+
+        # ===== 検索・フィルタエリア =====
+        filter_layout = QHBoxLayout()
+
+        filter_layout.addWidget(QLabel("検索:"))
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("番組名、取引先名、項目名で検索")
+        self.search_input.textChanged.connect(self.load_expense_items)
+        filter_layout.addWidget(self.search_input)
+
+        filter_layout.addWidget(QLabel("支払状態:"))
+        self.payment_status_filter = QComboBox()
+        self.payment_status_filter.addItems(["すべて", "未払い", "支払済"])
+        self.payment_status_filter.currentTextChanged.connect(self.load_expense_items)
+        filter_layout.addWidget(self.payment_status_filter)
+
+        filter_layout.addWidget(QLabel("状態:"))
+        self.status_filter = QComboBox()
+        self.status_filter.addItems(["すべて", "発注予定", "発注済", "請求書受領", "支払完了"])
+        self.status_filter.currentTextChanged.connect(self.load_expense_items)
+        filter_layout.addWidget(self.status_filter)
+
+        layout.addLayout(filter_layout)
+
+        # ===== テーブル =====
+        self.table = QTableWidget()
+        self.table.setColumnCount(11)
+        self.table.setHorizontalHeaderLabels([
+            "ID", "番組名", "取引先名", "項目名", "金額",
+            "実施日", "支払予定日", "状態", "支払状態",
+            "契約ID", "備考"
+        ])
+
+        # 列幅の設定
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID
+        header.setSectionResizeMode(1, QHeaderView.Stretch)  # 番組名
+        header.setSectionResizeMode(2, QHeaderView.Stretch)  # 取引先名
+        header.setSectionResizeMode(3, QHeaderView.Stretch)  # 項目名
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 金額
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 実施日
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 支払予定日
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # 状態
+        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # 支払状態
+        header.setSectionResizeMode(9, QHeaderView.ResizeToContents)  # 契約ID
+        header.setSectionResizeMode(10, QHeaderView.Stretch)  # 備考
+
+        self.table.setAlternatingRowColors(True)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.doubleClicked.connect(self.edit_expense_item)
+
+        layout.addWidget(self.table)
+
+        # ===== ボタンエリア =====
+        button_layout = QHBoxLayout()
+
+        self.add_button = create_button("➕ 新規追加", self.add_expense_item)
+        button_layout.addWidget(self.add_button)
+
+        self.edit_button = create_button("✏️ 編集", self.edit_expense_item)
+        button_layout.addWidget(self.edit_button)
+
+        self.delete_button = create_button("🗑️ 削除", self.delete_expense_item)
+        button_layout.addWidget(self.delete_button)
+
+        button_layout.addStretch()
+
+        self.refresh_button = create_button("🔄 更新", self.load_expense_items)
+        button_layout.addWidget(self.refresh_button)
+
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+
+    def load_expense_items(self):
+        """費用項目を読み込んで表示"""
+        search_term = self.search_input.text()
+        payment_status = self.payment_status_filter.currentText()
+        status = self.status_filter.currentText()
+
+        if payment_status == "すべて":
+            payment_status = None
+        if status == "すべて":
+            status = None
+
+        # データベースから費用項目を取得
+        expense_items = self.db.get_expense_items_with_details(
+            search_term=search_term,
+            payment_status=payment_status,
+            status=status
+        )
+
+        self.table.setRowCount(len(expense_items))
+
+        # 統計用カウンタ
+        total_amount = 0
+        unpaid_count = 0
+        paid_count = 0
+
+        for row, item in enumerate(expense_items):
+            # データ構造: (id, production_id, production_name, partner_id, partner_name,
+            #            item_name, amount, implementation_date, expected_payment_date,
+            #            status, payment_status, contract_id, notes)
+
+            item_id = item[0]
+            production_name = item[2] or ""
+            partner_name = item[4] or ""
+            item_name = item[5] or ""
+            amount = item[6] or 0
+            implementation_date = item[7] or ""
+            expected_payment_date = item[8] or ""
+            item_status = item[9] or "発注予定"
+            payment_status = item[10] or "未払い"
+            contract_id = item[11]
+            notes = item[12] or ""
+
+            # 統計更新
+            total_amount += amount
+            if payment_status == "支払済":
+                paid_count += 1
+            else:
+                unpaid_count += 1
+
+            # 金額のフォーマット
+            amount_text = f"¥{int(amount):,}"
+
+            # 行の背景色を決定
+            row_color = None
+            if payment_status == "支払済":
+                row_color = QColor(220, 255, 220)  # 緑
+            elif payment_status == "未払い":
+                # 支払予定日をチェック
+                if expected_payment_date:
+                    try:
+                        payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
+                        days_until = (payment_date - datetime.now()).days
+                        if days_until < 0:
+                            row_color = QColor(255, 220, 220)  # 赤（遅延）
+                        elif days_until <= 7:
+                            row_color = QColor(255, 255, 200)  # 黄（間近）
+                    except:
+                        pass
+
+            # テーブルにデータを設定
+            id_item = QTableWidgetItem(str(item_id))
+            id_item.setData(Qt.UserRole, item_id)
+            self.table.setItem(row, 0, id_item)
+            self.table.setItem(row, 1, QTableWidgetItem(production_name))
+            self.table.setItem(row, 2, QTableWidgetItem(partner_name))
+            self.table.setItem(row, 3, QTableWidgetItem(item_name))
+            self.table.setItem(row, 4, QTableWidgetItem(amount_text))
+            self.table.setItem(row, 5, QTableWidgetItem(implementation_date))
+            self.table.setItem(row, 6, QTableWidgetItem(expected_payment_date))
+            self.table.setItem(row, 7, QTableWidgetItem(item_status))
+            self.table.setItem(row, 8, QTableWidgetItem(payment_status))
+            self.table.setItem(row, 9, QTableWidgetItem(str(contract_id) if contract_id else ""))
+            self.table.setItem(row, 10, QTableWidgetItem(notes))
+
+            # 行全体に背景色を適用
+            if row_color:
+                for col in range(self.table.columnCount()):
+                    item = self.table.item(row, col)
+                    if item:
+                        item.setBackground(row_color)
+
+        # ダッシュボードを更新
+        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count)
+
+    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count):
+        """ダッシュボードの統計を更新"""
+        self.total_label.setText(f"総件数: {total_count}件")
+        self.amount_label.setText(f"総額: ¥{int(total_amount):,}")
+        self.unpaid_label.setText(f"未払い: {unpaid_count}件")
+        self.paid_label.setText(f"支払済: {paid_count}件")
+
+    def add_expense_item(self):
+        """費用項目を追加"""
+        QMessageBox.information(self, "開発中", "費用項目の追加機能は開発中です。")
+        # TODO: 費用項目追加ダイアログを実装
+
+    def edit_expense_item(self):
+        """選択された費用項目を編集"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "警告", "編集する費用項目を選択してください。")
+            return
+
+        QMessageBox.information(self, "開発中", "費用項目の編集機能は開発中です。")
+        # TODO: 費用項目編集ダイアログを実装
+
+    def delete_expense_item(self):
+        """選択された費用項目を削除"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "警告", "削除する費用項目を選択してください。")
+            return
+
+        row = selected_rows[0].row()
+        item_id = self.table.item(row, 0).data(Qt.UserRole)
+        item_name = self.table.item(row, 3).text()
+
+        reply = QMessageBox.question(
+            self, "確認",
+            f"費用項目「{item_name}」を削除してもよろしいですか？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                self.db.delete_expense_item(item_id)
+                QMessageBox.information(self, "成功", "費用項目を削除しました。")
+                self.load_expense_items()
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"費用項目の削除に失敗しました:\n{e}")
