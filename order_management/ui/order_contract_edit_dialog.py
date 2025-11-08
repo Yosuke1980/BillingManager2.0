@@ -1234,39 +1234,67 @@ class OrderContractEditDialog(QDialog):
 
     def add_cast_to_contract(self):
         """出演者を契約に追加"""
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QListWidget, QDialogButtonBox, QListWidgetItem
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QDialogButtonBox, QListWidgetItem, QLineEdit, QLabel
 
         # 出演者選択ダイアログを作成
         dialog = QDialog(self)
         dialog.setWindowTitle("出演者を選択")
-        dialog.setMinimumWidth(400)
+        dialog.setMinimumWidth(500)
+        dialog.setMinimumHeight(400)
 
         layout = QVBoxLayout(dialog)
 
+        # 検索フィールドを追加
+        search_layout = QHBoxLayout()
+        search_label = QLabel("検索:")
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("出演者名または所属事務所で検索...")
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(search_input)
+        layout.addLayout(search_layout)
+
         # 出演者リストを作成
         cast_list = QListWidget()
+        cast_list.setSelectionMode(QListWidget.MultiSelection)  # 複数選択を許可
         all_cast = self.db.get_all_cast()
 
-        for cast in all_cast:
-            cast_id, cast_name, partner_name = cast[0], cast[1], cast[2] if len(cast) > 2 else None
+        def load_cast_list(search_term=""):
+            """出演者リストを読み込み（検索フィルタ付き）"""
+            cast_list.clear()
 
-            # 既にテーブルに追加されている出演者をスキップ
-            already_added = False
-            for row in range(self.cast_table.rowCount()):
-                if self.cast_table.item(row, 0) and self.cast_table.item(row, 0).data(Qt.UserRole) == cast_id:
-                    already_added = True
-                    break
+            for cast in all_cast:
+                cast_id, cast_name, partner_name = cast[0], cast[1], cast[2] if len(cast) > 2 else None
 
-            if not already_added:
-                display_text = f"{cast_name}"
-                if partner_name:
-                    display_text += f" ({partner_name})"
+                # 検索フィルタ
+                if search_term:
+                    search_lower = search_term.lower()
+                    if search_lower not in cast_name.lower():
+                        if not partner_name or search_lower not in partner_name.lower():
+                            continue  # 名前にも所属にも一致しない場合はスキップ
 
-                item = QListWidgetItem(display_text)
-                item.setData(Qt.UserRole, cast_id)
-                item.setData(Qt.UserRole + 1, cast_name)
-                item.setData(Qt.UserRole + 2, partner_name or "")
-                cast_list.addItem(item)
+                # 既にテーブルに追加されている出演者をスキップ
+                already_added = False
+                for row in range(self.cast_table.rowCount()):
+                    if self.cast_table.item(row, 0) and self.cast_table.item(row, 0).data(Qt.UserRole) == cast_id:
+                        already_added = True
+                        break
+
+                if not already_added:
+                    display_text = f"{cast_name}"
+                    if partner_name:
+                        display_text += f" ({partner_name})"
+
+                    item = QListWidgetItem(display_text)
+                    item.setData(Qt.UserRole, cast_id)
+                    item.setData(Qt.UserRole + 1, cast_name)
+                    item.setData(Qt.UserRole + 2, partner_name or "")
+                    cast_list.addItem(item)
+
+        # 初期読み込み
+        load_cast_list()
+
+        # 検索入力時にリストを更新
+        search_input.textChanged.connect(lambda text: load_cast_list(text))
 
         layout.addWidget(cast_list)
 
