@@ -2971,6 +2971,45 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def update_expense_items_production(self, expense_ids, new_production_id):
+        """複数の費用項目の番組を一括変更
+
+        Args:
+            expense_ids: list of int - 費用項目IDのリスト
+            new_production_id: int - 新しい番組ID
+
+        Returns:
+            int: 更新された件数
+        """
+        if not expense_ids:
+            return 0
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # プレースホルダーを作成
+            placeholders = ','.join('?' * len(expense_ids))
+            query = f"""
+                UPDATE expense_items
+                SET production_id = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id IN ({placeholders})
+            """
+
+            # パラメータリスト: [new_production_id, expense_id1, expense_id2, ...]
+            params = [new_production_id] + list(expense_ids)
+
+            cursor.execute(query, params)
+            updated_count = cursor.rowcount
+            conn.commit()
+
+            return updated_count
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
     def get_expense_item_by_id(self, expense_id):
         """費用項目を1件取得
 

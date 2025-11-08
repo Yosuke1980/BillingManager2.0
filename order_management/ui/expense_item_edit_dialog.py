@@ -21,10 +21,13 @@ class ExpenseItemEditDialog(QDialog):
         self.expense_id = expense_id
         self.db = OrderManagementDB()
         self.expense_data = None
+        self.original_production_id = None  # 元の番組IDを記録
 
         # expense_idが指定されている場合はデータを取得
         if expense_id:
             self.expense_data = self.db.get_expense_item_by_id(expense_id)
+            if self.expense_data and len(self.expense_data) > 2:
+                self.original_production_id = self.expense_data[2]  # production_id
 
         self.setWindowTitle("費用項目編集" if expense_id else "費用項目追加")
         self.setMinimumWidth(600)
@@ -58,7 +61,9 @@ class ExpenseItemEditDialog(QDialog):
         self.production_combo = QComboBox()
         self.production_combo.addItem("(未選択)", None)
         self.refresh_productions()
-        form_layout.addRow("番組:", self.production_combo)
+        self.production_combo.currentIndexChanged.connect(self._on_production_changed)
+        production_label = QLabel("<b>番組・イベント *:</b>")
+        form_layout.addRow(production_label, self.production_combo)
 
         # 取引先選択
         self.partner_combo = QComboBox()
@@ -297,3 +302,40 @@ class ExpenseItemEditDialog(QDialog):
             data['id'] = self.expense_id
 
         return data
+
+    def _on_production_changed(self, index):
+        """番組変更時の確認ダイアログ"""
+        # 新規作成時または元の番組がない場合はチェック不要
+        if not self.original_production_id:
+            return
+
+        new_production_id = self.production_combo.currentData()
+
+        # 番組が変更されている場合のみ確認
+        if new_production_id and new_production_id != self.original_production_id:
+            # 元の番組名を取得
+            original_production_name = None
+            for i in range(self.production_combo.count()):
+                if self.production_combo.itemData(i) == self.original_production_id:
+                    original_production_name = self.production_combo.itemText(i)
+                    break
+
+            new_production_name = self.production_combo.currentText()
+
+            reply = QMessageBox.question(
+                self, "番組変更の確認",
+                f"番組を変更しますか？\n\n"
+                f"変更前: {original_production_name}\n"
+                f"変更後: {new_production_name}",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.No:
+                # 元の番組に戻す
+                for i in range(self.production_combo.count()):
+                    if self.production_combo.itemData(i) == self.original_production_id:
+                        self.production_combo.blockSignals(True)  # シグナルを一時的にブロック
+                        self.production_combo.setCurrentIndex(i)
+                        self.production_combo.blockSignals(False)
+                        break

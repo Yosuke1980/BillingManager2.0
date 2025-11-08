@@ -118,6 +118,9 @@ class ExpenseItemsWidget(QWidget):
         self.delete_button = create_button("🗑️ 削除", self.delete_expense_item)
         button_layout.addWidget(self.delete_button)
 
+        self.change_production_button = create_button("📋 番組を変更", self.change_production_bulk)
+        button_layout.addWidget(self.change_production_button)
+
         button_layout.addStretch()
 
         self.refresh_button = create_button("🔄 更新", self.load_expense_items)
@@ -319,3 +322,110 @@ class ExpenseItemsWidget(QWidget):
                     self, "成功",
                     f"{success_count}件の費用項目を削除しました。"
                 )
+
+    def change_production_bulk(self):
+        """選択された費用項目の番組を一括変更"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, "警告", "番組を変更する費用項目を選択してください。")
+            return
+
+        # 選択された費用項目の情報を取得
+        items_to_change = []
+        for index in selected_rows:
+            row = index.row()
+            item_id = self.table.item(row, 0).data(Qt.UserRole)
+            item_name = self.table.item(row, 3).text()
+            current_production = self.table.item(row, 1).text() if self.table.item(row, 1) else ""
+            items_to_change.append((item_id, item_name, current_production))
+
+        # 番組選択ダイアログを表示
+        production_id = self._show_production_selection_dialog(items_to_change)
+        if production_id is None:
+            return  # キャンセルされた
+
+        # 確認メッセージ
+        if len(items_to_change) == 1:
+            message = f"費用項目「{items_to_change[0][1]}」の番組を変更しますか？"
+        else:
+            message = f"{len(items_to_change)}件の費用項目の番組を変更しますか？\n\n"
+            message += "変更対象:\n"
+            for _, item_name, current_prod in items_to_change[:5]:
+                message += f"  • {item_name} (現在: {current_prod})\n"
+            if len(items_to_change) > 5:
+                message += f"  ...他{len(items_to_change) - 5}件"
+
+        reply = QMessageBox.question(
+            self, "確認", message,
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                expense_ids = [item[0] for item in items_to_change]
+                updated_count = self.db.update_expense_items_production(expense_ids, production_id)
+
+                QMessageBox.information(
+                    self, "成功",
+                    f"{updated_count}件の費用項目の番組を変更しました。"
+                )
+                self.load_expense_items()
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "エラー",
+                    f"番組の変更に失敗しました:\n{e}"
+                )
+
+    def _show_production_selection_dialog(self, items_to_change):
+        """番組選択ダイアログを表示
+
+        Args:
+            items_to_change: 変更対象の費用項目リスト [(id, name, current_production), ...]
+
+        Returns:
+            int or None: 選択された番組ID、キャンセル時はNone
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("番組・イベントを選択")
+        dialog.setMinimumWidth(500)
+
+        layout = QVBoxLayout(dialog)
+
+        # 説明ラベル
+        if len(items_to_change) == 1:
+            info_text = f"費用項目「{items_to_change[0][1]}」の番組を変更します。"
+        else:
+            info_text = f"{len(items_to_change)}件の費用項目の番組を変更します。"
+
+        info_label = QLabel(info_text)
+        info_label.setStyleSheet("font-weight: bold; padding: 10px;")
+        layout.addWidget(info_label)
+
+        # 番組選択コンボボックス
+        form_layout = QFormLayout()
+        production_combo = QComboBox()
+        production_combo.setMinimumWidth(400)
+
+        # 番組リストを取得
+        productions = self.db.get_all_productions()
+        for prod in productions:
+            # prod: (id, name, type, ...)
+            display_text = f"{prod[1]}"
+            if prod[2]:  # type
+                display_text += f" ({prod[2]})"
+            production_combo.addItem(display_text, prod[0])
+
+        form_layout.addRow("変更先の番組:", production_combo)
+        layout.addLayout(form_layout)
+
+        # ボタン
+        from PyQt5.QtWidgets import QDialogButtonBox
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        # ダイアログを表示
+        if dialog.exec_() == QDialog.Accepted:
+            return production_combo.currentData()
+        return None
