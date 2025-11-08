@@ -232,8 +232,8 @@ class OrderContractEditDialog(QDialog):
 
         # 費用項目
         self.item_name = QLineEdit()
-        self.item_name.setPlaceholderText("例: 山田太郎出演料、制作費")
-        item_name_label = QLabel("<b>費用項目 *:</b>")
+        self.item_name.setPlaceholderText("例: 山田太郎出演料、制作費（空欄の場合は業務種別から自動設定）")
+        item_name_label = QLabel("費用項目:")
         program_layout_main.addRow(item_name_label, self.item_name)
 
         program_group.setLayout(program_layout_main)
@@ -912,9 +912,11 @@ class OrderContractEditDialog(QDialog):
                 QMessageBox.warning(self, "警告", "案件を選択してください。")
                 return
 
+        # 費用項目が空欄の場合はデフォルト値を設定
         if not self.item_name.text().strip():
-            QMessageBox.warning(self, "警告", "費用項目を入力してください。")
-            return
+            work_type = '出演' if self.work_type_cast.isChecked() else '制作'
+            default_item_name = f"{work_type}料"
+            self.item_name.setText(default_item_name)
 
         if self.partner_combo.currentIndex() < 0:
             QMessageBox.warning(self, "警告", "取引先を選択してください。")
