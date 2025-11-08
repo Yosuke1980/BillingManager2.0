@@ -3216,3 +3216,115 @@ class OrderManagementDB:
             return deleted_count
         finally:
             conn.close()
+
+    # ========================================
+    # 契約と出演者の紐付け管理
+    # ========================================
+
+    def get_contract_cast(self, contract_id):
+        """契約に紐付けられた出演者を取得
+
+        Args:
+            contract_id: 契約ID
+
+        Returns:
+            list: [(contract_cast_id, cast_id, cast_name, partner_name, role), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT cc.id, cc.cast_id, c.name as cast_name, 
+                       p.name as partner_name, cc.role
+                FROM contract_cast cc
+                INNER JOIN cast c ON cc.cast_id = c.id
+                LEFT JOIN partners p ON c.partner_id = p.id
+                WHERE cc.contract_id = ?
+                ORDER BY cc.id
+            """, (contract_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def add_contract_cast(self, contract_id, cast_id, role=None):
+        """契約に出演者を追加
+
+        Args:
+            contract_id: 契約ID
+            cast_id: 出演者ID
+            role: 役割（オプション）
+
+        Returns:
+            int: contract_cast ID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO contract_cast (contract_id, cast_id, role)
+                VALUES (?, ?, ?)
+            """, (contract_id, cast_id, role))
+            conn.commit()
+            return cursor.lastrowid
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+    def remove_contract_cast(self, contract_cast_id):
+        """契約から出演者を削除
+
+        Args:
+            contract_cast_id: contract_cast ID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("DELETE FROM contract_cast WHERE id = ?", (contract_cast_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def update_contract_cast_role(self, contract_cast_id, role):
+        """契約出演者の役割を更新
+
+        Args:
+            contract_cast_id: contract_cast ID
+            role: 役割
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE contract_cast
+                SET role = ?
+                WHERE id = ?
+            """, (role, contract_cast_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_all_cast(self):
+        """全出演者を取得
+
+        Returns:
+            list: [(cast_id, cast_name, partner_name), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT c.id, c.name, p.name as partner_name
+                FROM cast c
+                LEFT JOIN partners p ON c.partner_id = p.id
+                ORDER BY c.name
+            """)
+            return cursor.fetchall()
+        finally:
+            conn.close()
