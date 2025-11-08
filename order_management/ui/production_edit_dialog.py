@@ -66,6 +66,9 @@ class ProductionEditDialog(QDialog):
         self.producer_data = []
         self.expense_data = []
 
+        # 初期表示状態を設定
+        self.on_production_type_changed()
+
     def _create_basic_info_tab(self):
         """基本情報タブを作成"""
         tab = QWidget()
@@ -94,18 +97,21 @@ class ProductionEditDialog(QDialog):
         self.type_public_broadcast = QRadioButton("公開放送")
         self.type_public_recording = QRadioButton("公開収録")
         self.type_special_project = QRadioButton("特別企画")
+        self.type_corner = QRadioButton("コーナー")
         self.type_regular.setMinimumWidth(100)
         self.type_special.setMinimumWidth(80)
         self.type_event.setMinimumWidth(90)
         self.type_public_broadcast.setMinimumWidth(90)
         self.type_public_recording.setMinimumWidth(90)
         self.type_special_project.setMinimumWidth(90)
+        self.type_corner.setMinimumWidth(90)
         self.production_type_group.addButton(self.type_regular)
         self.production_type_group.addButton(self.type_special)
         self.production_type_group.addButton(self.type_event)
         self.production_type_group.addButton(self.type_public_broadcast)
         self.production_type_group.addButton(self.type_public_recording)
         self.production_type_group.addButton(self.type_special_project)
+        self.production_type_group.addButton(self.type_corner)
         self.type_regular.setChecked(True)
         self.type_regular.toggled.connect(self.on_production_type_changed)
         production_type_layout.addWidget(self.type_regular)
@@ -114,6 +120,7 @@ class ProductionEditDialog(QDialog):
         production_type_layout.addWidget(self.type_public_broadcast)
         production_type_layout.addWidget(self.type_public_recording)
         production_type_layout.addWidget(self.type_special_project)
+        production_type_layout.addWidget(self.type_corner)
         production_type_layout.addStretch()
 
         production_type_widget = QWidget()
@@ -122,13 +129,13 @@ class ProductionEditDialog(QDialog):
         production_type_widget.setMinimumHeight(40)
         form_layout.addRow("種別:", production_type_widget)
 
-        # 親制作物（特別番組等の場合のみ表示）
+        # 親制作物（レギュラー以外の場合に表示）
         self.parent_production_combo = QComboBox()
         self.parent_production_combo.setMinimumWidth(300)
         self.load_parent_productions()
-        form_layout.addRow("親制作物:", self.parent_production_combo)
+        form_layout.addRow("親番組:", self.parent_production_combo)
         self.parent_production_label = form_layout.labelForField(self.parent_production_combo)
-        # 初期状態では非表示
+        # 初期状態では非表示（レギュラーがデフォルトのため）
         self.parent_production_combo.setVisible(False)
         self.parent_production_label.setVisible(False)
 
@@ -423,6 +430,8 @@ class ProductionEditDialog(QDialog):
                 self.type_public_recording.setChecked(True)
             elif production_type == "特別企画":
                 self.type_special_project.setChecked(True)
+            elif production_type == "コーナー":
+                self.type_corner.setChecked(True)
             else:
                 self.type_regular.setChecked(True)
 
@@ -1296,6 +1305,8 @@ class ProductionEditDialog(QDialog):
             production_type = "公開収録"
         elif self.type_special_project.isChecked():
             production_type = "特別企画"
+        elif self.type_corner.isChecked():
+            production_type = "コーナー"
         else:
             production_type = "レギュラー"
 
