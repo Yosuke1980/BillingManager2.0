@@ -3,7 +3,6 @@ billing.db
 expense_master.db
 expenses.db
 payee_master.db
-order_management.db
 
 # Log files
 logs/*.log
