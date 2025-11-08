@@ -76,6 +76,11 @@ class ExpenseItemEditDialog(QDialog):
         self.item_name_edit.setPlaceholderText("例: 出演料、制作費")
         form_layout.addRow("項目名:", self.item_name_edit)
 
+        # 業務種別
+        self.work_type_combo = QComboBox()
+        self.work_type_combo.addItems(["制作", "出演"])
+        form_layout.addRow("業務種別:", self.work_type_combo)
+
         # 金額
         self.amount_spin = QDoubleSpinBox()
         self.amount_spin.setRange(0, 99999999)
@@ -169,14 +174,14 @@ class ExpenseItemEditDialog(QDialog):
         cursor = conn.cursor()
         try:
             cursor.execute("""
-                SELECT production_id, partner_id, item_name, unit_price, spot_amount
+                SELECT production_id, partner_id, item_name, unit_price, spot_amount, work_type
                 FROM contracts
                 WHERE id = ?
             """, (contract_id,))
             contract = cursor.fetchone()
 
             if contract:
-                production_id, partner_id, item_name, unit_price, spot_amount = contract
+                production_id, partner_id, item_name, unit_price, spot_amount, work_type = contract
 
                 # 番組を設定
                 if production_id:
@@ -193,6 +198,12 @@ class ExpenseItemEditDialog(QDialog):
                 # 項目名を設定
                 if item_name:
                     self.item_name_edit.setText(item_name)
+
+                # 業務種別を設定
+                if work_type:
+                    idx = self.work_type_combo.findText(work_type)
+                    if idx >= 0:
+                        self.work_type_combo.setCurrentIndex(idx)
 
                 # 金額を設定
                 amount = spot_amount if spot_amount else unit_price
@@ -271,6 +282,12 @@ class ExpenseItemEditDialog(QDialog):
         notes = self.expense_data[23] or ""
         self.notes_edit.setPlainText(notes)
 
+        # 業務種別
+        work_type = self.expense_data[26] if len(self.expense_data) > 26 else "制作"
+        idx = self.work_type_combo.findText(work_type or "制作")
+        if idx >= 0:
+            self.work_type_combo.setCurrentIndex(idx)
+
     def validate_and_accept(self):
         """バリデーション後に受け入れ"""
         if not self.item_name_edit.text().strip():
@@ -290,6 +307,7 @@ class ExpenseItemEditDialog(QDialog):
             'production_id': self.production_combo.currentData(),
             'partner_id': self.partner_combo.currentData(),
             'item_name': self.item_name_edit.text().strip(),
+            'work_type': self.work_type_combo.currentText(),
             'amount': self.amount_spin.value(),
             'implementation_date': self.impl_date_edit.date().toString('yyyy-MM-dd'),
             'expected_payment_date': self.payment_date_edit.date().toString('yyyy-MM-dd'),

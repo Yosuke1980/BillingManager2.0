@@ -78,9 +78,9 @@ class ExpenseItemsWidget(QWidget):
 
         # ===== テーブル =====
         self.table = QTableWidget()
-        self.table.setColumnCount(11)
+        self.table.setColumnCount(12)
         self.table.setHorizontalHeaderLabels([
-            "ID", "番組名", "取引先名", "項目名", "金額",
+            "ID", "番組名", "取引先名", "項目名", "業務種別", "金額",
             "実施日", "支払予定日", "状態", "支払状態",
             "契約ID", "備考"
         ])
@@ -91,13 +91,14 @@ class ExpenseItemsWidget(QWidget):
         header.setSectionResizeMode(1, QHeaderView.Stretch)  # 番組名
         header.setSectionResizeMode(2, QHeaderView.Stretch)  # 取引先名
         header.setSectionResizeMode(3, QHeaderView.Stretch)  # 項目名
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 金額
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 実施日
-        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 支払予定日
-        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # 状態
-        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # 支払状態
-        header.setSectionResizeMode(9, QHeaderView.ResizeToContents)  # 契約ID
-        header.setSectionResizeMode(10, QHeaderView.Stretch)  # 備考
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 業務種別
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 金額
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 実施日
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # 支払予定日
+        header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # 状態
+        header.setSectionResizeMode(9, QHeaderView.ResizeToContents)  # 支払状態
+        header.setSectionResizeMode(10, QHeaderView.ResizeToContents)  # 契約ID
+        header.setSectionResizeMode(11, QHeaderView.Stretch)  # 備考
 
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -158,7 +159,7 @@ class ExpenseItemsWidget(QWidget):
         for row, item in enumerate(expense_items):
             # データ構造: (id, production_id, production_name, partner_id, partner_name,
             #            item_name, amount, implementation_date, expected_payment_date,
-            #            status, payment_status, contract_id, notes)
+            #            status, payment_status, contract_id, notes, work_type)
 
             item_id = item[0]
             production_name = item[2] or ""
@@ -171,6 +172,7 @@ class ExpenseItemsWidget(QWidget):
             payment_status = item[10] or "未払い"
             contract_id = item[11]
             notes = item[12] or ""
+            work_type = item[13] or "制作"
 
             # 統計更新
             total_amount += amount
@@ -206,13 +208,14 @@ class ExpenseItemsWidget(QWidget):
             self.table.setItem(row, 1, QTableWidgetItem(production_name))
             self.table.setItem(row, 2, QTableWidgetItem(partner_name))
             self.table.setItem(row, 3, QTableWidgetItem(item_name))
-            self.table.setItem(row, 4, QTableWidgetItem(amount_text))
-            self.table.setItem(row, 5, QTableWidgetItem(implementation_date))
-            self.table.setItem(row, 6, QTableWidgetItem(expected_payment_date))
-            self.table.setItem(row, 7, QTableWidgetItem(item_status))
-            self.table.setItem(row, 8, QTableWidgetItem(payment_status))
-            self.table.setItem(row, 9, QTableWidgetItem(str(contract_id) if contract_id else ""))
-            self.table.setItem(row, 10, QTableWidgetItem(notes))
+            self.table.setItem(row, 4, QTableWidgetItem(work_type))
+            self.table.setItem(row, 5, QTableWidgetItem(amount_text))
+            self.table.setItem(row, 6, QTableWidgetItem(implementation_date))
+            self.table.setItem(row, 7, QTableWidgetItem(expected_payment_date))
+            self.table.setItem(row, 8, QTableWidgetItem(item_status))
+            self.table.setItem(row, 9, QTableWidgetItem(payment_status))
+            self.table.setItem(row, 10, QTableWidgetItem(str(contract_id) if contract_id else ""))
+            self.table.setItem(row, 11, QTableWidgetItem(notes))
 
             # 行全体に背景色を適用
             if row_color:

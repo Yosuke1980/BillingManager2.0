@@ -2918,7 +2918,7 @@ class OrderManagementDB:
         Returns:
             list: (id, production_id, production_name, partner_id, partner_name,
                    item_name, amount, implementation_date, expected_payment_date,
-                   status, payment_status, contract_id, notes)
+                   status, payment_status, contract_id, notes, work_type)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -2929,7 +2929,7 @@ class OrderManagementDB:
                        ei.partner_id, part.name as partner_name,
                        ei.item_name, ei.amount, ei.implementation_date,
                        ei.expected_payment_date, ei.status, ei.payment_status,
-                       ei.contract_id, ei.notes
+                       ei.contract_id, ei.notes, ei.work_type
                 FROM expense_items ei
                 LEFT JOIN productions prod ON ei.production_id = prod.id
                 LEFT JOIN partners part ON ei.partner_id = part.id
@@ -3030,7 +3030,8 @@ class OrderManagementDB:
                        expected_payment_amount, payment_scheduled_date, payment_date,
                        payment_status, payment_verified_date, payment_matched_id,
                        payment_difference, gmail_draft_id, gmail_message_id,
-                       email_sent_at, contact_person, notes, created_at, updated_at
+                       email_sent_at, contact_person, notes, created_at, updated_at,
+                       work_type
                 FROM expense_items
                 WHERE id = ?
             """, (expense_id,))
@@ -3072,6 +3073,7 @@ class OrderManagementDB:
                         production_id = ?,
                         partner_id = ?,
                         item_name = ?,
+                        work_type = ?,
                         amount = ?,
                         implementation_date = ?,
                         expected_payment_date = ?,
@@ -3085,6 +3087,7 @@ class OrderManagementDB:
                     expense_data.get('production_id'),
                     expense_data.get('partner_id'),
                     expense_data.get('item_name'),
+                    expense_data.get('work_type', '制作'),
                     expense_data.get('amount'),
                     expense_data.get('implementation_date'),
                     expense_data.get('expected_payment_date'),
@@ -3097,15 +3100,16 @@ class OrderManagementDB:
                 # 新規作成
                 cursor.execute("""
                     INSERT INTO expense_items (
-                        contract_id, production_id, partner_id, item_name,
+                        contract_id, production_id, partner_id, item_name, work_type,
                         amount, implementation_date, expected_payment_date,
                         status, payment_status, notes
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     expense_data.get('contract_id'),
                     expense_data.get('production_id'),
                     expense_data.get('partner_id'),
                     expense_data.get('item_name'),
+                    expense_data.get('work_type', '制作'),
                     expense_data.get('amount'),
                     expense_data.get('implementation_date'),
                     expense_data.get('expected_payment_date'),
@@ -3167,18 +3171,18 @@ class OrderManagementDB:
                 SELECT id, production_id, partner_id, item_name,
                        contract_start_date, contract_end_date, contract_type,
                        payment_type, unit_price, spot_amount, payment_timing,
-                       implementation_date
+                       implementation_date, work_type
                 FROM contracts
                 WHERE id = ?
             """, (contract_id,))
-            
+
             contract = cursor.fetchone()
             if not contract:
                 return 0
 
             (cid, production_id, partner_id, item_name, start_date_str, end_date_str,
              contract_type, payment_type, unit_price, spot_amount, payment_timing,
-             implementation_date) = contract
+             implementation_date, work_type) = contract
 
             generated_count = 0
 
@@ -3189,11 +3193,11 @@ class OrderManagementDB:
                     INSERT INTO expense_items (
                         contract_id, production_id, partner_id, item_name,
                         amount, implementation_date, expected_payment_date,
-                        status, payment_status
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い')
+                        status, payment_status, work_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い', ?)
                 """, (
                     contract_id, production_id, partner_id, item_name,
-                    spot_amount, implementation_date, implementation_date
+                    spot_amount, implementation_date, implementation_date, work_type
                 ))
                 generated_count = 1
 
@@ -3219,11 +3223,11 @@ class OrderManagementDB:
                         INSERT INTO expense_items (
                             contract_id, production_id, partner_id, item_name,
                             amount, implementation_date, expected_payment_date,
-                            status, payment_status
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い')
+                            status, payment_status, work_type
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い', ?)
                     """, (
                         contract_id, production_id, partner_id, item_name,
-                        unit_price, current_date.strftime('%Y-%m-%d'), payment_date
+                        unit_price, current_date.strftime('%Y-%m-%d'), payment_date, work_type
                     ))
                     generated_count += 1
                     current_date = current_date + relativedelta(months=1)
