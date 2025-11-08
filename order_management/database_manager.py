@@ -2970,3 +2970,249 @@ class OrderManagementDB:
             conn.commit()
         finally:
             conn.close()
+
+    def get_expense_item_by_id(self, expense_id):
+        """費用項目を1件取得
+
+        Args:
+            expense_id: 費用項目ID
+
+        Returns:
+            tuple: 費用項目データ
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, contract_id, production_id, partner_id, item_name,
+                       amount, implementation_date, order_number, order_date,
+                       status, invoice_received_date, expected_payment_date,
+                       expected_payment_amount, payment_scheduled_date, payment_date,
+                       payment_status, payment_verified_date, payment_matched_id,
+                       payment_difference, gmail_draft_id, gmail_message_id,
+                       email_sent_at, contact_person, notes, created_at, updated_at
+                FROM expense_items
+                WHERE id = ?
+            """, (expense_id,))
+            return cursor.fetchone()
+        finally:
+            conn.close()
+
+    def save_expense_item(self, expense_data):
+        """費用項目を保存（新規/更新）
+
+        Args:
+            expense_data: dict with keys:
+                - id (optional): 更新時のID
+                - contract_id: 契約ID
+                - production_id: 番組ID
+                - partner_id: 取引先ID
+                - item_name: 項目名
+                - amount: 金額
+                - implementation_date: 実施日
+                - expected_payment_date: 支払予定日
+                - status: 状態
+                - payment_status: 支払状態
+                - notes: 備考
+
+        Returns:
+            int: 保存した費用項目のID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            expense_id = expense_data.get('id')
+
+            if expense_id:
+                # 更新
+                cursor.execute("""
+                    UPDATE expense_items SET
+                        contract_id = ?,
+                        production_id = ?,
+                        partner_id = ?,
+                        item_name = ?,
+                        amount = ?,
+                        implementation_date = ?,
+                        expected_payment_date = ?,
+                        status = ?,
+                        payment_status = ?,
+                        notes = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (
+                    expense_data.get('contract_id'),
+                    expense_data.get('production_id'),
+                    expense_data.get('partner_id'),
+                    expense_data.get('item_name'),
+                    expense_data.get('amount'),
+                    expense_data.get('implementation_date'),
+                    expense_data.get('expected_payment_date'),
+                    expense_data.get('status', '発注予定'),
+                    expense_data.get('payment_status', '未払い'),
+                    expense_data.get('notes'),
+                    expense_id
+                ))
+            else:
+                # 新規作成
+                cursor.execute("""
+                    INSERT INTO expense_items (
+                        contract_id, production_id, partner_id, item_name,
+                        amount, implementation_date, expected_payment_date,
+                        status, payment_status, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    expense_data.get('contract_id'),
+                    expense_data.get('production_id'),
+                    expense_data.get('partner_id'),
+                    expense_data.get('item_name'),
+                    expense_data.get('amount'),
+                    expense_data.get('implementation_date'),
+                    expense_data.get('expected_payment_date'),
+                    expense_data.get('status', '発注予定'),
+                    expense_data.get('payment_status', '未払い'),
+                    expense_data.get('notes')
+                ))
+                expense_id = cursor.lastrowid
+
+            conn.commit()
+            return expense_id
+        finally:
+            conn.close()
+
+    def get_active_contracts(self):
+        """有効な契約一覧を取得（費用項目編集用）
+
+        Returns:
+            list: (contract_id, production_name, partner_name, item_name,
+                   unit_price, spot_amount, contract_start_date, contract_end_date)
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT c.id, prod.name as production_name, part.name as partner_name,
+                       c.item_name, c.unit_price, c.spot_amount,
+                       c.contract_start_date, c.contract_end_date
+                FROM contracts c
+                LEFT JOIN productions prod ON c.production_id = prod.id
+                LEFT JOIN partners part ON c.partner_id = part.id
+                WHERE c.contract_end_date >= date('now')
+                   OR c.contract_end_date IS NULL
+                ORDER BY c.contract_start_date DESC
+            """)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def generate_expense_items_from_contract(self, contract_id):
+        """契約から費用項目を自動生成
+
+        Args:
+            contract_id: 契約ID
+
+        Returns:
+            int: 生成した費用項目の件数
+        """
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 契約情報を取得
+            cursor.execute("""
+                SELECT id, production_id, partner_id, item_name,
+                       contract_start_date, contract_end_date, contract_type,
+                       payment_type, unit_price, spot_amount, payment_timing,
+                       implementation_date
+                FROM contracts
+                WHERE id = ?
+            """, (contract_id,))
+            
+            contract = cursor.fetchone()
+            if not contract:
+                return 0
+
+            (cid, production_id, partner_id, item_name, start_date_str, end_date_str,
+             contract_type, payment_type, unit_price, spot_amount, payment_timing,
+             implementation_date) = contract
+
+            generated_count = 0
+
+            # 単発契約の場合
+            if spot_amount and spot_amount > 0:
+                # 1件のみ生成
+                cursor.execute("""
+                    INSERT INTO expense_items (
+                        contract_id, production_id, partner_id, item_name,
+                        amount, implementation_date, expected_payment_date,
+                        status, payment_status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い')
+                """, (
+                    contract_id, production_id, partner_id, item_name,
+                    spot_amount, implementation_date, implementation_date
+                ))
+                generated_count = 1
+
+            # 月額固定契約の場合
+            elif unit_price and unit_price > 0 and start_date_str and end_date_str:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+
+                # 月初に設定
+                current_date = start_date.replace(day=1)
+                end_month = end_date.replace(day=1)
+
+                while current_date <= end_month:
+                    # 支払予定日を計算
+                    if payment_timing == '当月末払い':
+                        # 当月末
+                        payment_date = (current_date + relativedelta(months=1, days=-1)).strftime('%Y-%m-%d')
+                    else:  # 翌月末払い（デフォルト）
+                        # 翌月末
+                        payment_date = (current_date + relativedelta(months=2, days=-1)).strftime('%Y-%m-%d')
+
+                    cursor.execute("""
+                        INSERT INTO expense_items (
+                            contract_id, production_id, partner_id, item_name,
+                            amount, implementation_date, expected_payment_date,
+                            status, payment_status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い')
+                    """, (
+                        contract_id, production_id, partner_id, item_name,
+                        unit_price, current_date.strftime('%Y-%m-%d'), payment_date
+                    ))
+                    generated_count += 1
+                    current_date = current_date + relativedelta(months=1)
+
+            conn.commit()
+            return generated_count
+        finally:
+            conn.close()
+
+    def delete_expense_items_by_contract(self, contract_id):
+        """契約に紐付く費用項目を削除
+
+        Args:
+            contract_id: 契約ID
+
+        Returns:
+            int: 削除した件数
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                DELETE FROM expense_items
+                WHERE contract_id = ?
+            """, (contract_id,))
+            deleted_count = cursor.rowcount
+            conn.commit()
+            return deleted_count
+        finally:
+            conn.close()

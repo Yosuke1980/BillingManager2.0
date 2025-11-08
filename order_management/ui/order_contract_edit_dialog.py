@@ -1015,7 +1015,38 @@ class OrderContractEditDialog(QDialog):
             contract_data['id'] = self.contract_id
 
         try:
-            self.db.save_order_contract(contract_data)
+            saved_id = self.db.save_order_contract(contract_data)
+
+            # 費用項目自動生成の確認
+            reply = QMessageBox.question(
+                self, "費用項目の自動生成",
+                "契約から費用項目を自動生成しますか？\n\n"
+                "（既存の費用項目がある場合は削除されます）",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.Yes:
+                try:
+                    # 既存の費用項目を削除
+                    contract_id = saved_id if saved_id else self.contract_id
+                    deleted_count = self.db.delete_expense_items_by_contract(contract_id)
+
+                    # 費用項目を生成
+                    generated_count = self.db.generate_expense_items_from_contract(contract_id)
+
+                    QMessageBox.information(
+                        self, "成功",
+                        f"費用項目を{generated_count}件生成しました。\n"
+                        f"（既存{deleted_count}件を削除）"
+                    )
+                except Exception as e:
+                    QMessageBox.warning(
+                        self, "警告",
+                        f"費用項目の自動生成に失敗しました:\n{str(e)}\n\n"
+                        f"契約は保存されています。"
+                    )
+
             # 成功ダイアログを表示せず、直接閉じる
             self.accept()
         except Exception as e:

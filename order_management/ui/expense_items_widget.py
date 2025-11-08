@@ -4,13 +4,15 @@
 """
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
-                             QComboBox, QMessageBox, QHeaderView, QGroupBox, QGridLayout)
+                             QComboBox, QMessageBox, QHeaderView, QGroupBox, QGridLayout,
+                             QDialog)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from datetime import datetime
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
+from order_management.ui.expense_item_edit_dialog import ExpenseItemEditDialog
 
 
 class ExpenseItemsWidget(QWidget):
@@ -227,8 +229,15 @@ class ExpenseItemsWidget(QWidget):
 
     def add_expense_item(self):
         """費用項目を追加"""
-        QMessageBox.information(self, "開発中", "費用項目の追加機能は開発中です。")
-        # TODO: 費用項目追加ダイアログを実装
+        dialog = ExpenseItemEditDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            expense_data = dialog.get_expense_data()
+            try:
+                self.db.save_expense_item(expense_data)
+                QMessageBox.information(self, "成功", "費用項目を追加しました。")
+                self.load_expense_items()
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"費用項目の追加に失敗しました:\n{e}")
 
     def edit_expense_item(self):
         """選択された費用項目を編集"""
@@ -237,8 +246,18 @@ class ExpenseItemsWidget(QWidget):
             QMessageBox.warning(self, "警告", "編集する費用項目を選択してください。")
             return
 
-        QMessageBox.information(self, "開発中", "費用項目の編集機能は開発中です。")
-        # TODO: 費用項目編集ダイアログを実装
+        row = selected_rows[0].row()
+        expense_id = self.table.item(row, 0).data(Qt.UserRole)
+
+        dialog = ExpenseItemEditDialog(self, expense_id=expense_id)
+        if dialog.exec_() == QDialog.Accepted:
+            expense_data = dialog.get_expense_data()
+            try:
+                self.db.save_expense_item(expense_data)
+                QMessageBox.information(self, "成功", "費用項目を更新しました。")
+                self.load_expense_items()
+            except Exception as e:
+                QMessageBox.critical(self, "エラー", f"費用項目の更新に失敗しました:\n{e}")
 
     def delete_expense_item(self):
         """選択された費用項目を削除"""
