@@ -167,7 +167,10 @@ class ExpenseItemsWidget(QWidget):
         for row, item in enumerate(expense_items):
             # データ構造: (id, production_id, production_name, partner_id, partner_name,
             #            item_name, amount, implementation_date, expected_payment_date,
-            #            status, payment_status, contract_id, notes, work_type)
+            #            status, payment_status, contract_id, notes, work_type,
+            #            order_number, order_date, invoice_received_date, actual_payment_date,
+            #            invoice_number, withholding_tax, consumption_tax, payment_amount,
+            #            invoice_file_path, payment_method, approver, approval_date)
 
             item_id = item[0]
             production_name = item[2] or ""

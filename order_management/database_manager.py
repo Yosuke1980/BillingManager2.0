@@ -3150,7 +3150,10 @@ class OrderManagementDB:
         Returns:
             list: (id, production_id, production_name, partner_id, partner_name,
                    item_name, amount, implementation_date, expected_payment_date,
-                   status, payment_status, contract_id, notes, work_type)
+                   status, payment_status, contract_id, notes, work_type,
+                   order_number, order_date, invoice_received_date, actual_payment_date,
+                   invoice_number, withholding_tax, consumption_tax, payment_amount,
+                   invoice_file_path, payment_method, approver, approval_date)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -3161,7 +3164,11 @@ class OrderManagementDB:
                        ei.partner_id, part.name as partner_name,
                        ei.item_name, ei.amount, ei.implementation_date,
                        ei.expected_payment_date, ei.status, ei.payment_status,
-                       ei.contract_id, ei.notes, ei.work_type
+                       ei.contract_id, ei.notes, ei.work_type,
+                       ei.order_number, ei.order_date, ei.invoice_received_date,
+                       ei.actual_payment_date, ei.invoice_number, ei.withholding_tax,
+                       ei.consumption_tax, ei.payment_amount, ei.invoice_file_path,
+                       ei.payment_method, ei.approver, ei.approval_date
                 FROM expense_items ei
                 LEFT JOIN productions prod ON ei.production_id = prod.id
                 LEFT JOIN partners part ON ei.partner_id = part.id
