@@ -99,7 +99,6 @@ class OrderContractEditDialog(QDialog):
         self.work_type_group.addButton(self.work_type_production)
         self.work_type_group.addButton(self.work_type_cast)
         self.work_type_production.setChecked(True)
-        self.work_type_production.toggled.connect(self.on_order_configuration_changed)
         work_type_layout.addWidget(self.work_type_production)
         work_type_layout.addWidget(self.work_type_cast)
         work_type_layout.addStretch()
@@ -110,10 +109,33 @@ class OrderContractEditDialog(QDialog):
         work_type_widget.setMinimumHeight(40)
         basic_layout.addRow("業務種別:", work_type_widget)
 
-        # 書類タイプ（自動設定・表示のみ）
-        self.doc_type_label = QLabel("<b>発注書</b>")
-        self.doc_type_label.setStyleSheet("font-size: 13px; color: #1976d2;")
-        basic_layout.addRow("書類タイプ:", self.doc_type_label)
+        # 書類タイプ（選択式）
+        doc_type_layout = QHBoxLayout()
+        doc_type_layout.setContentsMargins(0, 0, 0, 0)
+        self.doc_type_group = QButtonGroup()
+        self.doc_type_contract = QRadioButton("契約書")
+        self.doc_type_order = QRadioButton("発注書")
+        self.doc_type_email = QRadioButton("発注メール")
+        self.doc_type_contract.setMinimumWidth(100)
+        self.doc_type_order.setMinimumWidth(100)
+        self.doc_type_email.setMinimumWidth(120)
+        self.doc_type_group.addButton(self.doc_type_contract)
+        self.doc_type_group.addButton(self.doc_type_order)
+        self.doc_type_group.addButton(self.doc_type_email)
+        self.doc_type_order.setChecked(True)  # デフォルトは発注書
+        self.doc_type_contract.toggled.connect(self.on_doc_type_changed)
+        self.doc_type_order.toggled.connect(self.on_doc_type_changed)
+        self.doc_type_email.toggled.connect(self.on_doc_type_changed)
+        doc_type_layout.addWidget(self.doc_type_contract)
+        doc_type_layout.addWidget(self.doc_type_order)
+        doc_type_layout.addWidget(self.doc_type_email)
+        doc_type_layout.addStretch()
+
+        doc_type_widget = QWidget()
+        doc_type_widget.setLayout(doc_type_layout)
+        doc_type_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        doc_type_widget.setMinimumHeight(40)
+        basic_layout.addRow("書面:", doc_type_widget)
 
         # ファイル選択（契約書タイプの直下）
         file_layout = QHBoxLayout()
@@ -477,6 +499,7 @@ class OrderContractEditDialog(QDialog):
 
         # 初期表示：デフォルト設定に基づいて画面項目を調整
         self.on_order_configuration_changed()
+        self.on_doc_type_changed()
 
     def on_payment_type_changed(self, payment_type):
         """支払タイプが変更されたときの処理"""
@@ -492,29 +515,13 @@ class OrderContractEditDialog(QDialog):
             pass  # ユーザーの判断に任せる
 
     def on_order_configuration_changed(self):
-        """発注種別・業務種別が変更されたときの処理
+        """発注種別が変更されたときの処理
 
         組み合わせに応じて画面項目を表示/非表示する:
-        - レギュラー出演: 契約書、期間、自動延長あり
-        - レギュラー制作: 発注書、期間、自動延長なし
-        - 単発出演: 発注書、実施日、スポット金額
-        - 単発制作: 発注書、実施日、スポット金額
+        - レギュラー: 期間、月額固定/回数ベース
+        - 単発: 実施日、スポット金額
         """
         is_regular = self.order_type_regular.isChecked()
-        is_cast = self.work_type_cast.isChecked()
-
-        # 書類タイプの自動設定
-        if is_regular and is_cast:
-            # レギュラー出演 → 契約書
-            doc_type_text = "<b>契約書</b>"
-            doc_type_color = "#d32f2f"  # 赤
-        else:
-            # その他 → 発注書
-            doc_type_text = "<b>発注書</b>"
-            doc_type_color = "#1976d2"  # 青
-
-        self.doc_type_label.setText(doc_type_text)
-        self.doc_type_label.setStyleSheet(f"font-size: 13px; color: {doc_type_color};")
 
         # 日付フィールドの表示切り替え
         if is_regular:
@@ -540,11 +547,6 @@ class OrderContractEditDialog(QDialog):
             self.regular_payment_help.setVisible(False)
             self.spot_payment_widget.setVisible(True)
 
-        # 自動延長設定の表示切り替え（レギュラー出演契約書のみ）
-        show_renewal = is_regular and is_cast
-        for row_index, widget in self.renewal_section_widgets:
-            widget.setVisible(show_renewal)
-
         # 単発の場合は案件指定を「特定案件」に固定
         if not is_regular:
             self.rb_project.setChecked(True)
@@ -566,11 +568,17 @@ class OrderContractEditDialog(QDialog):
     def on_doc_type_changed(self):
         """書類タイプが変更されたときにフィールドの表示を切り替える"""
         is_email = self.doc_type_email.isChecked()
+        is_contract = self.doc_type_contract.isChecked()
 
         # メール発注の場合：確認情報を非表示、メールグループを表示
         # 契約書 or 発注書の場合：確認情報を表示、メールグループを非表示
         self.confirm_group.setVisible(not is_email)
         self.email_group.setVisible(is_email)
+
+        # 自動延長設定の表示切り替え（契約書を選んだ場合のみ表示）
+        show_renewal = is_contract
+        for row_index, widget in self.renewal_section_widgets:
+            widget.setVisible(show_renewal)
 
     def select_file(self):
         """ファイルを選択"""
@@ -721,9 +729,15 @@ class OrderContractEditDialog(QDialog):
             if contract[11]:
                 self.notes.setPlainText(contract[11])
 
-            # 発注種別（インデックス14）
-            # 注: 書類タイプは業務種別と発注区分から自動決定されるため、
-            # ここでは特に処理しない（後ほどon_order_configuration_changed()で設定）
+            # 書類タイプ（インデックス14: order_type）
+            if contract[14]:
+                doc_type = contract[14]
+                if doc_type == "契約書":
+                    self.doc_type_contract.setChecked(True)
+                elif doc_type == "発注メール":
+                    self.doc_type_email.setChecked(True)
+                else:
+                    self.doc_type_order.setChecked(True)
 
             # 発注ステータス（インデックス15）
             if contract[15]:
@@ -822,6 +836,7 @@ class OrderContractEditDialog(QDialog):
 
             # 画面の表示状態を更新
             self.on_order_configuration_changed()
+            self.on_doc_type_changed()
 
     def on_start_date_changed(self, date):
         """開始日変更時に終了日を自動設定"""
@@ -906,12 +921,11 @@ class OrderContractEditDialog(QDialog):
                 QMessageBox.warning(self, "警告", "取引先が正しく選択されていません。")
                 return
 
-        # 書類タイプの判定（レギュラー出演=契約書、それ以外=発注書）
-        is_regular = self.order_type_regular.isChecked()
-        is_cast = self.work_type_cast.isChecked()
-
-        if is_regular and is_cast:
+        # 書類タイプの取得
+        if self.doc_type_contract.isChecked():
             doc_type = "契約書"
+        elif self.doc_type_email.isChecked():
+            doc_type = "発注メール"
         else:
             doc_type = "発注書"
 

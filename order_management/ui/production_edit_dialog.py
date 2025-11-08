@@ -88,14 +88,14 @@ class ProductionEditDialog(QDialog):
         production_type_layout = QHBoxLayout()
         production_type_layout.setContentsMargins(0, 0, 0, 0)
         self.production_type_group = QButtonGroup()
-        self.type_regular = QRadioButton("レギュラー番組")
-        self.type_special = QRadioButton("特別番組")
+        self.type_regular = QRadioButton("レギュラー")
+        self.type_special = QRadioButton("特番")
         self.type_event = QRadioButton("イベント")
         self.type_public_broadcast = QRadioButton("公開放送")
         self.type_public_recording = QRadioButton("公開収録")
         self.type_special_project = QRadioButton("特別企画")
-        self.type_regular.setMinimumWidth(120)
-        self.type_special.setMinimumWidth(90)
+        self.type_regular.setMinimumWidth(100)
+        self.type_special.setMinimumWidth(80)
         self.type_event.setMinimumWidth(90)
         self.type_public_broadcast.setMinimumWidth(90)
         self.type_public_recording.setMinimumWidth(90)
@@ -142,30 +142,33 @@ class ProductionEditDialog(QDialog):
         self.start_date_edit.setDate(QDate.currentDate())
         form_layout.addRow("開始日:", self.start_date_edit)
 
-        # 終了日
+        # 終了日（空欄可能）
         self.end_date_edit = ImprovedDateEdit()
-        self.end_date_edit.setDate(QDate.currentDate())
-        form_layout.addRow("終了日:", self.end_date_edit)
+        self.end_date_edit.setSpecialValueText("（未定）")
+        self.end_date_edit.setDate(QDate(2000, 1, 1))  # 最小値
+        self.end_date_edit.setMinimumDate(QDate(2000, 1, 1))
+        end_date_layout = QHBoxLayout()
+        end_date_layout.addWidget(self.end_date_edit)
+        clear_end_date_btn = QPushButton("クリア")
+        clear_end_date_btn.clicked.connect(lambda: self.end_date_edit.setDate(QDate(2000, 1, 1)))
+        clear_end_date_btn.setMaximumWidth(80)
+        end_date_layout.addWidget(clear_end_date_btn)
+        end_date_layout.addStretch()
+        end_date_widget = QWidget()
+        end_date_widget.setLayout(end_date_layout)
+        form_layout.addRow("終了日:", end_date_widget)
 
-        # 実施開始時間（レギュラー以外用）
+        # 開始時間
         self.start_time_edit = QTimeEdit()
         self.start_time_edit.setDisplayFormat("HH:mm")
         self.start_time_edit.setTime(QTime(0, 0))
-        form_layout.addRow("実施開始時間:", self.start_time_edit)
-        self.start_time_label = form_layout.labelForField(self.start_time_edit)
-        # 初期状態では非表示
-        self.start_time_edit.setVisible(False)
-        self.start_time_label.setVisible(False)
+        form_layout.addRow("開始時間:", self.start_time_edit)
 
-        # 実施終了時間（レギュラー以外用）
+        # 終了時間
         self.end_time_edit = QTimeEdit()
         self.end_time_edit.setDisplayFormat("HH:mm")
         self.end_time_edit.setTime(QTime(0, 0))
-        form_layout.addRow("実施終了時間:", self.end_time_edit)
-        self.end_time_label = form_layout.labelForField(self.end_time_edit)
-        # 初期状態では非表示
-        self.end_time_edit.setVisible(False)
-        self.end_time_label.setVisible(False)
+        form_layout.addRow("終了時間:", self.end_time_edit)
 
         # 放送時間（レギュラー番組用）
         self.broadcast_time_edit = QLineEdit()
@@ -370,12 +373,6 @@ class ProductionEditDialog(QDialog):
             checkbox.setVisible(is_regular)
         self.broadcast_days_label.setVisible(is_regular)
 
-        # レギュラー番組以外の場合は実施時間を表示
-        self.start_time_edit.setVisible(not is_regular)
-        self.start_time_label.setVisible(not is_regular)
-        self.end_time_edit.setVisible(not is_regular)
-        self.end_time_label.setVisible(not is_regular)
-
         # 特別番組等の場合は親制作物を表示
         show_parent = not is_regular
         self.parent_production_combo.setVisible(show_parent)
@@ -390,14 +387,14 @@ class ProductionEditDialog(QDialog):
         for production in productions:
             # production: (id, name, description, production_type, start_date, end_date,
             #              start_time, end_time, broadcast_time, broadcast_days, status, parent_production_id)
-            production_type = production[3] if len(production) > 3 else "レギュラー番組"
+            production_type = production[3] if len(production) > 3 else "レギュラー"
 
             # 自分自身を除外（編集時）
             if self.is_edit and production[0] == self.production[0]:
                 continue
 
-            # レギュラー番組のみ親になれる
-            if production_type != "レギュラー番組":
+            # レギュラー番組のみ親になれる（新旧両方の名称に対応）
+            if production_type not in ["レギュラー番組", "レギュラー"]:
                 continue
 
             self.parent_production_combo.addItem(production[1], production[0])
@@ -415,7 +412,8 @@ class ProductionEditDialog(QDialog):
         # 種別を設定（インデックス3: production_type）
         if len(self.production) > 3 and self.production[3]:
             production_type = self.production[3]
-            if production_type == "特別番組":
+            # 新旧両方の名称に対応
+            if production_type in ["特別番組", "特番"]:
                 self.type_special.setChecked(True)
             elif production_type == "イベント":
                 self.type_event.setChecked(True)
@@ -433,6 +431,9 @@ class ProductionEditDialog(QDialog):
             self.start_date_edit.setDate(QDate.fromString(self.production[4], "yyyy-MM-dd"))
         if len(self.production) > 5 and self.production[5]:
             self.end_date_edit.setDate(QDate.fromString(self.production[5], "yyyy-MM-dd"))
+        else:
+            # 終了日が未定の場合
+            self.end_date_edit.setDate(QDate(2000, 1, 1))
 
         # 実施時間を設定（インデックス6, 7: start_time, end_time）
         if len(self.production) > 6 and self.production[6]:
@@ -1286,7 +1287,7 @@ class ProductionEditDialog(QDialog):
 
         # 種別を決定
         if self.type_special.isChecked():
-            production_type = "特別番組"
+            production_type = "特番"
         elif self.type_event.isChecked():
             production_type = "イベント"
         elif self.type_public_broadcast.isChecked():
@@ -1296,19 +1297,28 @@ class ProductionEditDialog(QDialog):
         elif self.type_special_project.isChecked():
             production_type = "特別企画"
         else:
-            production_type = "レギュラー番組"
+            production_type = "レギュラー"
 
         # 親制作物IDを取得
         parent_production_id = self.parent_production_combo.currentData()
+
+        # 終了日の処理（未定の場合はNULL）
+        end_date = self.end_date_edit.date()
+        if end_date == QDate(2000, 1, 1):
+            end_date_str = None
+        elif end_date.isValid():
+            end_date_str = end_date.toString("yyyy-MM-dd")
+        else:
+            end_date_str = None
 
         production_data = {
             'name': self.name_edit.text().strip(),
             'description': self.description_edit.toPlainText().strip(),
             'production_type': production_type,
             'start_date': self.start_date_edit.date().toString("yyyy-MM-dd") if self.start_date_edit.date().isValid() else None,
-            'end_date': self.end_date_edit.date().toString("yyyy-MM-dd") if self.end_date_edit.date().isValid() else None,
-            'start_time': self.start_time_edit.time().toString("HH:mm:ss") if not self.type_regular.isChecked() else None,
-            'end_time': self.end_time_edit.time().toString("HH:mm:ss") if not self.type_regular.isChecked() else None,
+            'end_date': end_date_str,
+            'start_time': self.start_time_edit.time().toString("HH:mm:ss"),
+            'end_time': self.end_time_edit.time().toString("HH:mm:ss"),
             'broadcast_time': self.broadcast_time_edit.text().strip() if self.type_regular.isChecked() else None,
             'broadcast_days': ",".join(selected_days) if self.type_regular.isChecked() else None,
             'status': status,
