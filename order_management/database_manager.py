@@ -3274,6 +3274,34 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def save_contract_cast_list(self, contract_id, cast_list):
+        """契約の出演者リストを一括保存（既存データを削除して再作成）
+
+        Args:
+            contract_id: 契約ID
+            cast_list: 出演者リスト [(cast_id, role), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 既存の出演者リンクを削除
+            cursor.execute("DELETE FROM contract_cast WHERE contract_id = ?", (contract_id,))
+
+            # 新しい出演者リンクを追加
+            for cast_id, role in cast_list:
+                cursor.execute("""
+                    INSERT INTO contract_cast (contract_id, cast_id, role)
+                    VALUES (?, ?, ?)
+                """, (contract_id, cast_id, role))
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
     def remove_contract_cast(self, contract_cast_id):
         """契約から出演者を削除
 

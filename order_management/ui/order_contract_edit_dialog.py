@@ -1054,8 +1054,15 @@ class OrderContractEditDialog(QDialog):
 
             # 出演者情報を保存（出演契約の場合のみ）
             if self.work_type_cast.isChecked():
-                contract_id = saved_id if saved_id else self.contract_id
-                self.save_contract_cast(contract_id)
+                try:
+                    contract_id = saved_id if saved_id else self.contract_id
+                    self.save_contract_cast(contract_id)
+                except Exception as e:
+                    QMessageBox.warning(
+                        self, "警告",
+                        f"出演者情報の保存に失敗しました:\n{str(e)}\n\n"
+                        f"契約は保存されています。"
+                    )
 
             # 費用項目自動生成の確認
             reply = QMessageBox.question(
@@ -1307,26 +1314,16 @@ class OrderContractEditDialog(QDialog):
 
     def save_contract_cast(self, contract_id):
         """契約に紐付いた出演者を保存"""
-        # まず、既存の出演者リンクをすべて削除
-        conn = self.db._get_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("DELETE FROM contract_cast WHERE contract_id = ?", (contract_id,))
+        # テーブルから出演者リストを取得
+        cast_list = []
+        for row in range(self.cast_table.rowCount()):
+            name_item = self.cast_table.item(row, 0)
+            role_item = self.cast_table.item(row, 2)
 
-            # テーブルから出演者を取得して保存
-            for row in range(self.cast_table.rowCount()):
-                name_item = self.cast_table.item(row, 0)
-                role_item = self.cast_table.item(row, 2)
+            if name_item:
+                cast_id = name_item.data(Qt.UserRole)
+                role = role_item.text() if role_item else None
+                cast_list.append((cast_id, role))
 
-                if name_item:
-                    cast_id = name_item.data(Qt.UserRole)
-                    role = role_item.text() if role_item else None
-
-                    self.db.add_contract_cast(contract_id, cast_id, role)
-
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            raise e
-        finally:
-            conn.close()
+        # データベースマネージャーの一括保存メソッドを使用
+        self.db.save_contract_cast_list(contract_id, cast_list)
