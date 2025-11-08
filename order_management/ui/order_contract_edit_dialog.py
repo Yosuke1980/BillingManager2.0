@@ -1057,6 +1057,45 @@ class OrderContractEditDialog(QDialog):
         if self.contract_id:
             contract_data['id'] = self.contract_id
 
+        # 出演契約の場合、出演者の所属と契約先の整合性をチェック
+        if self.work_type_cast.isChecked():
+            mismatched_casts = []
+            for row in range(self.cast_table.rowCount()):
+                name_item = self.cast_table.item(row, 0)
+                if name_item:
+                    cast_id = name_item.data(Qt.UserRole)
+                    cast_name = name_item.text()
+
+                    # 出演者の所属事務所IDを取得
+                    cast_info = self.db.get_cast_by_id(cast_id)
+                    if cast_info and len(cast_info) > 2:
+                        cast_partner_id = cast_info[2]  # partner_id
+                        cast_partner_name = cast_info[3] if len(cast_info) > 3 else "(不明)"
+
+                        # 契約取引先と出演者の所属が一致しない場合
+                        if cast_partner_id and cast_partner_id != partner_id:
+                            mismatched_casts.append((cast_name, cast_partner_name))
+
+            # 不一致がある場合は警告
+            if mismatched_casts:
+                contract_partner_name = self.partner_combo.currentText()
+                warning_message = "以下の出演者の所属事務所と契約取引先が一致しません。\n\n"
+                warning_message += f"契約先: {contract_partner_name}\n\n"
+                warning_message += "不一致の出演者:\n"
+                for cast_name, cast_partner in mismatched_casts:
+                    warning_message += f"  • {cast_name} (所属: {cast_partner})\n"
+                warning_message += "\nこのまま保存しますか？"
+
+                reply = QMessageBox.question(
+                    self, "所属事務所の不一致",
+                    warning_message,
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+
+                if reply == QMessageBox.No:
+                    return  # 保存をキャンセル
+
         try:
             saved_id = self.db.save_order_contract(contract_data)
 
@@ -1238,12 +1277,51 @@ class OrderContractEditDialog(QDialog):
         # ダイアログを表示
         if dialog.exec_() == QDialog.Accepted:
             selected_items = cast_list.selectedItems()
+
+            # 契約取引先を取得
+            contract_partner_id = self.partner_combo.currentData()
+            contract_partner_name = self.partner_combo.currentText()
+
+            # 整合性チェック用のリスト
+            mismatched_casts = []
+
             for item in selected_items:
                 cast_id = item.data(Qt.UserRole)
                 cast_name = item.data(Qt.UserRole + 1)
                 partner_name = item.data(Qt.UserRole + 2)
 
-                # テーブルに追加
+                # 出演者の所属事務所IDを取得
+                cast_info = self.db.get_cast_by_id(cast_id)
+                if cast_info and len(cast_info) > 2:
+                    cast_partner_id = cast_info[2]  # partner_id
+
+                    # 契約取引先と出演者の所属が一致しない場合
+                    if contract_partner_id and cast_partner_id != contract_partner_id:
+                        mismatched_casts.append((cast_name, partner_name, contract_partner_name))
+
+            # 不一致がある場合は警告
+            if mismatched_casts:
+                warning_message = "以下の出演者の所属事務所と契約取引先が一致しません。\n\n"
+                for cast_name, cast_partner, contract_partner in mismatched_casts:
+                    warning_message += f"• {cast_name}\n  所属: {cast_partner}\n  契約先: {contract_partner}\n\n"
+                warning_message += "このまま追加しますか？"
+
+                reply = QMessageBox.question(
+                    self, "所属事務所の不一致",
+                    warning_message,
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+
+                if reply == QMessageBox.No:
+                    return  # 追加をキャンセル
+
+            # テーブルに追加
+            for item in selected_items:
+                cast_id = item.data(Qt.UserRole)
+                cast_name = item.data(Qt.UserRole + 1)
+                partner_name = item.data(Qt.UserRole + 2)
+
                 row = self.cast_table.rowCount()
                 self.cast_table.insertRow(row)
 
