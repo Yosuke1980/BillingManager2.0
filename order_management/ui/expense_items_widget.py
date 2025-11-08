@@ -5,10 +5,12 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
                              QComboBox, QMessageBox, QHeaderView, QGroupBox, QGridLayout,
-                             QDialog)
+                             QDialog, QFileDialog)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from datetime import datetime
+import csv
+import codecs
 
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.ui_helpers import create_button
@@ -123,6 +125,12 @@ class ExpenseItemsWidget(QWidget):
         button_layout.addWidget(self.change_production_button)
 
         button_layout.addStretch()
+
+        self.export_csv_button = create_button("📤 CSV出力", self.export_to_csv)
+        button_layout.addWidget(self.export_csv_button)
+
+        self.import_csv_button = create_button("📥 CSV読込", self.import_from_csv)
+        button_layout.addWidget(self.import_csv_button)
 
         self.refresh_button = create_button("🔄 更新", self.load_expense_items)
         button_layout.addWidget(self.refresh_button)
@@ -432,3 +440,146 @@ class ExpenseItemsWidget(QWidget):
         if dialog.exec_() == QDialog.Accepted:
             return production_combo.currentData()
         return None
+
+    def export_to_csv(self):
+        """費用項目データをCSVに出力"""
+        try:
+            # ファイル保存ダイアログ
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "CSV出力",
+                "費用項目.csv",
+                "CSV Files (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # 現在表示されている全ての費用項目データを取得
+            expense_items = self.db.get_expense_items_with_details()
+
+            # CSV出力（UTF-8 with BOM）
+            with codecs.open(file_path, 'w', 'utf-8-sig') as f:
+                writer = csv.writer(f)
+
+                # ヘッダー行
+                writer.writerow([
+                    'ID', '契約ID', '番組名', '取引先名', '項目名', '業務種別',
+                    '金額', '実施日', '発注番号', '発注日', '状態',
+                    '請求書受領日', '支払予定日', '実際支払日', '請求書番号',
+                    '支払状態', '源泉徴収額', '消費税額', '支払金額',
+                    '請求書ファイルパス', '支払方法', '承認者', '承認日', '備考'
+                ])
+
+                # データ行
+                for item in expense_items:
+                    # item structure based on get_expense_items_with_details:
+                    # (id, production_id, production_name, partner_id, partner_name,
+                    #  item_name, amount, implementation_date, expected_payment_date,
+                    #  status, payment_status, contract_id, notes, work_type,
+                    #  order_number, order_date, invoice_received_date, actual_payment_date,
+                    #  invoice_number, withholding_tax, consumption_tax, payment_amount,
+                    #  invoice_file_path, payment_method, approver, approval_date)
+
+                    writer.writerow([
+                        item[0] or '',   # ID
+                        item[11] or '',  # 契約ID
+                        item[2] or '',   # 番組名
+                        item[4] or '',   # 取引先名
+                        item[5] or '',   # 項目名
+                        item[13] or '',  # 業務種別
+                        item[6] or '',   # 金額
+                        item[7] or '',   # 実施日
+                        item[14] or '',  # 発注番号
+                        item[15] or '',  # 発注日
+                        item[9] or '',   # 状態
+                        item[16] or '',  # 請求書受領日
+                        item[8] or '',   # 支払予定日
+                        item[17] or '',  # 実際支払日
+                        item[18] or '',  # 請求書番号
+                        item[10] or '',  # 支払状態
+                        item[19] or '',  # 源泉徴収額
+                        item[20] or '',  # 消費税額
+                        item[21] or '',  # 支払金額
+                        item[22] or '',  # 請求書ファイルパス
+                        item[23] or '',  # 支払方法
+                        item[24] or '',  # 承認者
+                        item[25] or '',  # 承認日
+                        item[12] or ''   # 備考
+                    ])
+
+            QMessageBox.information(
+                self,
+                "CSV出力完了",
+                f"{len(expense_items)}件の費用項目データをCSVに出力しました。\n\n{file_path}"
+            )
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV出力に失敗しました:\n{e}")
+
+    def import_from_csv(self):
+        """CSVから費用項目データを読み込み"""
+        try:
+            # ファイル選択ダイアログ
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "CSV読み込み",
+                "",
+                "CSV Files (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # CSV読み込み
+            csv_data = []
+            with codecs.open(file_path, 'r', 'utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    csv_data.append(row)
+
+            if not csv_data:
+                QMessageBox.warning(self, "警告", "CSVファイルにデータがありません")
+                return
+
+            # 上書き/追記の選択ダイアログを表示
+            reply = QMessageBox.question(
+                self,
+                'インポート方法の選択',
+                f'{len(csv_data)}件のデータを読み込みます。\n\n'
+                '既存のデータをどうしますか？\n\n'
+                '「はい」: 上書き（既存データを削除して新規データのみ）\n'
+                '「いいえ」: 追記（既存データを保持してIDがあれば更新、なければ追加）',
+                QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.Cancel:
+                return
+
+            overwrite = (reply == QMessageBox.Yes)
+
+            # データベースにインポート
+            result = self.db.import_expense_items_from_csv(csv_data, overwrite)
+
+            # 結果を表示
+            message = f"CSV読み込み完了\n\n"
+            message += f"成功: {result['success']}件\n"
+            message += f"  - 新規追加: {result['inserted']}件\n"
+            message += f"  - 更新: {result['updated']}件\n"
+            message += f"スキップ: {result['skipped']}件\n"
+
+            if result['errors']:
+                message += f"\nエラー詳細:\n"
+                for error in result['errors'][:10]:  # 最初の10件のみ表示
+                    message += f"  - {error['row']}行目: {error['reason']}\n"
+                if len(result['errors']) > 10:
+                    message += f"  ... 他{len(result['errors']) - 10}件のエラー\n"
+
+            QMessageBox.information(self, "CSV読み込み完了", message)
+
+            # データを再読み込み
+            self.load_expense_items()
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"CSV読み込みに失敗しました:\n{e}")

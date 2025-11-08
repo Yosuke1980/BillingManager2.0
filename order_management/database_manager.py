@@ -2352,6 +2352,182 @@ class OrderManagementDB:
 
         return result
 
+    def import_expense_items_from_csv(self, csv_data: List[dict], overwrite: bool = False) -> dict:
+        """費用項目データをCSVから一括インポート
+
+        Args:
+            csv_data: CSVから読み込んだ辞書のリスト
+                     期待されるキー: ID, 契約ID, 番組名, 取引先名, 項目名, 業務種別,
+                                    金額, 実施日, 発注番号, 発注日, 状態,
+                                    請求書受領日, 支払予定日, 実際支払日, 請求書番号,
+                                    支払状態, 源泉徴収額, 消費税額, 支払金額,
+                                    請求書ファイルパス, 支払方法, 承認者, 承認日, 備考
+            overwrite: True=上書き（既存データ削除）、False=追記/更新
+
+        Returns:
+            dict: {
+                'success': 成功件数,
+                'updated': 更新件数,
+                'inserted': 挿入件数,
+                'skipped': スキップ件数,
+                'errors': [{'row': 行番号, 'reason': 理由}]
+            }
+        """
+        result = {
+            'success': 0,
+            'updated': 0,
+            'inserted': 0,
+            'skipped': 0,
+            'errors': []
+        }
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 上書きモードの場合は既存データを削除
+            if overwrite:
+                cursor.execute("DELETE FROM expense_items")
+                conn.commit()
+
+            for row_num, row_data in enumerate(csv_data, start=2):  # ヘッダー行は1行目なので2から開始
+                try:
+                    # 必須項目チェック
+                    item_name = row_data.get('項目名', '').strip()
+                    amount_str = row_data.get('金額', '').strip()
+
+                    if not item_name:
+                        result['errors'].append({'row': row_num, 'reason': '項目名が空です'})
+                        result['skipped'] += 1
+                        continue
+
+                    # 金額をfloatに変換
+                    try:
+                        amount = float(amount_str) if amount_str else 0
+                    except ValueError:
+                        result['errors'].append({'row': row_num, 'reason': f'金額の形式が不正です: {amount_str}'})
+                        result['skipped'] += 1
+                        continue
+
+                    # 番組を検索
+                    production_id = None
+                    production_name = row_data.get('番組名', '').strip()
+                    if production_name:
+                        cursor.execute("SELECT id FROM productions WHERE name = ?", (production_name,))
+                        prod_result = cursor.fetchone()
+                        if prod_result:
+                            production_id = prod_result[0]
+
+                    # 取引先を検索
+                    partner_id = None
+                    partner_name = row_data.get('取引先名', '').strip()
+                    if partner_name:
+                        cursor.execute("SELECT id FROM partners WHERE name = ?", (partner_name,))
+                        partner_result = cursor.fetchone()
+                        if partner_result:
+                            partner_id = partner_result[0]
+
+                    # 契約IDの取得
+                    contract_id_str = row_data.get('契約ID', '').strip()
+                    contract_id = None
+                    if contract_id_str and contract_id_str.isdigit():
+                        contract_id = int(contract_id_str)
+
+                    # その他のデータ
+                    work_type = row_data.get('業務種別', '制作').strip()
+                    implementation_date = row_data.get('実施日', '').strip()
+                    order_number = row_data.get('発注番号', '').strip()
+                    order_date = row_data.get('発注日', '').strip()
+                    status = row_data.get('状態', '発注予定').strip()
+                    invoice_received_date = row_data.get('請求書受領日', '').strip()
+                    expected_payment_date = row_data.get('支払予定日', '').strip()
+                    actual_payment_date = row_data.get('実際支払日', '').strip()
+                    invoice_number = row_data.get('請求書番号', '').strip()
+                    payment_status = row_data.get('支払状態', '未払い').strip()
+
+                    # 数値フィールド
+                    withholding_tax_str = row_data.get('源泉徴収額', '').strip()
+                    consumption_tax_str = row_data.get('消費税額', '').strip()
+                    payment_amount_str = row_data.get('支払金額', '').strip()
+
+                    withholding_tax = float(withholding_tax_str) if withholding_tax_str else None
+                    consumption_tax = float(consumption_tax_str) if consumption_tax_str else None
+                    payment_amount = float(payment_amount_str) if payment_amount_str else None
+
+                    invoice_file_path = row_data.get('請求書ファイルパス', '').strip()
+                    payment_method = row_data.get('支払方法', '').strip()
+                    approver = row_data.get('承認者', '').strip()
+                    approval_date = row_data.get('承認日', '').strip()
+                    notes = row_data.get('備考', '').strip()
+
+                    expense_id_str = row_data.get('ID', '').strip()
+
+                    now = datetime.now()
+
+                    # UPSERTロジック: IDで既存レコードを検索
+                    existing_expense = None
+                    if expense_id_str and expense_id_str.isdigit():
+                        expense_id = int(expense_id_str)
+                        cursor.execute("SELECT id FROM expense_items WHERE id = ?", (expense_id,))
+                        existing_expense = cursor.fetchone()
+
+                    if existing_expense:
+                        # 既存費用項目を更新
+                        existing_id = existing_expense[0]
+                        cursor.execute("""
+                            UPDATE expense_items
+                            SET contract_id=?, production_id=?, partner_id=?, item_name=?, work_type=?,
+                                amount=?, implementation_date=?, order_number=?, order_date=?,
+                                status=?, invoice_received_date=?, expected_payment_date=?,
+                                actual_payment_date=?, invoice_number=?, payment_status=?,
+                                withholding_tax=?, consumption_tax=?, payment_amount=?,
+                                invoice_file_path=?, payment_method=?, approver=?, approval_date=?,
+                                notes=?, updated_at=?
+                            WHERE id=?
+                        """, (contract_id, production_id, partner_id, item_name, work_type,
+                              amount, implementation_date or None, order_number or None, order_date or None,
+                              status, invoice_received_date or None, expected_payment_date or None,
+                              actual_payment_date or None, invoice_number or None, payment_status,
+                              withholding_tax, consumption_tax, payment_amount,
+                              invoice_file_path or None, payment_method or None, approver or None, approval_date or None,
+                              notes or None, now, existing_id))
+                        result['updated'] += 1
+                        result['success'] += 1
+                    else:
+                        # 新規追加
+                        cursor.execute("""
+                            INSERT INTO expense_items (
+                                contract_id, production_id, partner_id, item_name, work_type,
+                                amount, implementation_date, order_number, order_date,
+                                status, invoice_received_date, expected_payment_date,
+                                actual_payment_date, invoice_number, payment_status,
+                                withholding_tax, consumption_tax, payment_amount,
+                                invoice_file_path, payment_method, approver, approval_date,
+                                notes, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (contract_id, production_id, partner_id, item_name, work_type,
+                              amount, implementation_date or None, order_number or None, order_date or None,
+                              status, invoice_received_date or None, expected_payment_date or None,
+                              actual_payment_date or None, invoice_number or None, payment_status,
+                              withholding_tax, consumption_tax, payment_amount,
+                              invoice_file_path or None, payment_method or None, approver or None, approval_date or None,
+                              notes or None, now, now))
+                        result['inserted'] += 1
+                        result['success'] += 1
+
+                except Exception as e:
+                    result['errors'].append({'row': row_num, 'reason': str(e)})
+                    result['skipped'] += 1
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
+        return result
+
     def import_programs_from_csv(self, csv_data: List[dict], overwrite: bool = False) -> dict:
         """番組データをCSVから一括インポート
 
