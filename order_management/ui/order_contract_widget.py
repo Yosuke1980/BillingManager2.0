@@ -140,6 +140,7 @@ class OrderContractWidget(QWidget):
         header.setSectionResizeMode(9, QHeaderView.Stretch)  # 備考
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.ExtendedSelection)  # 複数選択を許可
         self.table.setEditTriggers(QTableWidget.NoEditTriggers)  # テーブルを編集不可に設定
         self.table.doubleClicked.connect(self.edit_contract)
         layout.addWidget(self.table)
@@ -399,29 +400,64 @@ class OrderContractWidget(QWidget):
             self.load_contracts()
 
     def delete_contract(self):
-        """発注書削除"""
-        selected_row = self.table.currentRow()
-        if selected_row < 0:
+        """発注書削除（複数選択対応）"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
             QMessageBox.warning(self, "警告", "削除する発注書を選択してください。")
             return
 
-        # UserRoleからIDを取得
-        contract_id = self.table.item(selected_row, 0).data(Qt.UserRole)
-        program_name = self.table.item(selected_row, 2).text()  # 番組名は2列目
+        # 選択された発注書のIDと番組名を取得
+        contracts_to_delete = []
+        for index in selected_rows:
+            row = index.row()
+            contract_id = self.table.item(row, 0).data(Qt.UserRole)
+            program_name = self.table.item(row, 2).text()  # 番組名は2列目
+            item_name = self.table.item(row, 3).text()  # 費用項目は3列目
+            contracts_to_delete.append((contract_id, program_name, item_name))
+
+        # 確認メッセージ
+        if len(contracts_to_delete) == 1:
+            _, program_name, item_name = contracts_to_delete[0]
+            message = f"発注書「{program_name} - {item_name}」を削除してもよろしいですか?"
+        else:
+            message = f"{len(contracts_to_delete)}件の発注書を削除してもよろしいですか?\n\n"
+            message += "削除対象:\n"
+            for _, program_name, item_name in contracts_to_delete[:5]:  # 最初の5件のみ表示
+                message += f"  • {program_name} - {item_name}\n"
+            if len(contracts_to_delete) > 5:
+                message += f"  ...他{len(contracts_to_delete) - 5}件"
 
         reply = QMessageBox.question(
-            self, "確認",
-            f"発注書「{program_name}」を削除してもよろしいですか?",
+            self, "確認", message,
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                self.db.delete_order_contract(contract_id)
-                QMessageBox.information(self, "成功", "発注書を削除しました。")
+            success_count = 0
+            error_messages = []
+
+            for contract_id, program_name, item_name in contracts_to_delete:
+                try:
+                    self.db.delete_order_contract(contract_id)
+                    success_count += 1
+                except Exception as e:
+                    error_messages.append(f"{program_name} - {item_name}: {str(e)}")
+
+            # 結果を表示
+            if success_count > 0:
                 self.load_contracts()
-            except Exception as e:
-                QMessageBox.critical(self, "エラー", f"発注書の削除に失敗しました:\n{str(e)}")
+
+            if error_messages:
+                error_text = "\n".join(error_messages)
+                QMessageBox.warning(
+                    self, "削除結果",
+                    f"{success_count}件削除しました。\n\n以下の削除に失敗しました:\n{error_text}"
+                )
+            elif success_count > 0:
+                QMessageBox.information(
+                    self, "成功",
+                    f"{success_count}件の発注書を削除しました。"
+                )
 
     def open_pdf(self):
         """PDFファイルを開く"""

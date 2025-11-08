@@ -101,6 +101,7 @@ class ExpenseItemsWidget(QWidget):
 
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.ExtendedSelection)  # 複数選択を許可
         self.table.doubleClicked.connect(self.edit_expense_item)
 
         layout.addWidget(self.table)
@@ -260,26 +261,61 @@ class ExpenseItemsWidget(QWidget):
                 QMessageBox.critical(self, "エラー", f"費用項目の更新に失敗しました:\n{e}")
 
     def delete_expense_item(self):
-        """選択された費用項目を削除"""
+        """選択された費用項目を削除（複数選択対応）"""
         selected_rows = self.table.selectionModel().selectedRows()
         if not selected_rows:
             QMessageBox.warning(self, "警告", "削除する費用項目を選択してください。")
             return
 
-        row = selected_rows[0].row()
-        item_id = self.table.item(row, 0).data(Qt.UserRole)
-        item_name = self.table.item(row, 3).text()
+        # 選択された費用項目のIDと名前を取得
+        items_to_delete = []
+        for index in selected_rows:
+            row = index.row()
+            item_id = self.table.item(row, 0).data(Qt.UserRole)
+            item_name = self.table.item(row, 3).text()
+            partner_name = self.table.item(row, 2).text() if self.table.item(row, 2) else ""
+            items_to_delete.append((item_id, item_name, partner_name))
+
+        # 確認メッセージ
+        if len(items_to_delete) == 1:
+            _, item_name, partner_name = items_to_delete[0]
+            message = f"費用項目「{item_name}」({partner_name})を削除してもよろしいですか？"
+        else:
+            message = f"{len(items_to_delete)}件の費用項目を削除してもよろしいですか?\n\n"
+            message += "削除対象:\n"
+            for _, item_name, partner_name in items_to_delete[:5]:  # 最初の5件のみ表示
+                message += f"  • {item_name} ({partner_name})\n"
+            if len(items_to_delete) > 5:
+                message += f"  ...他{len(items_to_delete) - 5}件"
 
         reply = QMessageBox.question(
-            self, "確認",
-            f"費用項目「{item_name}」を削除してもよろしいですか？",
+            self, "確認", message,
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                self.db.delete_expense_item(item_id)
-                QMessageBox.information(self, "成功", "費用項目を削除しました。")
+            success_count = 0
+            error_messages = []
+
+            for item_id, item_name, partner_name in items_to_delete:
+                try:
+                    self.db.delete_expense_item(item_id)
+                    success_count += 1
+                except Exception as e:
+                    error_messages.append(f"{item_name} ({partner_name}): {str(e)}")
+
+            # 結果を表示
+            if success_count > 0:
                 self.load_expense_items()
-            except Exception as e:
-                QMessageBox.critical(self, "エラー", f"費用項目の削除に失敗しました:\n{e}")
+
+            if error_messages:
+                error_text = "\n".join(error_messages)
+                QMessageBox.warning(
+                    self, "削除結果",
+                    f"{success_count}件削除しました。\n\n以下の削除に失敗しました:\n{error_text}"
+                )
+            elif success_count > 0:
+                QMessageBox.information(
+                    self, "成功",
+                    f"{success_count}件の費用項目を削除しました。"
+                )

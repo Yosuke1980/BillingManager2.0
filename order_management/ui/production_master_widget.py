@@ -94,6 +94,7 @@ class ProductionMasterWidget(QWidget):
             "ID", "番組・イベント名", "種別", "開始日", "終了日", "放送時間", "放送曜日", "ステータス"
         ])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.ExtendedSelection)  # 複数選択を許可
         self.table.doubleClicked.connect(self.edit_production)
 
         # ID列を非表示
@@ -256,29 +257,65 @@ class ProductionMasterWidget(QWidget):
             self.load_productions()
 
     def delete_production(self):
-        """削除"""
-        current_row = self.table.currentRow()
-        if current_row < 0:
+        """削除（複数選択対応）"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
             QMessageBox.warning(self, "警告", "削除する番組・イベントを選択してください")
             return
 
-        production_id = int(self.table.item(current_row, 0).text())
-        production_name = self.table.item(current_row, 1).text()
+        # 選択された番組のIDと名前を取得
+        productions_to_delete = []
+        for index in selected_rows:
+            row = index.row()
+            production_id = int(self.table.item(row, 0).text())
+            production_name = self.table.item(row, 1).text()
+            productions_to_delete.append((production_id, production_name))
+
+        # 確認メッセージ
+        if len(productions_to_delete) == 1:
+            message = f"番組・イベント「{productions_to_delete[0][1]}」を削除してもよろしいですか?\n\n"
+        else:
+            message = f"{len(productions_to_delete)}件の番組・イベントを削除してもよろしいですか?\n\n"
+            message += "削除対象:\n"
+            for _, name in productions_to_delete[:5]:  # 最初の5件のみ表示
+                message += f"  • {name}\n"
+            if len(productions_to_delete) > 5:
+                message += f"  ...他{len(productions_to_delete) - 5}件\n\n"
+
+        message += "※関連する出演者・制作会社情報も削除されます。\n"
+        message += "※関連する案件が存在する場合は削除できません。"
 
         reply = QMessageBox.question(
-            self, "確認",
-            f"番組・イベント「{production_name}」を削除してもよろしいですか?\n\n"
-            f"※関連する出演者・制作会社情報も削除されます。\n"
-            f"※関連する案件が存在する場合は削除できません。",
+            self, "確認", message,
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                self.db.delete_production(production_id)
+            success_count = 0
+            error_messages = []
+
+            for production_id, production_name in productions_to_delete:
+                try:
+                    self.db.delete_production(production_id)
+                    success_count += 1
+                except Exception as e:
+                    error_messages.append(f"{production_name}: {str(e)}")
+
+            # 結果を表示
+            if success_count > 0:
                 self.load_productions()
-            except Exception as e:
-                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{e}")
+
+            if error_messages:
+                error_text = "\n".join(error_messages)
+                QMessageBox.warning(
+                    self, "削除結果",
+                    f"{success_count}件削除しました。\n\n以下の削除に失敗しました:\n{error_text}"
+                )
+            elif success_count > 0:
+                QMessageBox.information(
+                    self, "成功",
+                    f"{success_count}件の番組・イベントを削除しました。"
+                )
 
     def export_to_csv(self):
         """制作物データをCSVに出力"""

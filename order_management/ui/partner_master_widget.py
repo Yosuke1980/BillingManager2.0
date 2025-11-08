@@ -68,6 +68,7 @@ class PartnerMasterWidget(QWidget):
             "電話番号", "取引先区分", "備考"
         ])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.ExtendedSelection)  # 複数選択を許可
         self.table.doubleClicked.connect(self.edit_partner)
 
         # ID列を非表示
@@ -172,29 +173,64 @@ class PartnerMasterWidget(QWidget):
                 QMessageBox.critical(self, "エラー", f"更新に失敗しました: {e}")
 
     def delete_partner(self):
-        """取引先削除"""
-        current_row = self.table.currentRow()
-        if current_row < 0:
+        """取引先削除（複数選択対応）"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
             QMessageBox.warning(self, "警告", "削除する取引先を選択してください")
             return
 
-        partner_id = int(self.table.item(current_row, 0).text())
-        partner_name = self.table.item(current_row, 1).text()
+        # 選択された取引先のIDと名前を取得
+        partners_to_delete = []
+        for index in selected_rows:
+            row = index.row()
+            partner_id = int(self.table.item(row, 0).text())
+            partner_name = self.table.item(row, 1).text()
+            partners_to_delete.append((partner_id, partner_name))
+
+        # 確認メッセージ
+        if len(partners_to_delete) == 1:
+            message = f"{partners_to_delete[0][1]} を削除してもよろしいですか?\n\n"
+        else:
+            message = f"{len(partners_to_delete)}件の取引先を削除してもよろしいですか?\n\n"
+            message += "削除対象:\n"
+            for _, name in partners_to_delete[:5]:  # 最初の5件のみ表示
+                message += f"  • {name}\n"
+            if len(partners_to_delete) > 5:
+                message += f"  ...他{len(partners_to_delete) - 5}件\n\n"
+
+        message += "※関連する費用項目がある場合は削除できません。"
 
         reply = QMessageBox.question(
-            self, "確認",
-            f"{partner_name} を削除してもよろしいですか?\n"
-            "関連する費用項目がある場合は削除できません。",
+            self, "確認", message,
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                self.pm.delete_partner(partner_id)
+            success_count = 0
+            error_messages = []
+
+            for partner_id, partner_name in partners_to_delete:
+                try:
+                    self.pm.delete_partner(partner_id)
+                    success_count += 1
+                except Exception as e:
+                    error_messages.append(f"{partner_name}: {str(e)}")
+
+            # 結果を表示
+            if success_count > 0:
                 self.load_partners()
-                QMessageBox.information(self, "成功", "取引先を削除しました")
-            except Exception as e:
-                QMessageBox.critical(self, "エラー", f"削除に失敗しました: {e}")
+
+            if error_messages:
+                error_text = "\n".join(error_messages)
+                QMessageBox.warning(
+                    self, "削除結果",
+                    f"{success_count}件削除しました。\n\n以下の削除に失敗しました:\n{error_text}"
+                )
+            elif success_count > 0:
+                QMessageBox.information(
+                    self, "成功",
+                    f"{success_count}件の取引先を削除しました。"
+                )
 
 
 class PartnerEditDialog(QDialog):

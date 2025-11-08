@@ -68,6 +68,7 @@ class CastMasterWidget(QWidget):
             "ID", "出演者名", "所属事務所", "所属コード", "備考"
         ])
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.ExtendedSelection)  # 複数選択を許可
         self.table.doubleClicked.connect(self.edit_cast)
         self.table.setColumnHidden(0, True)
 
@@ -124,27 +125,64 @@ class CastMasterWidget(QWidget):
             self.load_casts()
 
     def delete_cast(self):
-        """出演者削除"""
-        current_row = self.table.currentRow()
-        if current_row < 0:
+        """出演者削除（複数選択対応）"""
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
             QMessageBox.warning(self, "警告", "削除する出演者を選択してください")
             return
 
-        cast_id = int(self.table.item(current_row, 0).text())
-        cast_name = self.table.item(current_row, 1).text()
+        # 選択された出演者のIDと名前を取得
+        casts_to_delete = []
+        for index in selected_rows:
+            row = index.row()
+            cast_id = int(self.table.item(row, 0).text())
+            cast_name = self.table.item(row, 1).text()
+            casts_to_delete.append((cast_id, cast_name))
+
+        # 確認メッセージ
+        if len(casts_to_delete) == 1:
+            message = f"出演者「{casts_to_delete[0][1]}」を削除してもよろしいですか?\n\n"
+        else:
+            message = f"{len(casts_to_delete)}件の出演者を削除してもよろしいですか?\n\n"
+            message += "削除対象:\n"
+            for _, name in casts_to_delete[:5]:  # 最初の5件のみ表示
+                message += f"  • {name}\n"
+            if len(casts_to_delete) > 5:
+                message += f"  ...他{len(casts_to_delete) - 5}件\n\n"
+
+        message += "※関連する番組が存在する場合は削除できません。"
 
         reply = QMessageBox.question(
-            self, "確認",
-            f"出演者「{cast_name}」を削除してもよろしいですか?\n※関連する番組が存在する場合は削除できません。",
+            self, "確認", message,
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                self.db.delete_cast(cast_id)
+            success_count = 0
+            error_messages = []
+
+            for cast_id, cast_name in casts_to_delete:
+                try:
+                    self.db.delete_cast(cast_id)
+                    success_count += 1
+                except Exception as e:
+                    error_messages.append(f"{cast_name}: {str(e)}")
+
+            # 結果を表示
+            if success_count > 0:
                 self.load_casts()
-            except Exception as e:
-                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{e}")
+
+            if error_messages:
+                error_text = "\n".join(error_messages)
+                QMessageBox.warning(
+                    self, "削除結果",
+                    f"{success_count}件削除しました。\n\n以下の削除に失敗しました:\n{error_text}"
+                )
+            elif success_count > 0:
+                QMessageBox.information(
+                    self, "成功",
+                    f"{success_count}件の出演者を削除しました。"
+                )
 
     def export_to_csv(self):
         """出演者データをCSVに出力"""
