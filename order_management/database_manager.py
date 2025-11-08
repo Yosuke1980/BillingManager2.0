@@ -51,10 +51,66 @@ class OrderManagementDB:
 
     def __init__(self, db_path="order_management.db"):
         self.db_path = db_path
+        # 起動時に自動マイグレーションを実行
+        self._auto_migrate()
 
     def _get_connection(self):
         """データベース接続を取得"""
         return sqlite3.connect(self.db_path)
+
+    def _check_column_exists(self, table_name, column_name):
+        """テーブルに指定したカラムが存在するかチェック"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            columns = [row[1] for row in cursor.fetchall()]
+            return column_name in columns
+        finally:
+            conn.close()
+
+    def _auto_migrate(self):
+        """起動時に自動でマイグレーションを実行"""
+        import os
+        if not os.path.exists(self.db_path):
+            return  # データベースがまだ作成されていない場合はスキップ
+
+        try:
+            # expense_itemsテーブルにwork_typeカラムが存在しない場合は追加
+            if not self._check_column_exists('expense_items', 'work_type'):
+                print("📝 自動マイグレーション: expense_itemsテーブルにwork_typeカラムを追加中...")
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("""
+                        ALTER TABLE expense_items
+                        ADD COLUMN work_type TEXT DEFAULT '制作'
+                    """)
+
+                    # 既存データを契約から更新
+                    cursor.execute("""
+                        UPDATE expense_items
+                        SET work_type = (
+                            SELECT c.work_type
+                            FROM contracts c
+                            WHERE c.id = expense_items.contract_id
+                        )
+                        WHERE expense_items.contract_id IS NOT NULL
+                          AND EXISTS (
+                            SELECT 1 FROM contracts c
+                            WHERE c.id = expense_items.contract_id
+                          )
+                    """)
+
+                    conn.commit()
+                    print("✓ work_typeカラムを追加しました")
+                except Exception as e:
+                    conn.rollback()
+                    print(f"⚠️  マイグレーション警告: {e}")
+                finally:
+                    conn.close()
+        except Exception as e:
+            print(f"⚠️  自動マイグレーションエラー: {e}")
 
     # ========================================
     # 統合取引先マスター操作（Phase 6）
