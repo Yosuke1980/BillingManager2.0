@@ -724,14 +724,14 @@ class OrderManagementDB:
             conn.close()
 
     def get_production_cast_with_contracts(self, production_id: int) -> List[Tuple]:
-        """番組の出演者と契約情報を取得
+        """番組の出演者と契約情報を取得（新テーブル: contracts）
 
         Args:
             production_id: 番組ID
 
         Returns:
             List[Tuple]: (production_cast_id, cast_id, cast_name, role, partner_id, partner_name,
-                         contract_id, item_name, unit_price, order_status, payment_timing,
+                         contract_id, item_name, unit_price, document_status, payment_timing,
                          contract_start_date, contract_end_date)
         """
         conn = self._get_connection()
@@ -749,14 +749,14 @@ class OrderManagementDB:
                     oc.id as contract_id,
                     oc.item_name,
                     oc.unit_price,
-                    oc.order_status,
+                    oc.document_status,
                     oc.payment_timing,
                     oc.contract_start_date,
                     oc.contract_end_date
                 FROM production_cast pc
                 INNER JOIN cast c ON pc.cast_id = c.id
                 INNER JOIN partners p ON c.partner_id = p.id
-                LEFT JOIN order_contracts oc ON
+                LEFT JOIN contracts oc ON
                     oc.production_id = pc.production_id
                     AND oc.partner_id = p.id
                 WHERE pc.production_id = ?
@@ -775,7 +775,7 @@ class OrderManagementDB:
 
         Returns:
             List[Tuple]: (production_producer_id, partner_id, partner_name,
-                         contract_id, item_name, unit_price, order_status, payment_timing,
+                         contract_id, item_name, unit_price, document_status, payment_timing,
                          contract_start_date, contract_end_date)
         """
         conn = self._get_connection()
@@ -790,13 +790,13 @@ class OrderManagementDB:
                     oc.id as contract_id,
                     oc.item_name,
                     oc.unit_price,
-                    oc.order_status,
+                    oc.document_status,
                     oc.payment_timing,
                     oc.contract_start_date,
                     oc.contract_end_date
                 FROM production_producers pp
                 INNER JOIN partners p ON pp.partner_id = p.id
-                LEFT JOIN order_contracts oc ON
+                LEFT JOIN contracts oc ON
                     oc.production_id = pp.production_id
                     AND oc.partner_id = p.id
                 WHERE pp.production_id = ?

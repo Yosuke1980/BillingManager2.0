@@ -499,7 +499,7 @@ class ProductionEditDialog(QDialog):
         cast_groups = {}
         for row in cast_with_contracts:
             # row: (production_cast_id, cast_id, cast_name, role, partner_id, partner_name,
-            #       contract_id, item_name, unit_price, order_status, payment_timing,
+            #       contract_id, item_name, unit_price, document_status, payment_timing,
             #       contract_start_date, contract_end_date)
             production_cast_id = row[0]
             cast_id = row[1]
@@ -671,7 +671,7 @@ class ProductionEditDialog(QDialog):
         producer_groups = {}
         for row in producer_with_contracts:
             # row: (production_producer_id, partner_id, partner_name,
-            #       contract_id, item_name, unit_price, order_status, payment_timing,
+            #       contract_id, item_name, unit_price, document_status, payment_timing,
             #       contract_start_date, contract_end_date)
             production_producer_id = row[0]
             partner_id = row[1]
