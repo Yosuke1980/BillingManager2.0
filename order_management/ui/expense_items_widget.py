@@ -243,18 +243,23 @@ class ExpenseItemsWidget(QWidget):
             else:
                 total_amount += amount
 
+            # 日付パース（1回のみ、パフォーマンス改善）
+            payment_date = None
+            days_until = None
+            if expected_payment_date:
+                try:
+                    payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
+                    days_until = (payment_date.date() - datetime.now().date()).days
+                except:
+                    pass
+
             if payment_status == "支払済":
                 paid_count += 1
             else:
                 unpaid_count += 1
                 # 期限超過チェック
-                if expected_payment_date:
-                    try:
-                        payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
-                        if payment_date.date() < datetime.now().date():
-                            overdue_count += 1
-                    except:
-                        pass
+                if payment_date and days_until is not None and days_until < 0:
+                    overdue_count += 1
 
             # 金額のフォーマット
             if amount_pending == 1:
@@ -266,13 +271,8 @@ class ExpenseItemsWidget(QWidget):
             row_color = None
 
             # 最優先: 期限超過（未払い＋支払予定日が過去）
-            if payment_status == "未払い" and expected_payment_date:
-                try:
-                    payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
-                    if payment_date.date() < datetime.now().date():
-                        row_color = QColor(255, 200, 200)  # 濃い赤（期限超過）
-                except:
-                    pass
+            if payment_status == "未払い" and days_until is not None and days_until < 0:
+                row_color = QColor(255, 200, 200)  # 濃い赤（期限超過）
 
             # 支払済み
             if not row_color and payment_status == "支払済":
@@ -283,14 +283,8 @@ class ExpenseItemsWidget(QWidget):
                 row_color = QColor(255, 243, 224)  # 薄いオレンジ（金額未定）
 
             # 支払間近（7日以内）
-            if not row_color and payment_status == "未払い" and expected_payment_date:
-                try:
-                    payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
-                    days_until = (payment_date.date() - datetime.now().date()).days
-                    if 0 <= days_until <= 7:
-                        row_color = QColor(255, 255, 200)  # 黄（間近）
-                except:
-                    pass
+            if not row_color and payment_status == "未払い" and days_until is not None and 0 <= days_until <= 7:
+                row_color = QColor(255, 255, 200)  # 黄（間近）
 
             # テーブルにデータを設定
             id_item = QTableWidgetItem(str(item_id))
