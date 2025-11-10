@@ -5,7 +5,7 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
                              QComboBox, QMessageBox, QHeaderView, QGroupBox, QGridLayout,
-                             QDialog, QFileDialog, QCheckBox)
+                             QDialog, QFileDialog, QCheckBox, QFormLayout)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from datetime import datetime
