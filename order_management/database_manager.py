@@ -3187,14 +3187,15 @@ class OrderManagementDB:
     # 費用項目管理
     # ========================================
 
-    def get_expense_items_with_details(self, search_term=None, payment_status=None, status=None, payment_month=None):
+    def get_expense_items_with_details(self, search_term=None, payment_status=None, status=None, payment_month=None, show_archived=False):
         """費用項目を詳細情報付きで取得
 
         Args:
             search_term: 検索キーワード（番組名、取引先名、項目名）
             payment_status: 支払状態フィルタ
             status: 状態フィルタ
-            payment_month: 支払月フィルタ（YYYY-MM形式）
+            payment_month: 支払月フィルタ（YYYY-MM形式または"current_unpaid"）
+            show_archived: アーカイブ済み項目を表示するか
 
         Returns:
             list: (id, production_id, production_name, partner_id, partner_name,
@@ -3202,7 +3203,7 @@ class OrderManagementDB:
                    status, payment_status, contract_id, notes, work_type,
                    order_number, order_date, invoice_received_date, actual_payment_date,
                    invoice_number, withholding_tax, consumption_tax, payment_amount,
-                   invoice_file_path, payment_method, approver, approval_date)
+                   invoice_file_path, payment_method, approver, approval_date, amount_pending)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -3225,6 +3226,10 @@ class OrderManagementDB:
             """
             params = []
 
+            # アーカイブフィルタ
+            if not show_archived:
+                query += " AND (ei.archived = 0 OR ei.archived IS NULL)"
+
             if search_term:
                 query += """ AND (prod.name LIKE ? OR part.name LIKE ? OR ei.item_name LIKE ?)"""
                 params.extend([f"%{search_term}%"] * 3)
@@ -3237,7 +3242,13 @@ class OrderManagementDB:
                 query += " AND ei.status = ?"
                 params.append(status)
 
-            if payment_month:
+            if payment_month == "current_unpaid":
+                # 当月または未払いのみ
+                query += """ AND (
+                    strftime('%Y-%m', ei.expected_payment_date) = strftime('%Y-%m', 'now')
+                    OR ei.payment_status = '未払い'
+                )"""
+            elif payment_month:
                 # YYYY-MM形式の月でフィルタ（expected_payment_dateの年月が一致）
                 query += " AND strftime('%Y-%m', ei.expected_payment_date) = ?"
                 params.append(payment_month)
@@ -3266,6 +3277,61 @@ class OrderManagementDB:
                 ORDER BY payment_month DESC
             """)
             return [row[0] for row in cursor.fetchall()]
+        finally:
+            conn.close()
+
+    def archive_old_expense_items(self, months_old=12):
+        """古い支払済み項目をアーカイブ
+
+        Args:
+            months_old: アーカイブ対象の月数（デフォルト12ヶ月）
+
+        Returns:
+            int: アーカイブした件数
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE expense_items
+                SET archived = 1, archived_date = CURRENT_DATE
+                WHERE payment_status = '支払済'
+                AND expected_payment_date < date('now', ? || ' months')
+                AND archived = 0
+            """, (f'-{months_old}',))
+
+            count = cursor.rowcount
+            conn.commit()
+            log_message(f"{count}件の費用項目をアーカイブしました")
+            return count
+        except Exception as e:
+            conn.rollback()
+            log_message(f"アーカイブエラー: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def get_archive_candidate_count(self, months_old=12):
+        """アーカイブ対象件数を取得
+
+        Args:
+            months_old: アーカイブ対象の月数（デフォルト12ヶ月）
+
+        Returns:
+            int: アーカイブ対象件数
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM expense_items
+                WHERE payment_status = '支払済'
+                AND expected_payment_date < date('now', ? || ' months')
+                AND archived = 0
+            """, (f'-{months_old}',))
+            return cursor.fetchone()[0]
         finally:
             conn.close()
 

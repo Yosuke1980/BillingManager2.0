@@ -5,7 +5,7 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
                              QComboBox, QMessageBox, QHeaderView, QGroupBox, QGridLayout,
-                             QDialog, QFileDialog)
+                             QDialog, QFileDialog, QCheckBox)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 from datetime import datetime
@@ -56,6 +56,12 @@ class ExpenseItemsWidget(QWidget):
         self.pending_label.setStyleSheet("font-size: 13px; color: #f57c00;")
         dashboard_layout.addWidget(self.pending_label, 1, 2)
 
+        self.overdue_label = QLabel("⚠️ 期限超過: 0件")
+        self.overdue_label.setStyleSheet("font-size: 13px; color: #d32f2f; font-weight: bold;")
+        self.overdue_label.setCursor(Qt.PointingHandCursor)
+        self.overdue_label.mousePressEvent = self._show_overdue_items
+        dashboard_layout.addWidget(self.overdue_label, 2, 0)
+
         dashboard_group.setLayout(dashboard_layout)
         layout.addWidget(dashboard_group)
 
@@ -86,6 +92,10 @@ class ExpenseItemsWidget(QWidget):
         self._populate_payment_months()
         self.payment_month_filter.currentTextChanged.connect(self.load_expense_items)
         filter_layout.addWidget(self.payment_month_filter)
+
+        self.show_archived_checkbox = QCheckBox("アーカイブ済みを表示")
+        self.show_archived_checkbox.stateChanged.connect(self.load_expense_items)
+        filter_layout.addWidget(self.show_archived_checkbox)
 
         layout.addLayout(filter_layout)
 
@@ -135,6 +145,9 @@ class ExpenseItemsWidget(QWidget):
         self.change_production_button = create_button("📋 番組を変更", self.change_production_bulk)
         button_layout.addWidget(self.change_production_button)
 
+        self.archive_button = create_button("📦 アーカイブ実行", self.archive_old_items)
+        button_layout.addWidget(self.archive_button)
+
         button_layout.addStretch()
 
         self.export_csv_button = create_button("📤 CSV出力", self.export_to_csv)
@@ -152,6 +165,9 @@ class ExpenseItemsWidget(QWidget):
 
     def _populate_payment_months(self):
         """支払月のリストを作成"""
+        # 特殊フィルタを最初に追加
+        self.payment_month_filter.addItem("当月＋未払い", "current_unpaid")
+
         # データベースから支払予定日の年月を取得
         try:
             months = self.db.get_payment_months()
@@ -165,12 +181,16 @@ class ExpenseItemsWidget(QWidget):
         except Exception as e:
             print(f"支払月リスト作成エラー: {e}")
 
+        # デフォルトを「当月＋未払い」に設定
+        self.payment_month_filter.setCurrentIndex(0)
+
     def load_expense_items(self):
         """費用項目を読み込んで表示"""
         search_term = self.search_input.text()
         payment_status = self.payment_status_filter.currentText()
         status = self.status_filter.currentText()
         payment_month = self.payment_month_filter.currentData()
+        show_archived = self.show_archived_checkbox.isChecked()
 
         if payment_status == "すべて":
             payment_status = None
@@ -182,7 +202,8 @@ class ExpenseItemsWidget(QWidget):
             search_term=search_term,
             payment_status=payment_status,
             status=status,
-            payment_month=payment_month
+            payment_month=payment_month,
+            show_archived=show_archived
         )
 
         self.table.setRowCount(len(expense_items))
@@ -192,6 +213,7 @@ class ExpenseItemsWidget(QWidget):
         unpaid_count = 0
         paid_count = 0
         pending_count = 0
+        overdue_count = 0
 
         for row, item in enumerate(expense_items):
             # データ構造: (id, production_id, production_name, partner_id, partner_name,
@@ -225,6 +247,14 @@ class ExpenseItemsWidget(QWidget):
                 paid_count += 1
             else:
                 unpaid_count += 1
+                # 期限超過チェック
+                if expected_payment_date:
+                    try:
+                        payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
+                        if payment_date.date() < datetime.now().date():
+                            overdue_count += 1
+                    except:
+                        pass
 
             # 金額のフォーマット
             if amount_pending == 1:
@@ -232,24 +262,35 @@ class ExpenseItemsWidget(QWidget):
             else:
                 amount_text = f"¥{int(amount):,}"
 
-            # 行の背景色を決定（優先順位: 支払済 > 金額未定 > 支払遅延 > 支払間近）
+            # 行の背景色を決定（優先順位: 期限超過 > 支払済 > 金額未定 > 支払間近）
             row_color = None
-            if payment_status == "支払済":
+
+            # 最優先: 期限超過（未払い＋支払予定日が過去）
+            if payment_status == "未払い" and expected_payment_date:
+                try:
+                    payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
+                    if payment_date.date() < datetime.now().date():
+                        row_color = QColor(255, 200, 200)  # 濃い赤（期限超過）
+                except:
+                    pass
+
+            # 支払済み
+            if not row_color and payment_status == "支払済":
                 row_color = QColor(220, 255, 220)  # 緑
-            elif amount_pending == 1:
+
+            # 金額未定
+            if not row_color and amount_pending == 1:
                 row_color = QColor(255, 243, 224)  # 薄いオレンジ（金額未定）
-            elif payment_status == "未払い":
-                # 支払予定日をチェック
-                if expected_payment_date:
-                    try:
-                        payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
-                        days_until = (payment_date - datetime.now()).days
-                        if days_until < 0:
-                            row_color = QColor(255, 220, 220)  # 赤（遅延）
-                        elif days_until <= 7:
-                            row_color = QColor(255, 255, 200)  # 黄（間近）
-                    except:
-                        pass
+
+            # 支払間近（7日以内）
+            if not row_color and payment_status == "未払い" and expected_payment_date:
+                try:
+                    payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
+                    days_until = (payment_date.date() - datetime.now().date()).days
+                    if 0 <= days_until <= 7:
+                        row_color = QColor(255, 255, 200)  # 黄（間近）
+                except:
+                    pass
 
             # テーブルにデータを設定
             id_item = QTableWidgetItem(str(item_id))
@@ -275,15 +316,50 @@ class ExpenseItemsWidget(QWidget):
                         item.setBackground(row_color)
 
         # ダッシュボードを更新
-        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count, pending_count)
+        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count, pending_count, overdue_count)
 
-    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count, pending_count):
+    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count, pending_count, overdue_count):
         """ダッシュボードの統計を更新"""
         self.total_label.setText(f"総件数: {total_count}件")
         self.amount_label.setText(f"総額: ¥{int(total_amount):,}")
         self.unpaid_label.setText(f"未払い: {unpaid_count}件")
         self.paid_label.setText(f"支払済: {paid_count}件")
         self.pending_label.setText(f"金額未定: {pending_count}件")
+        self.overdue_label.setText(f"⚠️ 期限超過: {overdue_count}件")
+
+    def _show_overdue_items(self, event):
+        """期限超過項目のみを表示"""
+        # 支払状態を「未払い」に設定
+        self.payment_status_filter.setCurrentText("未払い")
+        # 支払月を「すべて」に設定
+        idx = self.payment_month_filter.findData(None)
+        if idx >= 0:
+            self.payment_month_filter.setCurrentIndex(idx)
+        # load_expense_itemsは自動的に呼ばれる
+
+    def archive_old_items(self):
+        """1年以上前の支払済み項目をアーカイブ"""
+        try:
+            count = self.db.get_archive_candidate_count(12)
+            if count == 0:
+                QMessageBox.information(self, "アーカイブ",
+                    "アーカイブ対象の項目はありません。\n\n"
+                    "（1年以上前の支払済み項目が対象です）")
+                return
+
+            reply = QMessageBox.question(self, "アーカイブ確認",
+                f"1年以上前の支払済み項目（{count}件）をアーカイブしますか？\n\n"
+                f"アーカイブした項目は通常表示されなくなりますが、\n"
+                f"「アーカイブ済みを表示」をチェックすると閲覧できます。",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+            if reply == QMessageBox.Yes:
+                archived_count = self.db.archive_old_expense_items(12)
+                QMessageBox.information(self, "アーカイブ完了",
+                    f"✓ {archived_count}件の項目をアーカイブしました。")
+                self.load_expense_items()
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"アーカイブに失敗しました:\n{e}")
 
     def add_expense_item(self):
         """費用項目を追加"""
