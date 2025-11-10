@@ -11,6 +11,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QDate
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.custom_date_edit import ImprovedDateEdit
+from order_management.ui.ui_helpers import create_button
+from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
 
 
 class ExpenseItemEditDialog(QDialog):
@@ -54,6 +56,11 @@ class ExpenseItemEditDialog(QDialog):
         self.link_contract_checkbox = QCheckBox("契約から自動入力")
         self.link_contract_checkbox.setChecked(True)
         contract_layout.addWidget(self.link_contract_checkbox)
+
+        # 新規契約作成ボタン
+        new_contract_btn = create_button("➕ 新規契約", self.create_new_contract)
+        new_contract_btn.setMinimumWidth(110)
+        contract_layout.addWidget(new_contract_btn)
 
         form_layout.addRow("契約:", contract_layout)
 
@@ -357,3 +364,78 @@ class ExpenseItemEditDialog(QDialog):
                         self.production_combo.setCurrentIndex(i)
                         self.production_combo.blockSignals(False)
                         break
+
+    def create_new_contract(self):
+        """新規契約を作成"""
+        # 番組が選択されているか確認
+        production_id = self.production_combo.currentData()
+        if not production_id:
+            QMessageBox.warning(
+                self, "番組未選択",
+                "契約を作成するには、まず番組を選択してください。"
+            )
+            return
+
+        # 現在の選択値を取得
+        partner_id = self.partner_combo.currentData()
+        work_type = self.work_type_combo.currentText()
+
+        # 契約編集ダイアログを開く
+        dialog = OrderContractEditDialog(
+            self,
+            production_id=production_id,
+            partner_id=partner_id,
+            work_type=work_type
+        )
+
+        if dialog.exec_() == QDialog.Accepted:
+            # 契約リストを更新
+            self.refresh_contracts()
+
+            # 新規作成された契約を選択
+            # 最新の契約を取得（番組と取引先でフィルタ）
+            try:
+                conn = self.db._get_connection()
+                cursor = conn.cursor()
+
+                # 最新の契約IDを取得
+                if partner_id:
+                    cursor.execute("""
+                        SELECT id FROM contracts
+                        WHERE production_id = ? AND partner_id = ?
+                        ORDER BY id DESC
+                        LIMIT 1
+                    """, (production_id, partner_id))
+                else:
+                    cursor.execute("""
+                        SELECT id FROM contracts
+                        WHERE production_id = ?
+                        ORDER BY id DESC
+                        LIMIT 1
+                    """, (production_id,))
+
+                result = cursor.fetchone()
+                conn.close()
+
+                if result:
+                    new_contract_id = result[0]
+                    # 契約コンボボックスで新規契約を選択
+                    idx = self.contract_combo.findData(new_contract_id)
+                    if idx >= 0:
+                        self.contract_combo.setCurrentIndex(idx)
+                        # 契約情報を自動入力
+                        self._on_contract_selected(idx)
+                        QMessageBox.information(
+                            self, "成功",
+                            "契約を作成しました。契約情報が自動入力されています。"
+                        )
+                    else:
+                        QMessageBox.information(
+                            self, "成功",
+                            "契約を作成しました。"
+                        )
+            except Exception as e:
+                QMessageBox.warning(
+                    self, "警告",
+                    f"契約を作成しましたが、自動選択に失敗しました:\n{e}"
+                )
