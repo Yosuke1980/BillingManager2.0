@@ -3187,13 +3187,14 @@ class OrderManagementDB:
     # 費用項目管理
     # ========================================
 
-    def get_expense_items_with_details(self, search_term=None, payment_status=None, status=None):
+    def get_expense_items_with_details(self, search_term=None, payment_status=None, status=None, payment_month=None):
         """費用項目を詳細情報付きで取得
 
         Args:
             search_term: 検索キーワード（番組名、取引先名、項目名）
             payment_status: 支払状態フィルタ
             status: 状態フィルタ
+            payment_month: 支払月フィルタ（YYYY-MM形式）
 
         Returns:
             list: (id, production_id, production_name, partner_id, partner_name,
@@ -3236,10 +3237,35 @@ class OrderManagementDB:
                 query += " AND ei.status = ?"
                 params.append(status)
 
+            if payment_month:
+                # YYYY-MM形式の月でフィルタ（expected_payment_dateの年月が一致）
+                query += " AND strftime('%Y-%m', ei.expected_payment_date) = ?"
+                params.append(payment_month)
+
             query += " ORDER BY ei.expected_payment_date DESC, ei.id DESC"
 
             cursor.execute(query, params)
             return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_payment_months(self):
+        """費用項目の支払予定日から年月リストを取得
+
+        Returns:
+            list: YYYY-MM形式の年月リスト（降順）
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT DISTINCT strftime('%Y-%m', expected_payment_date) as payment_month
+                FROM expense_items
+                WHERE expected_payment_date IS NOT NULL
+                ORDER BY payment_month DESC
+            """)
+            return [row[0] for row in cursor.fetchall()]
         finally:
             conn.close()
 

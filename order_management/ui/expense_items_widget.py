@@ -76,6 +76,13 @@ class ExpenseItemsWidget(QWidget):
         self.status_filter.currentTextChanged.connect(self.load_expense_items)
         filter_layout.addWidget(self.status_filter)
 
+        filter_layout.addWidget(QLabel("支払月:"))
+        self.payment_month_filter = QComboBox()
+        self.payment_month_filter.addItem("すべて", None)
+        self._populate_payment_months()
+        self.payment_month_filter.currentTextChanged.connect(self.load_expense_items)
+        filter_layout.addWidget(self.payment_month_filter)
+
         layout.addLayout(filter_layout)
 
         # ===== テーブル =====
@@ -139,11 +146,27 @@ class ExpenseItemsWidget(QWidget):
 
         self.setLayout(layout)
 
+    def _populate_payment_months(self):
+        """支払月のリストを作成"""
+        # データベースから支払予定日の年月を取得
+        try:
+            months = self.db.get_payment_months()
+            for month in months:
+                # month: "2025-08" 形式
+                if month:
+                    # "2025年8月" 形式に変換
+                    year, month_num = month.split('-')
+                    display_text = f"{year}年{int(month_num)}月"
+                    self.payment_month_filter.addItem(display_text, month)
+        except Exception as e:
+            print(f"支払月リスト作成エラー: {e}")
+
     def load_expense_items(self):
         """費用項目を読み込んで表示"""
         search_term = self.search_input.text()
         payment_status = self.payment_status_filter.currentText()
         status = self.status_filter.currentText()
+        payment_month = self.payment_month_filter.currentData()
 
         if payment_status == "すべて":
             payment_status = None
@@ -154,7 +177,8 @@ class ExpenseItemsWidget(QWidget):
         expense_items = self.db.get_expense_items_with_details(
             search_term=search_term,
             payment_status=payment_status,
-            status=status
+            status=status,
+            payment_month=payment_month
         )
 
         self.table.setRowCount(len(expense_items))
