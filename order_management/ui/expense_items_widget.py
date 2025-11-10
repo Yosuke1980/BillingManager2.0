@@ -165,15 +165,28 @@ class ExpenseItemsWidget(QWidget):
 
     def _populate_payment_months(self):
         """支払月のリストを作成"""
+        from datetime import datetime
+        from dateutil.relativedelta import relativedelta
+
         # 特殊フィルタを最初に追加
+        self.payment_month_filter.addItem("今月末まで", "until_current_month_end")
         self.payment_month_filter.addItem("来月末まで", "until_next_month_end")
 
         # データベースから支払予定日の年月を取得
         try:
             months = self.db.get_payment_months()
+
+            # 再来月の年月を計算
+            next_next_month = datetime.now() + relativedelta(months=2)
+            next_next_month_str = next_next_month.strftime('%Y-%m')
+
             for month in months:
                 # month: "2025-08" 形式
                 if month:
+                    # 再来月末以降の月は除外
+                    if month >= next_next_month_str:
+                        continue
+
                     # "2025年8月" 形式に変換
                     year, month_num = month.split('-')
                     display_text = f"{year}年{int(month_num)}月"
@@ -182,7 +195,7 @@ class ExpenseItemsWidget(QWidget):
             print(f"支払月リスト作成エラー: {e}")
 
         # デフォルトを「来月末まで」に設定
-        self.payment_month_filter.setCurrentIndex(0)
+        self.payment_month_filter.setCurrentIndex(1)
 
     def load_expense_items(self):
         """費用項目を読み込んで表示"""

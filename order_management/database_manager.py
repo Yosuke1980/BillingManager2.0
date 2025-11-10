@@ -3242,7 +3242,10 @@ class OrderManagementDB:
                 query += " AND ei.status = ?"
                 params.append(status)
 
-            if payment_month == "until_next_month_end":
+            if payment_month == "until_current_month_end":
+                # 今月末までの支払予定
+                query += """ AND ei.expected_payment_date <= date('now', 'start of month', '+1 month', '-1 day')"""
+            elif payment_month == "until_next_month_end":
                 # 来月末までの支払予定
                 query += """ AND ei.expected_payment_date <= date('now', 'start of month', '+2 months', '-1 day')"""
             elif payment_month:
