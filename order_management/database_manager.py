@@ -4,7 +4,7 @@
 """
 import sqlite3
 from typing import List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils import log_message
 
 
