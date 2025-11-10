@@ -89,12 +89,19 @@ class ExpenseItemEditDialog(QDialog):
         form_layout.addRow("業務種別:", self.work_type_combo)
 
         # 金額
+        amount_layout = QHBoxLayout()
         self.amount_spin = QDoubleSpinBox()
         self.amount_spin.setRange(0, 99999999)
         self.amount_spin.setDecimals(0)
         self.amount_spin.setSuffix(" 円")
         self.amount_spin.setGroupSeparatorShown(True)
-        form_layout.addRow("金額:", self.amount_spin)
+        amount_layout.addWidget(self.amount_spin)
+
+        self.amount_pending_checkbox = QCheckBox("金額未定")
+        self.amount_pending_checkbox.stateChanged.connect(self._on_amount_pending_changed)
+        amount_layout.addWidget(self.amount_pending_checkbox)
+
+        form_layout.addRow("金額:", amount_layout)
 
         # 実施日
         self.impl_date_edit = ImprovedDateEdit()
@@ -295,27 +302,44 @@ class ExpenseItemEditDialog(QDialog):
         if idx >= 0:
             self.work_type_combo.setCurrentIndex(idx)
 
+        # 金額未定フラグ
+        amount_pending = self.expense_data[27] if len(self.expense_data) > 27 else 0
+        self.amount_pending_checkbox.setChecked(amount_pending == 1)
+        if amount_pending == 1:
+            self.amount_spin.setEnabled(False)
+
+    def _on_amount_pending_changed(self, state):
+        """金額未定チェックボックス変更時の処理"""
+        is_pending = (state == 2)  # Qt.Checked
+        self.amount_spin.setEnabled(not is_pending)
+        if is_pending:
+            self.amount_spin.setValue(0)
+
     def validate_and_accept(self):
         """バリデーション後に受け入れ"""
         if not self.item_name_edit.text().strip():
             QMessageBox.warning(self, "入力エラー", "項目名を入力してください")
             return
 
-        if self.amount_spin.value() <= 0:
-            QMessageBox.warning(self, "入力エラー", "金額を入力してください")
-            return
+        # 金額未定の場合はバリデーションスキップ
+        if not self.amount_pending_checkbox.isChecked():
+            if self.amount_spin.value() <= 0:
+                QMessageBox.warning(self, "入力エラー", "金額を入力してください")
+                return
 
         self.accept()
 
     def get_expense_data(self):
         """入力されたデータを取得"""
+        is_pending = self.amount_pending_checkbox.isChecked()
         data = {
             'contract_id': self.contract_combo.currentData(),
             'production_id': self.production_combo.currentData(),
             'partner_id': self.partner_combo.currentData(),
             'item_name': self.item_name_edit.text().strip(),
             'work_type': self.work_type_combo.currentText(),
-            'amount': self.amount_spin.value(),
+            'amount': 0 if is_pending else self.amount_spin.value(),
+            'amount_pending': 1 if is_pending else 0,
             'implementation_date': self.impl_date_edit.date().toString('yyyy-MM-dd'),
             'expected_payment_date': self.payment_date_edit.date().toString('yyyy-MM-dd'),
             'status': self.status_combo.currentText(),

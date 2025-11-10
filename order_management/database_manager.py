@@ -3217,7 +3217,7 @@ class OrderManagementDB:
                        ei.order_number, ei.order_date, ei.invoice_received_date,
                        ei.actual_payment_date, ei.invoice_number, ei.withholding_tax,
                        ei.consumption_tax, ei.payment_amount, ei.invoice_file_path,
-                       ei.payment_method, ei.approver, ei.approval_date
+                       ei.payment_method, ei.approver, ei.approval_date, ei.amount_pending
                 FROM expense_items ei
                 LEFT JOIN productions prod ON ei.production_id = prod.id
                 LEFT JOIN partners part ON ei.partner_id = part.id
@@ -3388,6 +3388,7 @@ class OrderManagementDB:
                         item_name = ?,
                         work_type = ?,
                         amount = ?,
+                        amount_pending = ?,
                         implementation_date = ?,
                         expected_payment_date = ?,
                         status = ?,
@@ -3401,7 +3402,8 @@ class OrderManagementDB:
                     expense_data.get('partner_id'),
                     expense_data.get('item_name'),
                     expense_data.get('work_type', '制作'),
-                    expense_data.get('amount'),
+                    expense_data.get('amount', 0),
+                    expense_data.get('amount_pending', 0),
                     expense_data.get('implementation_date'),
                     expense_data.get('expected_payment_date'),
                     expense_data.get('status', '発注予定'),
@@ -3414,16 +3416,17 @@ class OrderManagementDB:
                 cursor.execute("""
                     INSERT INTO expense_items (
                         contract_id, production_id, partner_id, item_name, work_type,
-                        amount, implementation_date, expected_payment_date,
+                        amount, amount_pending, implementation_date, expected_payment_date,
                         status, payment_status, notes
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     expense_data.get('contract_id'),
                     expense_data.get('production_id'),
                     expense_data.get('partner_id'),
                     expense_data.get('item_name'),
                     expense_data.get('work_type', '制作'),
-                    expense_data.get('amount'),
+                    expense_data.get('amount', 0),
+                    expense_data.get('amount_pending', 0),
                     expense_data.get('implementation_date'),
                     expense_data.get('expected_payment_date'),
                     expense_data.get('status', '発注予定'),

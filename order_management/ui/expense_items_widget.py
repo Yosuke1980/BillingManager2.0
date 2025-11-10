@@ -52,6 +52,10 @@ class ExpenseItemsWidget(QWidget):
         self.paid_label.setStyleSheet("font-size: 13px; color: #388e3c;")
         dashboard_layout.addWidget(self.paid_label, 1, 1)
 
+        self.pending_label = QLabel("金額未定: 0件")
+        self.pending_label.setStyleSheet("font-size: 13px; color: #f57c00;")
+        dashboard_layout.addWidget(self.pending_label, 1, 2)
+
         dashboard_group.setLayout(dashboard_layout)
         layout.addWidget(dashboard_group)
 
@@ -187,6 +191,7 @@ class ExpenseItemsWidget(QWidget):
         total_amount = 0
         unpaid_count = 0
         paid_count = 0
+        pending_count = 0
 
         for row, item in enumerate(expense_items):
             # データ構造: (id, production_id, production_name, partner_id, partner_name,
@@ -194,7 +199,7 @@ class ExpenseItemsWidget(QWidget):
             #            status, payment_status, contract_id, notes, work_type,
             #            order_number, order_date, invoice_received_date, actual_payment_date,
             #            invoice_number, withholding_tax, consumption_tax, payment_amount,
-            #            invoice_file_path, payment_method, approver, approval_date)
+            #            invoice_file_path, payment_method, approver, approval_date, amount_pending)
 
             item_id = item[0]
             production_name = item[2] or ""
@@ -208,21 +213,31 @@ class ExpenseItemsWidget(QWidget):
             contract_id = item[11]
             notes = item[12] or ""
             work_type = item[13] or "制作"
+            amount_pending = item[26] if len(item) > 26 else 0
 
             # 統計更新
-            total_amount += amount
+            if amount_pending == 1:
+                pending_count += 1
+            else:
+                total_amount += amount
+
             if payment_status == "支払済":
                 paid_count += 1
             else:
                 unpaid_count += 1
 
             # 金額のフォーマット
-            amount_text = f"¥{int(amount):,}"
+            if amount_pending == 1:
+                amount_text = "未定"
+            else:
+                amount_text = f"¥{int(amount):,}"
 
-            # 行の背景色を決定
+            # 行の背景色を決定（優先順位: 支払済 > 金額未定 > 支払遅延 > 支払間近）
             row_color = None
             if payment_status == "支払済":
                 row_color = QColor(220, 255, 220)  # 緑
+            elif amount_pending == 1:
+                row_color = QColor(255, 243, 224)  # 薄いオレンジ（金額未定）
             elif payment_status == "未払い":
                 # 支払予定日をチェック
                 if expected_payment_date:
@@ -260,14 +275,15 @@ class ExpenseItemsWidget(QWidget):
                         item.setBackground(row_color)
 
         # ダッシュボードを更新
-        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count)
+        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count, pending_count)
 
-    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count):
+    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count, pending_count):
         """ダッシュボードの統計を更新"""
         self.total_label.setText(f"総件数: {total_count}件")
         self.amount_label.setText(f"総額: ¥{int(total_amount):,}")
         self.unpaid_label.setText(f"未払い: {unpaid_count}件")
         self.paid_label.setText(f"支払済: {paid_count}件")
+        self.pending_label.setText(f"金額未定: {pending_count}件")
 
     def add_expense_item(self):
         """費用項目を追加"""
