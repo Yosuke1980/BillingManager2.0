@@ -166,7 +166,7 @@ class ExpenseItemsWidget(QWidget):
     def _populate_payment_months(self):
         """支払月のリストを作成"""
         # 特殊フィルタを最初に追加
-        self.payment_month_filter.addItem("当月＋未払い", "current_unpaid")
+        self.payment_month_filter.addItem("来月末まで", "until_next_month_end")
 
         # データベースから支払予定日の年月を取得
         try:
@@ -181,7 +181,7 @@ class ExpenseItemsWidget(QWidget):
         except Exception as e:
             print(f"支払月リスト作成エラー: {e}")
 
-        # デフォルトを「当月＋未払い」に設定
+        # デフォルトを「来月末まで」に設定
         self.payment_month_filter.setCurrentIndex(0)
 
     def load_expense_items(self):

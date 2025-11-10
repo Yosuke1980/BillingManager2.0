@@ -3242,12 +3242,9 @@ class OrderManagementDB:
                 query += " AND ei.status = ?"
                 params.append(status)
 
-            if payment_month == "current_unpaid":
-                # 当月または未払いのみ
-                query += """ AND (
-                    strftime('%Y-%m', ei.expected_payment_date) = strftime('%Y-%m', 'now')
-                    OR ei.payment_status = '未払い'
-                )"""
+            if payment_month == "until_next_month_end":
+                # 来月末までの支払予定
+                query += """ AND ei.expected_payment_date <= date('now', 'start of month', '+2 months', '-1 day')"""
             elif payment_month:
                 # YYYY-MM形式の月でフィルタ（expected_payment_dateの年月が一致）
                 query += " AND strftime('%Y-%m', ei.expected_payment_date) = ?"
