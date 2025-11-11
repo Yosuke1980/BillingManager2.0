@@ -1134,6 +1134,70 @@ class OrderContractEditDialog(QDialog):
                 if reply == QMessageBox.No:
                     return  # 保存をキャンセル
 
+        # 重複契約チェック（新規作成時のみ）
+        if not self.contract_id:
+            duplicate = self.db.check_duplicate_contract(
+                production_id=contract_data['production_id'],
+                partner_id=contract_data['partner_id'],
+                work_type=contract_data['work_type']
+            )
+
+            if duplicate:
+                # 重複契約が見つかった場合、確認ダイアログを表示
+                production_name = duplicate[1] or ""
+                partner_name = duplicate[2] or ""
+                work_type = duplicate[3] or ""
+                start_date = duplicate[4] or ""
+                end_date = duplicate[5] or ""
+                unit_price = duplicate[6]
+                spot_amount = duplicate[7]
+                item_name = duplicate[8] or ""
+
+                # 金額の表示
+                if spot_amount:
+                    amount_text = f"単発金額: {int(spot_amount):,}円"
+                elif unit_price:
+                    amount_text = f"月額: {int(unit_price):,}円"
+                else:
+                    amount_text = "金額未定"
+
+                message = f"既に同じ内容の契約が存在します。\n\n"
+                message += f"既存契約:\n"
+                message += f"  番組: {production_name}\n"
+                message += f"  取引先: {partner_name}\n"
+                message += f"  業務種別: {work_type}\n"
+                message += f"  項目名: {item_name}\n"
+                message += f"  {amount_text}\n"
+                message += f"  契約期間: {start_date} ～ {end_date}\n\n"
+                message += f"どうしますか？"
+
+                from PyQt5.QtWidgets import QPushButton
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("重複契約の確認")
+                msg_box.setText(message)
+                msg_box.setIcon(QMessageBox.Warning)
+
+                use_existing_btn = msg_box.addButton("既存の契約を使用", QMessageBox.AcceptRole)
+                create_new_btn = msg_box.addButton("それでも新規作成", QMessageBox.DestructiveRole)
+                cancel_btn = msg_box.addButton("キャンセル", QMessageBox.RejectRole)
+
+                msg_box.exec_()
+                clicked_button = msg_box.clickedButton()
+
+                if clicked_button == use_existing_btn:
+                    # 既存契約を使用
+                    self.contract_id = duplicate[0]
+                    QMessageBox.information(
+                        self, "契約選択",
+                        f"既存の契約（ID: {duplicate[0]}）を選択しました。"
+                    )
+                    self.accept()
+                    return
+                elif clicked_button == cancel_btn:
+                    # キャンセル
+                    return
+                # create_new_btnの場合は、そのまま新規作成を続行
+
         try:
             saved_id = self.db.save_order_contract(contract_data)
 

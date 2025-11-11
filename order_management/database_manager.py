@@ -1436,6 +1436,72 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def check_duplicate_contract(self, production_id: int, partner_id: int, work_type: str, exclude_contract_id: int = None) -> Optional[Tuple]:
+        """重複契約をチェック
+
+        番組ID、取引先ID、業務種別が同じ契約が既に存在するかチェックします。
+
+        Args:
+            production_id: 番組ID
+            partner_id: 取引先ID
+            work_type: 業務種別（制作/出演）
+            exclude_contract_id: 除外する契約ID（編集時に自分自身を除外）
+
+        Returns:
+            重複する契約が存在する場合は契約データ、存在しない場合はNone
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            if exclude_contract_id:
+                # 編集時: 自分自身を除外して検索
+                cursor.execute("""
+                    SELECT
+                        c.id,
+                        prod.name as production_name,
+                        part.name as partner_name,
+                        c.work_type,
+                        c.contract_start_date,
+                        c.contract_end_date,
+                        c.unit_price,
+                        c.spot_amount,
+                        c.item_name
+                    FROM contracts c
+                    LEFT JOIN productions prod ON c.production_id = prod.id
+                    LEFT JOIN partners part ON c.partner_id = part.id
+                    WHERE c.production_id = ?
+                      AND c.partner_id = ?
+                      AND c.work_type = ?
+                      AND c.id != ?
+                    LIMIT 1
+                """, (production_id, partner_id, work_type, exclude_contract_id))
+            else:
+                # 新規作成時: すべて検索
+                cursor.execute("""
+                    SELECT
+                        c.id,
+                        prod.name as production_name,
+                        part.name as partner_name,
+                        c.work_type,
+                        c.contract_start_date,
+                        c.contract_end_date,
+                        c.unit_price,
+                        c.spot_amount,
+                        c.item_name
+                    FROM contracts c
+                    LEFT JOIN productions prod ON c.production_id = prod.id
+                    LEFT JOIN partners part ON c.partner_id = part.id
+                    WHERE c.production_id = ?
+                      AND c.partner_id = ?
+                      AND c.work_type = ?
+                    LIMIT 1
+                """, (production_id, partner_id, work_type))
+
+            return cursor.fetchone()
+        finally:
+            conn.close()
+
     def get_order_contracts_by_production(self, production_id: int) -> List[Tuple]:
         """制作物IDで発注書を取得"""
         conn = self._get_connection()
