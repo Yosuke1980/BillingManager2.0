@@ -4032,7 +4032,8 @@ class OrderManagementDB:
                     ei.corner_id,
                     ei.contract_id,
                     ei.invoice_received_date,
-                    ei.actual_payment_date
+                    ei.actual_payment_date,
+                    ei.payment_matched_id
                 FROM expense_items ei
                 LEFT JOIN partners part ON ei.partner_id = part.id
                 LEFT JOIN productions corner ON ei.corner_id = corner.id
@@ -4107,7 +4108,8 @@ class OrderManagementDB:
                     ei.corner_id,
                     ei.contract_id,
                     ei.invoice_received_date,
-                    ei.actual_payment_date
+                    ei.actual_payment_date,
+                    ei.payment_matched_id
                 FROM expense_items ei
                 LEFT JOIN partners p ON ei.partner_id = p.id
                 LEFT JOIN productions corner ON ei.corner_id = corner.id

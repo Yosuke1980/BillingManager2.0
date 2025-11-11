@@ -371,7 +371,7 @@ class ProductionExpenseDetailWidget(QWidget):
         # データ構造: (id, partner_name, item_name, amount, implementation_date,
         #            expected_payment_date, payment_status, status, notes, amount_pending,
         #            work_type, corner_name, corner_id, contract_id, invoice_received_date,
-        #            actual_payment_date)
+        #            actual_payment_date, payment_matched_id)
         item_id = detail[0]
         partner_name = detail[1] or ""
         item_name = detail[2] or ""
@@ -387,6 +387,7 @@ class ProductionExpenseDetailWidget(QWidget):
         contract_id = detail[13] if len(detail) > 13 else None
         invoice_received_date = detail[14] if len(detail) > 14 else None
         actual_payment_date = detail[15] if len(detail) > 15 else None
+        payment_matched_id = detail[16] if len(detail) > 16 else None
 
         # 金額のフォーマット
         if amount_pending == 1:
@@ -406,28 +407,34 @@ class ProductionExpenseDetailWidget(QWidget):
             except:
                 pass
 
-        # 手続状態の判定（支払い発注チェックタブと同じロジック）
+        # 手続状態の判定（billing.dbとの照合を基準に判定）
         procedure_status = ""
         procedure_status_color = None
 
-        # payment_statusが「支払済」なら、actual_payment_dateの有無に関係なく完了扱い
-        if payment_status == "支払済":
+        # payment_matched_idがあれば、billing.dbと照合済み = 支払完了
+        if payment_matched_id:
             procedure_status = "✅ 完了"
             procedure_status_color = QColor(220, 255, 220)  # 緑
-        elif not actual_payment_date and payment_status == "未払い":
-            # 支払未完了（未払いかつactual_payment_dateなし）
-            procedure_status = "🚨 支払未"
-            procedure_status_color = QColor(255, 220, 220)  # 赤
-        elif not contract_id or (isinstance(contract_id, str) and contract_id == ""):
-            # 未発注
-            procedure_status = "未発注"
-            procedure_status_color = QColor(255, 255, 200)  # 黄
-        elif not invoice_received_date:
-            # 書類不備（請求書未受領）
-            procedure_status = "⚠️ 書類不備"
-            procedure_status_color = QColor(255, 255, 200)  # 黄
+        # payment_statusが「支払済」でもpayment_matched_idがなければ手動更新のみ
+        elif payment_status == "支払済":
+            procedure_status = "✅ 完了"
+            procedure_status_color = QColor(220, 255, 220)  # 緑
+        # 未払いの場合、手続き状況を細かくチェック
+        elif payment_status == "未払い":
+            if not contract_id or (isinstance(contract_id, str) and contract_id == ""):
+                # 未発注
+                procedure_status = "未発注"
+                procedure_status_color = QColor(255, 255, 200)  # 黄
+            elif not invoice_received_date:
+                # 書類不備（請求書未受領）
+                procedure_status = "⚠️ 書類不備"
+                procedure_status_color = QColor(255, 255, 200)  # 黄
+            else:
+                # 発注済み、書類OKだが支払未完了
+                procedure_status = "🚨 支払未"
+                procedure_status_color = QColor(255, 220, 220)  # 赤
         else:
-            # すべて完了
+            # その他
             procedure_status = "✅ 完了"
             procedure_status_color = QColor(220, 255, 220)  # 緑
 
