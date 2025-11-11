@@ -434,30 +434,21 @@ class ExpenseItemsWidget(QWidget):
         )
 
         if reply == QMessageBox.Yes:
-            success_count = 0
-            error_messages = []
+            try:
+                # 一括削除を実行
+                expense_ids = [item_id for item_id, _, _ in items_to_delete]
+                deleted_count = self.db.delete_expense_items_bulk(expense_ids)
 
-            for item_id, item_name, partner_name in items_to_delete:
-                try:
-                    self.db.delete_expense_item(item_id)
-                    success_count += 1
-                except Exception as e:
-                    error_messages.append(f"{item_name} ({partner_name}): {str(e)}")
-
-            # 結果を表示
-            if success_count > 0:
+                # 結果を表示
                 self.load_expense_items()
-
-            if error_messages:
-                error_text = "\n".join(error_messages)
-                QMessageBox.warning(
-                    self, "削除結果",
-                    f"{success_count}件削除しました。\n\n以下の削除に失敗しました:\n{error_text}"
-                )
-            elif success_count > 0:
                 QMessageBox.information(
                     self, "成功",
-                    f"{success_count}件の費用項目を削除しました。"
+                    f"{deleted_count}件の費用項目を削除しました。"
+                )
+            except Exception as e:
+                QMessageBox.critical(
+                    self, "エラー",
+                    f"費用項目の削除に失敗しました:\n{e}"
                 )
 
     def change_production_bulk(self):

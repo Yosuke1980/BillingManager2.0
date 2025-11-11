@@ -3374,6 +3374,37 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def delete_expense_items_bulk(self, expense_ids):
+        """複数の費用項目を一括削除
+
+        Args:
+            expense_ids: list of int - 費用項目IDのリスト
+
+        Returns:
+            int: 削除された件数
+        """
+        if not expense_ids:
+            return 0
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # プレースホルダーを作成
+            placeholders = ','.join('?' * len(expense_ids))
+            query = f"DELETE FROM expense_items WHERE id IN ({placeholders})"
+
+            cursor.execute(query, list(expense_ids))
+            deleted_count = cursor.rowcount
+            conn.commit()
+
+            return deleted_count
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+
     def update_expense_items_production(self, expense_ids, new_production_id):
         """複数の費用項目の番組を一括変更
 
