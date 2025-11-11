@@ -104,6 +104,15 @@ class ProductionExpenseDetailWidget(QWidget):
 
         layout.addWidget(self.production_table)
 
+        # 更新ボタン
+        refresh_button_layout = QHBoxLayout()
+        refresh_button = QPushButton("🔄 一覧を更新")
+        refresh_button.setToolTip("他のタブで追加した番組を反映します")
+        refresh_button.clicked.connect(self.load_production_list)
+        refresh_button_layout.addWidget(refresh_button)
+        refresh_button_layout.addStretch()
+        layout.addLayout(refresh_button_layout)
+
         widget.setLayout(layout)
         return widget
 
