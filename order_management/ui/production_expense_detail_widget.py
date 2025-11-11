@@ -365,6 +365,8 @@ class ProductionExpenseDetailWidget(QWidget):
 
     def _populate_detail_row(self, row, detail):
         """詳細テーブルの1行にデータを設定する共通ヘルパーメソッド"""
+        from datetime import datetime
+
         # データ構造: (id, partner_name, item_name, amount, implementation_date,
         #            expected_payment_date, payment_status, status, notes, amount_pending,
         #            work_type, corner_name, corner_id)
@@ -390,6 +392,15 @@ class ProductionExpenseDetailWidget(QWidget):
         # コーナー名の設定（corner_idがある場合のみ表示）
         corner_display = corner_name if corner_id else ""
 
+        # 日付パースと期限チェック
+        days_until = None
+        if expected_payment_date:
+            try:
+                payment_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
+                days_until = (payment_date.date() - datetime.now().date()).days
+            except:
+                pass
+
         # テーブルにデータを設定（列順: 実施日、項目名、コーナー、金額、取引先、支払予定日、支払状態）
         implementation_date_item = QTableWidgetItem(implementation_date)
         implementation_date_item.setData(Qt.UserRole, item_id)  # expense_item_idを保存
@@ -401,13 +412,24 @@ class ProductionExpenseDetailWidget(QWidget):
         self.detail_table.setItem(row, 5, QTableWidgetItem(expected_payment_date))
         self.detail_table.setItem(row, 6, QTableWidgetItem(payment_status))
 
-        # 支払い状態に応じて行の色を変更
-        if payment_status == "支払済":
+        # 行の背景色を決定（優先順位: 期限超過 > 支払済 > 金額未定 > 支払間近）
+        row_color = None
+
+        # 最優先: 期限超過（未払い＋支払予定日が過去）
+        if payment_status == "未払い" and days_until is not None and days_until < 0:
+            row_color = QColor(255, 200, 200)  # 濃い赤（期限超過）
+
+        # 支払済み
+        if not row_color and payment_status == "支払済":
             row_color = QColor(220, 255, 220)  # 緑
-        elif amount_pending == 1:
-            row_color = QColor(255, 243, 224)  # 薄いオレンジ
-        else:
-            row_color = None
+
+        # 金額未定
+        if not row_color and amount_pending == 1:
+            row_color = QColor(255, 243, 224)  # 薄いオレンジ（金額未定）
+
+        # 支払間近（7日以内）
+        if not row_color and payment_status == "未払い" and days_until is not None and 0 <= days_until <= 7:
+            row_color = QColor(255, 255, 200)  # 黄（間近）
 
         if row_color:
             for col in range(self.detail_table.columnCount()):
