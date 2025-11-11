@@ -100,6 +100,7 @@ class ProductionExpenseDetailWidget(QWidget):
         self.production_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.production_table.setSelectionMode(QTableWidget.SingleSelection)
         self.production_table.itemSelectionChanged.connect(self.on_production_selected)
+        self.production_table.itemDoubleClicked.connect(self.on_production_double_clicked)
 
         layout.addWidget(self.production_table)
 
@@ -145,6 +146,7 @@ class ProductionExpenseDetailWidget(QWidget):
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 支払状態
 
         self.detail_table.setAlternatingRowColors(True)
+        self.detail_table.itemDoubleClicked.connect(self.on_expense_item_double_clicked)
 
         layout.addWidget(self.detail_table)
 
@@ -373,7 +375,9 @@ class ProductionExpenseDetailWidget(QWidget):
             amount_text = f"¥{int(amount):,}"
 
         # テーブルにデータを設定（列順: 実施日、項目名、金額、取引先、支払予定日、支払状態）
-        self.detail_table.setItem(row, 0, QTableWidgetItem(implementation_date))
+        implementation_date_item = QTableWidgetItem(implementation_date)
+        implementation_date_item.setData(Qt.UserRole, item_id)  # expense_item_idを保存
+        self.detail_table.setItem(row, 0, implementation_date_item)
         self.detail_table.setItem(row, 1, QTableWidgetItem(item_name))
         self.detail_table.setItem(row, 2, QTableWidgetItem(amount_text))
         self.detail_table.setItem(row, 3, QTableWidgetItem(partner_name))
@@ -444,3 +448,53 @@ class ProductionExpenseDetailWidget(QWidget):
         layout.addWidget(table)
         dialog.setLayout(layout)
         dialog.exec_()
+
+    def on_production_double_clicked(self, item):
+        """番組一覧のダブルクリックイベント - 番組編集ダイアログを開く"""
+        # 選択された番組のIDを取得
+        row = item.row()
+        production_id_item = self.production_table.item(row, 0)
+        if production_id_item:
+            production_id = production_id_item.data(Qt.UserRole)
+            if production_id:
+                # 番組編集ダイアログを開く
+                from order_management.ui.production_edit_dialog import ProductionEditDialog
+
+                # 番組情報を取得
+                production = self.db.get_production(production_id)
+                if production:
+                    dialog = ProductionEditDialog(self, production)
+                    if dialog.exec_():
+                        # 編集後、リストを再読み込み
+                        self.load_production_list()
+                        # 同じ番組を再選択して詳細を更新
+                        if self.current_production_id == production_id:
+                            self.load_production_detail(production_id)
+
+    def on_expense_item_double_clicked(self, item):
+        """費用項目のダブルクリックイベント - 費用項目編集ダイアログを開く"""
+        # 月別ヘッダー行の場合はスキップ
+        row = item.row()
+        first_col_item = self.detail_table.item(row, 0)
+
+        # ヘッダー行かどうかをチェック（スパンされている場合）
+        if self.detail_table.columnSpan(row, 0) > 1:
+            return  # 月ヘッダー行なのでスキップ
+
+        # 実施日セルからexpense_item_idを取得（UserRoleに保存されていると仮定）
+        # もしUserRoleに保存されていない場合は、他の方法でIDを取得
+        # ここでは簡易的にテーブルの最初の列（実施日）からテキストを使ってIDを推定する代わりに
+        # _populate_detail_rowメソッドでIDをUserRoleに保存するように修正が必要
+
+        # 暫定的に、detail_tableの各行の最初のセルにexpense_item_idを保存するように変更
+        expense_item_id = first_col_item.data(Qt.UserRole) if first_col_item else None
+
+        if expense_item_id:
+            # 費用項目編集ダイアログを開く
+            from order_management.ui.expense_item_edit_dialog import ExpenseItemEditDialog
+
+            dialog = ExpenseItemEditDialog(self, expense_item_id)
+            if dialog.exec_():
+                # 編集後、詳細を再読み込み
+                if self.current_production_id:
+                    self.load_production_detail(self.current_production_id)
