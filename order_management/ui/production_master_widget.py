@@ -41,12 +41,10 @@ class ProductionMasterWidget(QWidget):
         type_label = QLabel("種別:")
         self.type_filter = QComboBox()
         self.type_filter.addItem("全て", "")
-        self.type_filter.addItem("レギュラー番組", "レギュラー番組")
-        self.type_filter.addItem("特別番組", "特別番組")
+        self.type_filter.addItem("レギュラー", "レギュラー")
         self.type_filter.addItem("イベント", "イベント")
-        self.type_filter.addItem("公開放送", "公開放送")
-        self.type_filter.addItem("公開収録", "公開収録")
-        self.type_filter.addItem("特別企画", "特別企画")
+        self.type_filter.addItem("特番", "特番")
+        self.type_filter.addItem("コーナー", "コーナー")
         self.type_filter.currentIndexChanged.connect(self.load_productions)
         top_layout.addWidget(type_label)
         top_layout.addWidget(self.type_filter)
@@ -359,7 +357,7 @@ class ProductionMasterWidget(QWidget):
                         production[0],  # ID
                         production[1] or '',  # 制作物名
                         production[2] or '',  # 説明
-                        production[3] or 'レギュラー番組',  # 制作物種別
+                        production[3] or 'レギュラー',  # 制作物種別
                         production[4] or '',  # 開始日
                         production[5] or '',  # 終了日
                         production[6] or '',  # 実施開始時間
