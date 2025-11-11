@@ -333,6 +333,10 @@ class ProductionExpenseDetailWidget(QWidget):
                 self._populate_detail_row(row_index, detail)
                 row_index += 1
 
+        # 列幅を内容に合わせて自動調整
+        self.detail_table.resizeColumnToContents(0)  # 実施日
+        self.detail_table.resizeColumnToContents(4)  # 支払予定日
+
     def load_all_details(self, production_id):
         """全費用項目を表示（イベント・特番用）"""
         # 費用項目詳細を取得
@@ -342,6 +346,10 @@ class ProductionExpenseDetailWidget(QWidget):
 
         for row, detail in enumerate(details):
             self._populate_detail_row(row, detail)
+
+        # 列幅を内容に合わせて自動調整
+        self.detail_table.resizeColumnToContents(0)  # 実施日
+        self.detail_table.resizeColumnToContents(4)  # 支払予定日
 
     def _populate_detail_row(self, row, detail):
         """詳細テーブルの1行にデータを設定する共通ヘルパーメソッド"""
