@@ -4033,10 +4033,12 @@ class OrderManagementDB:
                     ei.contract_id,
                     ei.invoice_received_date,
                     ei.actual_payment_date,
-                    ei.payment_matched_id
+                    ei.payment_matched_id,
+                    c.document_status
                 FROM expense_items ei
                 LEFT JOIN partners part ON ei.partner_id = part.id
                 LEFT JOIN productions corner ON ei.corner_id = corner.id
+                LEFT JOIN contracts c ON ei.contract_id = c.id
                 WHERE ei.production_id = ?
                   AND (ei.archived = 0 OR ei.archived IS NULL)
                 ORDER BY ei.implementation_date ASC, ei.id ASC
@@ -4109,10 +4111,12 @@ class OrderManagementDB:
                     ei.contract_id,
                     ei.invoice_received_date,
                     ei.actual_payment_date,
-                    ei.payment_matched_id
+                    ei.payment_matched_id,
+                    c.document_status
                 FROM expense_items ei
                 LEFT JOIN partners p ON ei.partner_id = p.id
                 LEFT JOIN productions corner ON ei.corner_id = corner.id
+                LEFT JOIN contracts c ON ei.contract_id = c.id
                 WHERE ei.production_id = ?
                   AND strftime('%Y-%m', ei.expected_payment_date) = ?
                   AND (ei.archived = 0 OR ei.archived IS NULL)

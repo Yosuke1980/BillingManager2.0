@@ -407,34 +407,37 @@ class ProductionExpenseDetailWidget(QWidget):
             except:
                 pass
 
-        # 手続状態の判定（billing.dbとの照合を基準に判定）
+        # 手続状態の判定（支払い発注チェックタブと同じロジック）
         procedure_status = ""
         procedure_status_color = None
 
-        # payment_matched_idがあれば、billing.dbと照合済み = 支払完了
-        if payment_matched_id:
-            procedure_status = "完了"
-            procedure_status_color = QColor(220, 255, 220)  # 緑
-        # payment_statusが「支払済」でもpayment_matched_idがなければ手動更新のみ
-        elif payment_status == "支払済":
-            procedure_status = "完了"
-            procedure_status_color = QColor(220, 255, 220)  # 緑
-        # 未払いの場合、手続き状況を細かくチェック
-        elif payment_status == "未払い":
-            if not contract_id or (isinstance(contract_id, str) and contract_id == ""):
-                # 未発注
-                procedure_status = "未発注"
-                procedure_status_color = QColor(255, 255, 200)  # 黄
-            elif not invoice_received_date:
-                # 書類不備（請求書未受領）
-                procedure_status = "書類不備"
-                procedure_status_color = QColor(255, 255, 200)  # 黄
+        # 支払実績チェック（payment_matched_idまたはpayment_statusで判定）
+        payment_ok = bool(payment_matched_id) or payment_status == "支払済"
+
+        # 発注チェック
+        has_order = bool(contract_id) and contract_id != "" and contract_id != 0
+
+        # 書類チェック（請求書受領 or document_status完了）
+        receipt_ok = bool(invoice_received_date) or document_status == '完了'
+
+        # 優先度順に判定
+        if not payment_ok:
+            # 支払未完了 → 赤背景（最優先）
+            procedure_status = "支払未"
+            procedure_status_color = QColor(255, 220, 220)  # 赤
+        elif not has_order:
+            # 発注なし → 黄背景
+            procedure_status = "未発注"
+            procedure_status_color = QColor(255, 255, 200)  # 黄
+        elif not receipt_ok or document_status == '未完了':
+            # 書類不備 or 書類未完了 → 黄背景
+            if document_status == '未完了':
+                procedure_status = "書類未完了"
             else:
-                # 発注済み、書類OKだが支払未完了
-                procedure_status = "支払未"
-                procedure_status_color = QColor(255, 220, 220)  # 赤
+                procedure_status = "書類不備"
+            procedure_status_color = QColor(255, 255, 200)  # 黄
         else:
-            # その他
+            # すべてOK → 緑背景
             procedure_status = "完了"
             procedure_status_color = QColor(220, 255, 220)  # 緑
 
