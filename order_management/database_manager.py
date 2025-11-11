@@ -3919,3 +3919,42 @@ class OrderManagementDB:
             return cursor.fetchall()
         finally:
             conn.close()
+
+    def get_production_expense_details_by_month(self, production_id, year_month):
+        """指定した番組の特定月の費用項目詳細を取得
+
+        Args:
+            production_id: 番組ID
+            year_month: 対象年月（'YYYY-MM'形式）
+
+        Returns:
+            list: [(id, partner_name, item_name, amount, implementation_date,
+                   expected_payment_date, payment_status, status, notes, amount_pending, work_type), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT
+                    ei.id,
+                    p.name as partner_name,
+                    ei.item_name,
+                    ei.amount,
+                    ei.implementation_date,
+                    ei.expected_payment_date,
+                    ei.payment_status,
+                    ei.status,
+                    ei.notes,
+                    ei.amount_pending,
+                    ei.work_type
+                FROM expense_items ei
+                LEFT JOIN partners p ON ei.partner_id = p.id
+                WHERE ei.production_id = ?
+                  AND strftime('%Y-%m', ei.expected_payment_date) = ?
+                  AND (ei.archived = 0 OR ei.archived IS NULL)
+                ORDER BY ei.expected_payment_date, ei.id
+            """, (production_id, year_month))
+            return cursor.fetchall()
+        finally:
+            conn.close()

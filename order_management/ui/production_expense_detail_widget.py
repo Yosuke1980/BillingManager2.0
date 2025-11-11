@@ -283,76 +283,127 @@ class ProductionExpenseDetailWidget(QWidget):
         productions = self.db.get_production_expense_summary()
         production_data = next((p for p in productions if p[0] == production_id), None)
 
-        if production_data:
-            # データ構造: (production_id, production_name, production_type, item_count, total_amount,
-            #            unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count,
-            #            month_count, monthly_average)
-            production_name = production_data[1]
-            item_count = production_data[3]
-            total_amount = production_data[4] or 0
-            unpaid_count = production_data[5]
-            unpaid_amount = production_data[6] or 0
-            paid_count = production_data[7]
-            paid_amount = production_data[8] or 0
-            pending_count = production_data[9]
+        if not production_data:
+            return
 
-            # サマリーを更新
-            self.production_name_label.setText(f"番組: {production_name}")
-            self.total_amount_label.setText(f"総費用額: ¥{int(total_amount):,}")
-            self.item_count_label.setText(f"費用項目数: {item_count}件")
-            self.unpaid_label.setText(f"未払い: {unpaid_count}件 (¥{int(unpaid_amount):,})")
-            self.paid_label.setText(f"支払済: {paid_count}件 (¥{int(paid_amount):,})")
-            self.pending_label.setText(f"金額未定: {pending_count}件")
+        # データ構造: (production_id, production_name, production_type, item_count, total_amount,
+        #            unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count,
+        #            month_count, monthly_average)
+        production_name = production_data[1]
+        production_type = production_data[2]
+        item_count = production_data[3]
+        total_amount = production_data[4] or 0
+        unpaid_count = production_data[5]
+        unpaid_amount = production_data[6] or 0
+        paid_count = production_data[7]
+        paid_amount = production_data[8] or 0
+        pending_count = production_data[9]
 
+        # サマリーを更新
+        self.production_name_label.setText(f"番組: {production_name}")
+        self.total_amount_label.setText(f"総費用額: ¥{int(total_amount):,}")
+        self.item_count_label.setText(f"費用項目数: {item_count}件")
+        self.unpaid_label.setText(f"未払い: {unpaid_count}件 (¥{int(unpaid_amount):,})")
+        self.paid_label.setText(f"支払済: {paid_count}件 (¥{int(paid_amount):,})")
+        self.pending_label.setText(f"金額未定: {pending_count}件")
+
+        # レギュラー番組は月別表示、それ以外は全件表示
+        if production_type == "レギュラー" or production_type == "コーナー":
+            self.load_monthly_grouped_details(production_id)
+        else:
+            self.load_all_details(production_id)
+
+    def load_monthly_grouped_details(self, production_id):
+        """月別にグループ化して詳細を表示（レギュラー番組用）"""
+        # 月別集計を取得
+        monthly_summary = self.db.get_production_expense_monthly_summary(production_id)
+
+        # テーブルをクリア
+        self.detail_table.setRowCount(0)
+
+        row_index = 0
+        for month_data in monthly_summary:
+            # データ構造: (month, item_count, total_amount, unpaid_count, paid_count)
+            month = month_data[0]
+            month_item_count = month_data[1]
+            month_total = month_data[2] or 0
+            month_unpaid_count = month_data[3]
+            month_paid_count = month_data[4]
+
+            # 月ヘッダー行を追加
+            self.detail_table.insertRow(row_index)
+            month_header = f"📅 {month} ({month_item_count}件 / ¥{int(month_total):,})"
+            header_item = QTableWidgetItem(month_header)
+            header_item.setBackground(QColor(230, 240, 255))  # 青系
+            self.detail_table.setItem(row_index, 0, header_item)
+
+            # ヘッダー行は全列を結合
+            self.detail_table.setSpan(row_index, 0, 1, 9)
+            row_index += 1
+
+            # その月の費用項目を取得
+            month_details = self.db.get_production_expense_details_by_month(production_id, month)
+
+            for detail in month_details:
+                self.detail_table.insertRow(row_index)
+                self._populate_detail_row(row_index, detail)
+                row_index += 1
+
+    def load_all_details(self, production_id):
+        """全費用項目を表示（イベント・特番用）"""
         # 費用項目詳細を取得
         details = self.db.get_production_expense_details(production_id)
 
         self.detail_table.setRowCount(len(details))
 
         for row, detail in enumerate(details):
-            # データ構造: (id, partner_name, item_name, amount, implementation_date,
-            #            expected_payment_date, payment_status, status, notes, amount_pending, work_type)
-            item_id = detail[0]
-            partner_name = detail[1] or ""
-            item_name = detail[2] or ""
-            amount = detail[3] or 0
-            implementation_date = detail[4] or ""
-            expected_payment_date = detail[5] or ""
-            payment_status = detail[6] or "未払い"
-            status = detail[7] or ""
-            notes = detail[8] or ""
-            amount_pending = detail[9] if len(detail) > 9 else 0
+            self._populate_detail_row(row, detail)
 
-            # 金額のフォーマット
-            if amount_pending == 1:
-                amount_text = "未定"
-            else:
-                amount_text = f"¥{int(amount):,}"
+    def _populate_detail_row(self, row, detail):
+        """詳細テーブルの1行にデータを設定する共通ヘルパーメソッド"""
+        # データ構造: (id, partner_name, item_name, amount, implementation_date,
+        #            expected_payment_date, payment_status, status, notes, amount_pending, work_type)
+        item_id = detail[0]
+        partner_name = detail[1] or ""
+        item_name = detail[2] or ""
+        amount = detail[3] or 0
+        implementation_date = detail[4] or ""
+        expected_payment_date = detail[5] or ""
+        payment_status = detail[6] or "未払い"
+        status = detail[7] or ""
+        notes = detail[8] or ""
+        amount_pending = detail[9] if len(detail) > 9 else 0
 
-            # テーブルにデータを設定
-            self.detail_table.setItem(row, 0, QTableWidgetItem(str(item_id)))
-            self.detail_table.setItem(row, 1, QTableWidgetItem(partner_name))
-            self.detail_table.setItem(row, 2, QTableWidgetItem(item_name))
-            self.detail_table.setItem(row, 3, QTableWidgetItem(amount_text))
-            self.detail_table.setItem(row, 4, QTableWidgetItem(implementation_date))
-            self.detail_table.setItem(row, 5, QTableWidgetItem(expected_payment_date))
-            self.detail_table.setItem(row, 6, QTableWidgetItem(payment_status))
-            self.detail_table.setItem(row, 7, QTableWidgetItem(status))
-            self.detail_table.setItem(row, 8, QTableWidgetItem(notes))
+        # 金額のフォーマット
+        if amount_pending == 1:
+            amount_text = "未定"
+        else:
+            amount_text = f"¥{int(amount):,}"
 
-            # 支払い状態に応じて行の色を変更
-            if payment_status == "支払済":
-                row_color = QColor(220, 255, 220)  # 緑
-            elif amount_pending == 1:
-                row_color = QColor(255, 243, 224)  # 薄いオレンジ
-            else:
-                row_color = None
+        # テーブルにデータを設定
+        self.detail_table.setItem(row, 0, QTableWidgetItem(str(item_id)))
+        self.detail_table.setItem(row, 1, QTableWidgetItem(partner_name))
+        self.detail_table.setItem(row, 2, QTableWidgetItem(item_name))
+        self.detail_table.setItem(row, 3, QTableWidgetItem(amount_text))
+        self.detail_table.setItem(row, 4, QTableWidgetItem(implementation_date))
+        self.detail_table.setItem(row, 5, QTableWidgetItem(expected_payment_date))
+        self.detail_table.setItem(row, 6, QTableWidgetItem(payment_status))
+        self.detail_table.setItem(row, 7, QTableWidgetItem(status))
+        self.detail_table.setItem(row, 8, QTableWidgetItem(notes))
 
-            if row_color:
-                for col in range(self.detail_table.columnCount()):
-                    item = self.detail_table.item(row, col)
-                    if item:
-                        item.setBackground(row_color)
+        # 支払い状態に応じて行の色を変更
+        if payment_status == "支払済":
+            row_color = QColor(220, 255, 220)  # 緑
+        elif amount_pending == 1:
+            row_color = QColor(255, 243, 224)  # 薄いオレンジ
+        else:
+            row_color = None
+
+        if row_color:
+            for col in range(self.detail_table.columnCount()):
+                item = self.detail_table.item(row, col)
+                if item:
+                    item.setBackground(row_color)
 
     def show_monthly_summary(self):
         """月別集計を表示"""
