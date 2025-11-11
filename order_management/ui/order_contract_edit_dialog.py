@@ -688,18 +688,9 @@ class OrderContractEditDialog(QDialog):
             self.project_combo.addItem(display_text, project[0])
 
     def add_new_project(self):
-        """新規案件を追加"""
-        from order_management.ui.project_edit_dialog import ProjectEditDialog
-
-        program_id = self.program_combo.currentData()
-        dialog = ProjectEditDialog(self, program_id=program_id)
-        if dialog.exec_():
-            # 案件一覧を再読み込み
-            self.load_projects_for_program()
-            # 新しく追加された案件を選択
-            # （最後に追加された案件が最新）
-            if self.project_combo.count() > 1:
-                self.project_combo.setCurrentIndex(self.project_combo.count() - 1)
+        """新規案件を追加（機能無効化）"""
+        # 案件機能は使用しないため、何もしない
+        pass
 
     def load_programs(self):
         """番組一覧を読み込み"""
