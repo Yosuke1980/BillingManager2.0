@@ -358,7 +358,7 @@ class ProductionExpenseDetailWidget(QWidget):
         """詳細テーブルの1行にデータを設定する共通ヘルパーメソッド"""
         # データ構造: (id, partner_name, item_name, amount, implementation_date,
         #            expected_payment_date, payment_status, status, notes, amount_pending,
-        #            work_type, corner_name, parent_production_id)
+        #            work_type, corner_name, corner_id)
         item_id = detail[0]
         partner_name = detail[1] or ""
         item_name = detail[2] or ""
@@ -370,7 +370,7 @@ class ProductionExpenseDetailWidget(QWidget):
         notes = detail[8] or ""
         amount_pending = detail[9] if len(detail) > 9 else 0
         corner_name = detail[11] if len(detail) > 11 else ""
-        parent_production_id = detail[12] if len(detail) > 12 else None
+        corner_id = detail[12] if len(detail) > 12 else None
 
         # 金額のフォーマット
         if amount_pending == 1:
@@ -378,8 +378,8 @@ class ProductionExpenseDetailWidget(QWidget):
         else:
             amount_text = f"¥{int(amount):,}"
 
-        # コーナー名の設定（parent_production_idがある場合のみ表示）
-        corner_display = corner_name if parent_production_id else ""
+        # コーナー名の設定（corner_idがある場合のみ表示）
+        corner_display = corner_name if corner_id else ""
 
         # テーブルにデータを設定（列順: 実施日、項目名、コーナー、金額、取引先、支払予定日、支払状態）
         implementation_date_item = QTableWidgetItem(implementation_date)
@@ -503,6 +503,7 @@ class ProductionExpenseDetailWidget(QWidget):
 
             dialog = ExpenseItemEditDialog(self, expense_item_id)
             if dialog.exec_():
-                # 編集後、詳細を再読み込み
+                # 編集後、番組一覧と詳細を再読み込み
+                self.load_production_list()
                 if self.current_production_id:
                     self.load_production_detail(self.current_production_id)

@@ -2,30 +2,39 @@
 
 ## 2025-11-11
 
-### 番組別費用詳細にコーナー名表示を追加
+### 番組別費用詳細の表示改善とコーナー名表示機能の修正
 
 **実装内容:**
 
-コーナーに紐づく費用項目について、コーナー名を表示できるようにしました。
+費用項目編集後の画面更新と、コーナー名表示機能の修正を行いました。
 
 **変更点:**
 
-1. **データベースクエリの更新** ([database_manager.py:3883-3884, 3955-3956](order_management/database_manager.py#L3883-L3884))
-   - `get_production_expense_details()`: productionsテーブルをJOINしてcorner_nameとparent_production_idを取得
+1. **費用項目編集後の画面更新を修正** ([production_expense_detail_widget.py:507](order_management/ui/production_expense_detail_widget.py#L507))
+   - 費用項目編集後に番組一覧も再読み込みするように修正
+   - 金額などの変更が即座に左側の番組一覧に反映されるようになった
+
+2. **expense_itemsテーブルにcorner_idカラムを追加**
+   - 費用項目とコーナーを紐づけるための`corner_id`カラムを追加
+   - これにより、各費用項目がどのコーナーに属するかを管理可能に
+
+3. **データベースクエリの更新** ([database_manager.py:3883-3884, 3955-3956](order_management/database_manager.py#L3883-L3884))
+   - `get_production_expense_details()`: corner_idでproductionsテーブルをJOINしてコーナー名を取得
    - `get_production_expense_details_by_month()`: 同様にコーナー情報を取得
 
-2. **UIの更新** ([production_expense_detail_widget.py:134-147](order_management/ui/production_expense_detail_widget.py#L134-L147))
+4. **UIの更新** ([production_expense_detail_widget.py:134-147](order_management/ui/production_expense_detail_widget.py#L134-L147))
    - 費用項目テーブルに「コーナー」列を追加（6列→7列）
    - 列順: 実施日、項目名、**コーナー**、金額、取引先、支払予定日、支払状態
    - 月ヘッダー行のスパンを7列に更新
 
-3. **データ表示ロジックの実装** ([production_expense_detail_widget.py:372-382](order_management/ui/production_expense_detail_widget.py#L372-L382))
-   - `parent_production_id`が存在する場合のみコーナー名を表示
-   - 通常の番組（コーナーでない）場合は空白を表示
+5. **データ表示ロジックの実装** ([production_expense_detail_widget.py:381-382](order_management/ui/production_expense_detail_widget.py#L381-L382))
+   - `corner_id`が存在する場合のみコーナー名を表示
+   - コーナーに紐づかない費用項目では空白を表示
 
 **結果:**
-- コーナーの費用項目では、どのコーナーに属しているかが一目で分かる
-- 通常の番組では空白表示で邪魔にならない
+- 費用項目編集後、すぐに画面に変更が反映される
+- 費用項目にコーナーを設定することで、コーナー別の費用管理が可能に
+- コーナー列でどのコーナーに属する費用かが一目で分かる
 
 ### 発注管理に金額未定機能を追加
 
