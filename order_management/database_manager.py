@@ -3781,3 +3781,127 @@ class OrderManagementDB:
             return cursor.fetchall()
         finally:
             conn.close()
+
+    # ========================================
+    # 番組別費用集計
+    # ========================================
+
+    def get_production_expense_summary(self, search_term=None, sort_by='total_amount'):
+        """番組ごとの費用集計を取得
+
+        Args:
+            search_term: 検索キーワード（番組名）
+            sort_by: ソート基準（total_amount, unpaid_count, item_count）
+
+        Returns:
+            list: [(production_id, production_name, item_count, total_amount,
+                   unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            query = """
+                SELECT 
+                    p.id,
+                    p.name,
+                    COUNT(*) as item_count,
+                    SUM(CASE WHEN ei.amount_pending = 1 THEN 0 ELSE ei.amount END) as total_amount,
+                    SUM(CASE WHEN ei.payment_status = '未払い' THEN 1 ELSE 0 END) as unpaid_count,
+                    SUM(CASE WHEN ei.payment_status = '未払い' AND ei.amount_pending = 0 
+                         THEN ei.amount ELSE 0 END) as unpaid_amount,
+                    SUM(CASE WHEN ei.payment_status = '支払済' THEN 1 ELSE 0 END) as paid_count,
+                    SUM(CASE WHEN ei.payment_status = '支払済' THEN ei.amount ELSE 0 END) as paid_amount,
+                    SUM(CASE WHEN ei.amount_pending = 1 THEN 1 ELSE 0 END) as pending_count
+                FROM expense_items ei
+                JOIN productions p ON ei.production_id = p.id
+                WHERE (ei.archived = 0 OR ei.archived IS NULL)
+            """
+            params = []
+
+            if search_term:
+                query += " AND p.name LIKE ?"
+                params.append(f"%{search_term}%")
+
+            query += " GROUP BY p.id, p.name"
+
+            # ソート
+            if sort_by == 'unpaid_count':
+                query += " ORDER BY unpaid_count DESC, total_amount DESC"
+            elif sort_by == 'item_count':
+                query += " ORDER BY item_count DESC, total_amount DESC"
+            else:  # total_amount
+                query += " ORDER BY total_amount DESC, item_count DESC"
+
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_production_expense_details(self, production_id):
+        """指定した番組の費用項目詳細を取得
+
+        Args:
+            production_id: 番組ID
+
+        Returns:
+            list: [(id, partner_name, item_name, amount, implementation_date,
+                   expected_payment_date, payment_status, status, notes, amount_pending), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT 
+                    ei.id,
+                    part.name as partner_name,
+                    ei.item_name,
+                    ei.amount,
+                    ei.implementation_date,
+                    ei.expected_payment_date,
+                    ei.payment_status,
+                    ei.status,
+                    ei.notes,
+                    ei.amount_pending,
+                    ei.work_type
+                FROM expense_items ei
+                LEFT JOIN partners part ON ei.partner_id = part.id
+                WHERE ei.production_id = ?
+                  AND (ei.archived = 0 OR ei.archived IS NULL)
+                ORDER BY ei.expected_payment_date DESC, ei.id DESC
+            """, (production_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_production_expense_monthly_summary(self, production_id):
+        """指定した番組の月別費用集計を取得
+
+        Args:
+            production_id: 番組ID
+
+        Returns:
+            list: [(month, item_count, total_amount, unpaid_count, paid_count), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT 
+                    strftime('%Y-%m', ei.expected_payment_date) as month,
+                    COUNT(*) as item_count,
+                    SUM(CASE WHEN ei.amount_pending = 1 THEN 0 ELSE ei.amount END) as total_amount,
+                    SUM(CASE WHEN ei.payment_status = '未払い' THEN 1 ELSE 0 END) as unpaid_count,
+                    SUM(CASE WHEN ei.payment_status = '支払済' THEN 1 ELSE 0 END) as paid_count
+                FROM expense_items ei
+                WHERE ei.production_id = ?
+                  AND (ei.archived = 0 OR ei.archived IS NULL)
+                  AND ei.expected_payment_date IS NOT NULL
+                GROUP BY month
+                ORDER BY month DESC
+            """, (production_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()

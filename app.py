@@ -27,6 +27,7 @@ from payment_tab import PaymentTab
 from payment_order_check_tab import PaymentOrderCheckTab
 from order_management.ui.order_contract_widget import OrderContractWidget
 from order_management.ui.expense_items_widget import ExpenseItemsWidget
+from order_management.ui.production_expense_detail_widget import ProductionExpenseDetailWidget
 from master_management_tab import MasterManagementTab
 from data_management_tab import DataManagementTab
 from utils import get_latest_csv_file, log_message
@@ -148,11 +149,15 @@ class RadioBillingApp(QMainWindow):
         self.expense_items_widget = ExpenseItemsWidget()
         self.expense_items_tab_index = tab_control.addTab(self.expense_items_widget, "費用項目管理")
 
-        # メインタブ5: マスター管理
+        # メインタブ5: 番組別費用詳細（新設）
+        self.production_expense_detail_widget = ProductionExpenseDetailWidget()
+        self.production_expense_tab_index = tab_control.addTab(self.production_expense_detail_widget, "番組別費用詳細")
+
+        # メインタブ6: マスター管理
         self.master_management_tab = MasterManagementTab(tab_control, self)
         tab_control.addTab(self.master_management_tab, self.config.TAB_NAMES['master_management'])
 
-        # メインタブ6: データ管理（たまに使う、サブタブあり）
+        # メインタブ7: データ管理（たまに使う、サブタブあり）
         self.data_management_tab = DataManagementTab(tab_control, self)
         tab_control.addTab(self.data_management_tab, self.config.TAB_NAMES['data_management'])
 
