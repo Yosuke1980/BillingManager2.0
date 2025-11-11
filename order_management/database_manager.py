@@ -3694,18 +3694,29 @@ class OrderManagementDB:
 
             # 単発契約の場合
             if spot_amount and spot_amount > 0:
-                # 1件のみ生成
+                # 重複チェック：同じ契約ID・実施日・金額の費用項目が既に存在するか確認
                 cursor.execute("""
-                    INSERT INTO expense_items (
+                    SELECT COUNT(*) FROM expense_items
+                    WHERE contract_id = ?
+                      AND implementation_date = ?
+                      AND amount = ?
+                """, (contract_id, implementation_date, spot_amount))
+
+                exists = cursor.fetchone()[0] > 0
+
+                if not exists:
+                    # 1件のみ生成
+                    cursor.execute("""
+                        INSERT INTO expense_items (
+                            contract_id, production_id, partner_id, item_name,
+                            amount, implementation_date, expected_payment_date,
+                            status, payment_status, work_type
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い', ?)
+                    """, (
                         contract_id, production_id, partner_id, item_name,
-                        amount, implementation_date, expected_payment_date,
-                        status, payment_status, work_type
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い', ?)
-                """, (
-                    contract_id, production_id, partner_id, item_name,
-                    spot_amount, implementation_date, implementation_date, work_type
-                ))
-                generated_count = 1
+                        spot_amount, implementation_date, implementation_date, work_type
+                    ))
+                    generated_count = 1
 
             # 月額固定契約の場合
             elif unit_price and unit_price > 0 and start_date_str and end_date_str:
@@ -3725,17 +3736,31 @@ class OrderManagementDB:
                         # 翌月末
                         payment_date = (current_date + relativedelta(months=2, days=-1)).strftime('%Y-%m-%d')
 
+                    impl_date_str = current_date.strftime('%Y-%m-%d')
+
+                    # 重複チェック：同じ契約ID・実施日・金額の費用項目が既に存在するか確認
                     cursor.execute("""
-                        INSERT INTO expense_items (
+                        SELECT COUNT(*) FROM expense_items
+                        WHERE contract_id = ?
+                          AND implementation_date = ?
+                          AND amount = ?
+                    """, (contract_id, impl_date_str, unit_price))
+
+                    exists = cursor.fetchone()[0] > 0
+
+                    if not exists:
+                        cursor.execute("""
+                            INSERT INTO expense_items (
+                                contract_id, production_id, partner_id, item_name,
+                                amount, implementation_date, expected_payment_date,
+                                status, payment_status, work_type
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い', ?)
+                        """, (
                             contract_id, production_id, partner_id, item_name,
-                            amount, implementation_date, expected_payment_date,
-                            status, payment_status, work_type
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い', ?)
-                    """, (
-                        contract_id, production_id, partner_id, item_name,
-                        unit_price, current_date.strftime('%Y-%m-%d'), payment_date, work_type
-                    ))
-                    generated_count += 1
+                            unit_price, impl_date_str, payment_date, work_type
+                        ))
+                        generated_count += 1
+
                     current_date = current_date + relativedelta(months=1)
 
             conn.commit()
