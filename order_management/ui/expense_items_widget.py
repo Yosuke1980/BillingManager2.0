@@ -105,7 +105,7 @@ class ExpenseItemsWidget(QWidget):
         self.table.setHorizontalHeaderLabels([
             "ID", "番組名", "取引先名", "項目名", "業務種別", "金額",
             "実施日", "支払予定日", "状態", "支払状態",
-            "契約ID", "備考"
+            "発注", "備考"
         ])
 
         # 列幅の設定
@@ -312,7 +312,13 @@ class ExpenseItemsWidget(QWidget):
             self.table.setItem(row, 7, QTableWidgetItem(expected_payment_date))
             self.table.setItem(row, 8, QTableWidgetItem(item_status))
             self.table.setItem(row, 9, QTableWidgetItem(payment_status))
-            self.table.setItem(row, 10, QTableWidgetItem(str(contract_id) if contract_id else ""))
+
+            # 発注（契約）の有無を分かりやすく表示
+            contract_display = "✓ あり" if contract_id else "✗ なし"
+            contract_item = QTableWidgetItem(contract_display)
+            contract_item.setData(Qt.UserRole, contract_id)  # 契約IDを保存
+            self.table.setItem(row, 10, contract_item)
+
             self.table.setItem(row, 11, QTableWidgetItem(notes))
 
             # 行全体に背景色を適用
