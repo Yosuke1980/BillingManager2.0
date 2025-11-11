@@ -140,9 +140,9 @@ class ProductionExpenseDetailWidget(QWidget):
         layout.addWidget(detail_label)
 
         self.detail_table = QTableWidget()
-        self.detail_table.setColumnCount(7)
+        self.detail_table.setColumnCount(8)
         self.detail_table.setHorizontalHeaderLabels([
-            "実施日", "項目名", "コーナー", "金額", "取引先", "支払予定日", "支払状態"
+            "実施日", "項目名", "コーナー", "金額", "取引先", "支払予定日", "支払状態", "手続状態"
         ])
 
         # 列幅の設定
@@ -154,6 +154,7 @@ class ProductionExpenseDetailWidget(QWidget):
         header.setSectionResizeMode(4, QHeaderView.Stretch)  # 取引先
         header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 支払予定日
         header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 支払状態
+        header.setSectionResizeMode(7, QHeaderView.ResizeToContents)  # 手続状態
 
         self.detail_table.setAlternatingRowColors(True)
         self.detail_table.itemDoubleClicked.connect(self.on_expense_item_double_clicked)
@@ -334,7 +335,7 @@ class ProductionExpenseDetailWidget(QWidget):
             self.detail_table.setItem(row_index, 0, header_item)
 
             # ヘッダー行は全列を結合
-            self.detail_table.setSpan(row_index, 0, 1, 7)
+            self.detail_table.setSpan(row_index, 0, 1, 8)
             row_index += 1
 
             # その月の費用項目を取得
@@ -369,7 +370,8 @@ class ProductionExpenseDetailWidget(QWidget):
 
         # データ構造: (id, partner_name, item_name, amount, implementation_date,
         #            expected_payment_date, payment_status, status, notes, amount_pending,
-        #            work_type, corner_name, corner_id)
+        #            work_type, corner_name, corner_id, contract_id, invoice_received_date,
+        #            actual_payment_date)
         item_id = detail[0]
         partner_name = detail[1] or ""
         item_name = detail[2] or ""
@@ -382,6 +384,9 @@ class ProductionExpenseDetailWidget(QWidget):
         amount_pending = detail[9] if len(detail) > 9 else 0
         corner_name = detail[11] if len(detail) > 11 else ""
         corner_id = detail[12] if len(detail) > 12 else None
+        contract_id = detail[13] if len(detail) > 13 else None
+        invoice_received_date = detail[14] if len(detail) > 14 else None
+        actual_payment_date = detail[15] if len(detail) > 15 else None
 
         # 金額のフォーマット
         if amount_pending == 1:
@@ -401,7 +406,28 @@ class ProductionExpenseDetailWidget(QWidget):
             except:
                 pass
 
-        # テーブルにデータを設定（列順: 実施日、項目名、コーナー、金額、取引先、支払予定日、支払状態）
+        # 手続状態の判定（支払い発注チェックタブと同じロジック）
+        procedure_status = ""
+        procedure_status_color = None
+
+        if not actual_payment_date:
+            # 支払未完了（最優先）
+            procedure_status = "🚨 支払未"
+            procedure_status_color = QColor(255, 220, 220)  # 赤
+        elif not contract_id or (isinstance(contract_id, str) and contract_id == ""):
+            # 未発注
+            procedure_status = "未発注"
+            procedure_status_color = QColor(255, 255, 200)  # 黄
+        elif not invoice_received_date:
+            # 書類不備（請求書未受領）
+            procedure_status = "⚠️ 書類不備"
+            procedure_status_color = QColor(255, 255, 200)  # 黄
+        else:
+            # すべて完了
+            procedure_status = "✅ 完了"
+            procedure_status_color = QColor(220, 255, 220)  # 緑
+
+        # テーブルにデータを設定（列順: 実施日、項目名、コーナー、金額、取引先、支払予定日、支払状態、手続状態）
         implementation_date_item = QTableWidgetItem(implementation_date)
         implementation_date_item.setData(Qt.UserRole, item_id)  # expense_item_idを保存
         self.detail_table.setItem(row, 0, implementation_date_item)
@@ -411,22 +437,20 @@ class ProductionExpenseDetailWidget(QWidget):
         self.detail_table.setItem(row, 4, QTableWidgetItem(partner_name))
         self.detail_table.setItem(row, 5, QTableWidgetItem(expected_payment_date))
         self.detail_table.setItem(row, 6, QTableWidgetItem(payment_status))
+        self.detail_table.setItem(row, 7, QTableWidgetItem(procedure_status))
 
-        # 行の背景色を決定（優先順位: 期限超過 > 支払済 > 金額未定 > 支払間近）
+        # 行の背景色を決定（優先順位: 期限超過 > 手続状態 > 金額未定 > 支払間近）
         row_color = None
 
         # 最優先: 期限超過（未払い＋支払予定日が過去）
         if payment_status == "未払い" and days_until is not None and days_until < 0:
             row_color = QColor(255, 200, 200)  # 濃い赤（期限超過）
-
-        # 支払済み
-        if not row_color and payment_status == "支払済":
-            row_color = QColor(220, 255, 220)  # 緑
-
-        # 金額未定
+        # 手続状態による色分け
+        elif not row_color:
+            row_color = procedure_status_color
+        # 金額未定（手続完了でも金額未定の場合は表示）
         if not row_color and amount_pending == 1:
             row_color = QColor(255, 243, 224)  # 薄いオレンジ（金額未定）
-
         # 支払間近（7日以内）
         if not row_color and payment_status == "未払い" and days_until is not None and 0 <= days_until <= 7:
             row_color = QColor(255, 255, 200)  # 黄（間近）
