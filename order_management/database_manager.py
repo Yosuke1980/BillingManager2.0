@@ -531,6 +531,29 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def get_corners_by_production(self, production_id: int) -> List[Tuple]:
+        """指定した番組に紐づくコーナー一覧を取得
+
+        Args:
+            production_id: 親番組のID
+
+        Returns:
+            List[Tuple]: (id, name) のリスト
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, name
+                FROM productions
+                WHERE parent_production_id = ?
+                ORDER BY name
+            """, (production_id,))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
     def save_production(self, production_data: dict, is_new: bool = True):
         """制作物を保存
 
@@ -3411,7 +3434,7 @@ class OrderManagementDB:
                        payment_status, payment_verified_date, payment_matched_id,
                        payment_difference, gmail_draft_id, gmail_message_id,
                        email_sent_at, contact_person, notes, created_at, updated_at,
-                       work_type
+                       work_type, amount_pending, corner_id
                 FROM expense_items
                 WHERE id = ?
             """, (expense_id,))

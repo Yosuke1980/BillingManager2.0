@@ -2,6 +2,35 @@
 
 ## 2025-11-11
 
+### 費用項目編集画面にコーナー選択機能を追加
+
+**実装内容:**
+
+費用項目編集画面でコーナーを選択できるようにし、番組別費用詳細でコーナー名が表示されるようにしました。
+
+**変更点:**
+
+1. **データベースマネージャーにコーナー取得メソッドを追加** ([database_manager.py:534-555](order_management/database_manager.py#L534-L555))
+   - `get_corners_by_production(production_id)`: 指定した番組のコーナー一覧を取得するメソッドを追加
+
+2. **費用項目編集画面にコーナー選択UIを追加** ([expense_item_edit_dialog.py:75-78](order_management/ui/expense_item_edit_dialog.py#L75-L78))
+   - 番組選択の下に「コーナー」コンボボックスを追加
+   - 番組を選択すると、その番組に紐づくコーナーが自動的に表示される
+
+3. **番組変更時のコーナー一覧更新** ([expense_item_edit_dialog.py:377-378](order_management/ui/expense_item_edit_dialog.py#L377-L378))
+   - 番組が変更されたときに、コーナー一覧も自動的に更新される
+   - コーナーがない番組では「(なし)」のみ表示
+
+4. **データ保存・読み込みの更新**
+   - `get_expense_data()`: corner_idを含めてデータを取得 ([expense_item_edit_dialog.py:357](order_management/ui/expense_item_edit_dialog.py#L357))
+   - `_load_data()`: 既存費用項目のコーナー情報を読み込み ([expense_item_edit_dialog.py:272-277](order_management/ui/expense_item_edit_dialog.py#L272-L277))
+   - `get_expense_item_by_id()`: corner_idを含めて取得 ([database_manager.py:3437](order_management/database_manager.py#L3437))
+
+**結果:**
+- 費用項目を編集する際に、どのコーナーに属するかを設定できるようになった
+- 番組別費用詳細画面で、コーナーが設定された費用項目はコーナー名が表示される
+- コーナーを使った費用管理が可能になった
+
 ### 番組別費用詳細の表示改善とコーナー名表示機能の修正
 
 **実装内容:**

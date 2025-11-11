@@ -72,6 +72,11 @@ class ExpenseItemEditDialog(QDialog):
         production_label = QLabel("<b>番組・イベント *:</b>")
         form_layout.addRow(production_label, self.production_combo)
 
+        # コーナー選択
+        self.corner_combo = QComboBox()
+        self.corner_combo.addItem("(なし)", None)
+        form_layout.addRow("コーナー:", self.corner_combo)
+
         # 取引先選択
         self.partner_combo = QComboBox()
         self.partner_combo.addItem("(未選択)", None)
@@ -174,6 +179,19 @@ class ExpenseItemEditDialog(QDialog):
 
             self.partner_combo.addItem(display_text, partner_id)
 
+    def refresh_corners(self, production_id=None):
+        """コーナーリストを更新"""
+        # 既存のアイテムをクリア
+        self.corner_combo.clear()
+        self.corner_combo.addItem("(なし)", None)
+
+        if production_id:
+            corners = self.db.get_corners_by_production(production_id)
+            for corner in corners:
+                corner_id = corner[0]
+                corner_name = corner[1]
+                self.corner_combo.addItem(corner_name, corner_id)
+
     def _on_contract_selected(self, index):
         """契約が選択されたときの処理"""
         if not self.link_contract_checkbox.isChecked():
@@ -248,6 +266,15 @@ class ExpenseItemEditDialog(QDialog):
             idx = self.production_combo.findData(production_id)
             if idx >= 0:
                 self.production_combo.setCurrentIndex(idx)
+            # コーナー一覧を読み込み
+            self.refresh_corners(production_id)
+
+        # コーナーを設定
+        corner_id = self.expense_data[28] if len(self.expense_data) > 28 else None
+        if corner_id:
+            idx = self.corner_combo.findData(corner_id)
+            if idx >= 0:
+                self.corner_combo.setCurrentIndex(idx)
 
         # 取引先を設定
         partner_id = self.expense_data[3]
@@ -336,6 +363,7 @@ class ExpenseItemEditDialog(QDialog):
             'contract_id': self.contract_combo.currentData(),
             'production_id': self.production_combo.currentData(),
             'partner_id': self.partner_combo.currentData(),
+            'corner_id': self.corner_combo.currentData(),
             'item_name': self.item_name_edit.text().strip(),
             'work_type': self.work_type_combo.currentText(),
             'amount': 0 if is_pending else self.amount_spin.value(),
@@ -353,12 +381,15 @@ class ExpenseItemEditDialog(QDialog):
         return data
 
     def _on_production_changed(self, index):
-        """番組変更時の確認ダイアログ"""
+        """番組変更時の確認ダイアログとコーナー一覧の更新"""
+        new_production_id = self.production_combo.currentData()
+
+        # コーナー一覧を更新
+        self.refresh_corners(new_production_id)
+
         # 新規作成時または元の番組がない場合はチェック不要
         if not self.original_production_id:
             return
-
-        new_production_id = self.production_combo.currentData()
 
         # 番組が変更されている場合のみ確認
         if new_production_id and new_production_id != self.original_production_id:
@@ -387,6 +418,8 @@ class ExpenseItemEditDialog(QDialog):
                         self.production_combo.blockSignals(True)  # シグナルを一時的にブロック
                         self.production_combo.setCurrentIndex(i)
                         self.production_combo.blockSignals(False)
+                        # コーナー一覧を元に戻す
+                        self.refresh_corners(self.original_production_id)
                         break
 
     def create_new_contract(self):
