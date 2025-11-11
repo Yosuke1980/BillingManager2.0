@@ -2,6 +2,41 @@
 
 ## 2025-11-11
 
+### 発注管理に金額未定機能を追加
+
+**実装内容:**
+
+発注書・契約書の作成時に金額が未確定の場合に対応する機能を追加しました。
+
+**変更点:**
+
+1. **UIの追加** ([order_contract_edit_dialog.py:357-359, 382-384](order_management/ui/order_contract_edit_dialog.py#L357-L359))
+   - レギュラー契約: 単価入力欄の横に「金額未定」チェックボックスを追加
+   - 単発契約: スポット金額入力欄の横に「金額未定」チェックボックスを追加
+
+2. **イベントハンドラの実装** ([order_contract_edit_dialog.py:569-581](order_management/ui/order_contract_edit_dialog.py#L569-L581))
+   - `on_unit_price_pending_changed()`: レギュラー契約用
+   - `on_spot_amount_pending_changed()`: 単発契約用
+   - チェック時: 金額入力欄を無効化し、入力内容をクリア
+   - チェック解除時: 金額入力欄を有効化
+
+3. **バリデーションの更新** ([order_contract_edit_dialog.py:954](order_management/ui/order_contract_edit_dialog.py#L954))
+   - 金額未定チェックボックスがチェックされている場合、金額の入力チェックをスキップ
+
+4. **保存ロジックの更新** ([order_contract_edit_dialog.py:1026-1028, 1083-1084](order_management/ui/order_contract_edit_dialog.py#L1026-L1028))
+   - `amount_pending` フラグをデータベースに保存
+   - レギュラー契約: `unit_price` を NULL で保存
+   - 単発契約: `spot_amount` を NULL で保存
+
+5. **データベース読み込みの対応** ([database_manager.py:1405](order_management/database_manager.py#L1405))
+   - `get_order_contract_by_id()` に `amount_pending` フィールドを追加
+   - 既存契約編集時にチェックボックスの状態を正しく復元
+
+**結果:**
+- 金額が未確定の契約でも発注書・契約書を作成可能に
+- 金額確定後、契約を編集して金額を入力可能
+- データベースには `amount_pending = 1` と `amount = NULL` で保存
+
 ### 番組別費用詳細の表示項目を整理
 
 **変更内容:**

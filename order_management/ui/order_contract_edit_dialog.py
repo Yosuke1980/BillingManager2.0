@@ -352,6 +352,12 @@ class OrderContractEditDialog(QDialog):
         self.unit_price.setPlaceholderText("例: 50000")
         self.unit_price.setMaximumWidth(150)
         payment_layout.addWidget(self.unit_price)
+
+        # 金額未定チェックボックス（レギュラー用）
+        self.unit_price_pending = QCheckBox("金額未定")
+        self.unit_price_pending.stateChanged.connect(self.on_unit_price_pending_changed)
+        payment_layout.addWidget(self.unit_price_pending)
+
         payment_layout.addStretch()
 
         self.regular_payment_widget = QWidget()
@@ -371,6 +377,12 @@ class OrderContractEditDialog(QDialog):
         self.spot_amount.setPlaceholderText("例: 100000")
         self.spot_amount.setMaximumWidth(150)
         spot_amount_layout.addWidget(self.spot_amount)
+
+        # 金額未定チェックボックス（スポット用）
+        self.spot_amount_pending = QCheckBox("金額未定")
+        self.spot_amount_pending.stateChanged.connect(self.on_spot_amount_pending_changed)
+        spot_amount_layout.addWidget(self.spot_amount_pending)
+
         spot_amount_layout.addStretch()
 
         self.spot_payment_widget = QWidget()
@@ -554,6 +566,20 @@ class OrderContractEditDialog(QDialog):
             # 自動延長を無効にした場合、終了通知受領日もクリア推奨
             pass  # ユーザーの判断に任せる
 
+    def on_unit_price_pending_changed(self, state):
+        """金額未定チェックボックスの状態変更（レギュラー用）"""
+        is_checked = (state == Qt.Checked)
+        self.unit_price.setEnabled(not is_checked)
+        if is_checked:
+            self.unit_price.clear()
+
+    def on_spot_amount_pending_changed(self, state):
+        """金額未定チェックボックスの状態変更（スポット用）"""
+        is_checked = (state == Qt.Checked)
+        self.spot_amount.setEnabled(not is_checked)
+        if is_checked:
+            self.spot_amount.clear()
+
     def on_order_configuration_changed(self):
         """発注種別が変更されたときの処理
 
@@ -734,7 +760,7 @@ class OrderContractEditDialog(QDialog):
             # 26:spot_amount, 27:order_category,
             # 28:email_subject, 29:email_body, 30:email_to,
             # 31:auto_renewal_enabled, 32:renewal_period_months, 33:termination_notice_date,
-            # 34:last_renewal_date, 35:renewal_count, 36:work_type
+            # 34:last_renewal_date, 35:renewal_count, 36:work_type, 37:amount_pending
 
             # 番組選択
             for i in range(self.program_combo.count()):
@@ -871,8 +897,14 @@ class OrderContractEditDialog(QDialog):
                 # 単発金額を設定
                 if contract[26] is not None:  # spot_amount
                     self.spot_amount.setText(str(int(contract[26])))
+                # 金額未定チェックボックスを設定（スポット用）
+                amount_pending = contract[37] if len(contract) > 37 else 0
+                self.spot_amount_pending.setChecked(bool(amount_pending))
             else:
                 self.order_type_regular.setChecked(True)
+                # 金額未定チェックボックスを設定（レギュラー用）
+                amount_pending = contract[37] if len(contract) > 37 else 0
+                self.unit_price_pending.setChecked(bool(amount_pending))
 
             # 画面の表示状態を更新
             self.on_order_configuration_changed()
@@ -924,14 +956,16 @@ class OrderContractEditDialog(QDialog):
 
         # 単発の場合の追加バリデーション
         if self.order_type_spot.isChecked():
-            if not self.spot_amount.text().strip():
-                QMessageBox.warning(self, "警告", "単発金額を入力してください。")
-                return
-            try:
-                float(self.spot_amount.text())
-            except ValueError:
-                QMessageBox.warning(self, "警告", "単発金額は数値で入力してください。")
-                return
+            # 金額未定チェックボックスがチェックされていない場合のみ金額を検証
+            if not self.spot_amount_pending.isChecked():
+                if not self.spot_amount.text().strip():
+                    QMessageBox.warning(self, "警告", "単発金額を入力してください。")
+                    return
+                try:
+                    float(self.spot_amount.text())
+                except ValueError:
+                    QMessageBox.warning(self, "警告", "単発金額は数値で入力してください。")
+                    return
 
         # PDFファイルを保存
         saved_pdf_path = ""
@@ -995,8 +1029,9 @@ class OrderContractEditDialog(QDialog):
             'notes': self.notes.toPlainText(),
             # レギュラー番組契約条件
             'payment_type': self.payment_type.currentText(),
-            'unit_price': float(self.unit_price.text()) if self.unit_price.text() else None,
+            'unit_price': float(self.unit_price.text()) if (self.unit_price.text() and not self.unit_price_pending.isChecked()) else None,
             'payment_timing': self.payment_timing.currentText(),
+            'amount_pending': 1 if self.unit_price_pending.isChecked() else 0,
             # V6フィールド
             'contract_type': 'regular_fixed' if self.payment_type.currentText() == '月額固定' else 'regular_count'
         }
@@ -1051,7 +1086,8 @@ class OrderContractEditDialog(QDialog):
         # 単発の場合は実施日と単発金額を保存
         if self.order_type_spot.isChecked():
             contract_data['implementation_date'] = self.implementation_date.date().toString("yyyy-MM-dd")
-            contract_data['spot_amount'] = float(self.spot_amount.text()) if self.spot_amount.text() else None
+            contract_data['spot_amount'] = float(self.spot_amount.text()) if (self.spot_amount.text() and not self.spot_amount_pending.isChecked()) else None
+            contract_data['amount_pending'] = 1 if self.spot_amount_pending.isChecked() else 0
         else:
             contract_data['implementation_date'] = None
             contract_data['spot_amount'] = None

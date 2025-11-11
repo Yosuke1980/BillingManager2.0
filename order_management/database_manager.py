@@ -1401,7 +1401,8 @@ class OrderManagementDB:
                        oc.termination_notice_date,
                        oc.last_renewal_date,
                        COALESCE(oc.renewal_count, 0) as renewal_count,
-                       COALESCE(oc.work_type, '制作') as work_type
+                       COALESCE(oc.work_type, '制作') as work_type,
+                       COALESCE(oc.amount_pending, 0) as amount_pending
                 FROM contracts oc
                 LEFT JOIN productions prod ON oc.production_id = prod.id
                 LEFT JOIN productions proj ON oc.project_id = proj.id
