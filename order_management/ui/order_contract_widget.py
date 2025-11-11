@@ -282,7 +282,10 @@ class OrderContractWidget(QWidget):
             status_item.setData(Qt.UserRole, contract[0])  # IDを保存
             self.table.setItem(row, 0, status_item)  # 書類ステータス
             self.table.setItem(row, 1, QTableWidgetItem(contract[8] or "発注書"))  # 書類種別
-            self.table.setItem(row, 2, QTableWidgetItem(contract[2] or ""))  # 番組名
+
+            # 番組名の表示（番組が紐づいていない場合は明示）
+            production_name = contract[2] or "（番組なし）"
+            self.table.setItem(row, 2, QTableWidgetItem(production_name))  # 番組名
             self.table.setItem(row, 3, QTableWidgetItem(item_name))  # 費用項目
             self.table.setItem(row, 4, QTableWidgetItem(amount_text))  # 金額
             self.table.setItem(row, 5, QTableWidgetItem(payment_type or ""))  # 支払タイプ
