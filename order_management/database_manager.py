@@ -942,7 +942,7 @@ class OrderManagementDB:
             partner_id: 取引先ID
 
         Returns:
-            List[Tuple]: (contract_id, item_name, unit_price, order_status, payment_timing)
+            List[Tuple]: (contract_id, item_name, unit_price, document_status, payment_timing)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -950,7 +950,7 @@ class OrderManagementDB:
         try:
             cursor.execute("""
                 SELECT
-                    id, item_name, unit_price, order_status, payment_timing
+                    id, item_name, unit_price, document_status, payment_timing
                 FROM contracts
                 WHERE production_id = ? AND partner_id = ?
                 ORDER BY item_name
