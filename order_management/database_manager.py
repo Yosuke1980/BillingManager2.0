@@ -1518,6 +1518,7 @@ class OrderManagementDB:
                         auto_renewal_enabled = ?,
                         renewal_period_months = ?,
                         termination_notice_date = ?,
+                        amount_pending = ?,
                         notes = ?,
                         updated_at = ?
                     WHERE id = ?
@@ -1545,6 +1546,7 @@ class OrderManagementDB:
                     contract_data.get('auto_renewal_enabled', 1),
                     contract_data.get('renewal_period_months', 3),
                     contract_data.get('termination_notice_date'),
+                    contract_data.get('amount_pending', 0),
                     contract_data.get('notes', ''),
                     now,
                     contract_id
@@ -1560,8 +1562,8 @@ class OrderManagementDB:
                         document_type, document_status, pdf_file_path,
                         email_to, email_subject, email_body, email_sent_date,
                         auto_renewal_enabled, renewal_period_months, termination_notice_date,
-                        notes, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        amount_pending, notes, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     contract_data.get('production_id'),
                     contract_data.get('project_id'),
@@ -1586,6 +1588,7 @@ class OrderManagementDB:
                     contract_data.get('auto_renewal_enabled', 1),
                     contract_data.get('renewal_period_months', 3),
                     contract_data.get('termination_notice_date'),
+                    contract_data.get('amount_pending', 0),
                     contract_data.get('notes', ''),
                     now,
                     now
