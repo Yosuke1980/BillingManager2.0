@@ -736,7 +736,7 @@ class ProductionEditDialog(QDialog):
                     # 契約情報を表示
                     self.producer_table.setItem(row, 1, QTableWidgetItem(contract['item_name']))
                     self.producer_table.setItem(row, 2, QTableWidgetItem(f"{contract['unit_price']:,.0f}"))
-                    self.producer_table.setItem(row, 3, QTableWidgetItem(contract['document_status']))
+                    self.producer_table.setItem(row, 3, QTableWidgetItem(contract.get('order_status', '')))
                     self.producer_table.setItem(row, 4, QTableWidgetItem(contract['payment_timing']))
                     self.producer_table.setItem(row, 5, QTableWidgetItem(""))
 
