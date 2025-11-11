@@ -503,11 +503,23 @@ def main():
     """メイン関数"""
     import argparse
     import platform
+    import fcntl
+    import tempfile
 
     # コマンドライン引数の解析
     parser = argparse.ArgumentParser(description=AppConfig.WINDOW_TITLE)
     parser.add_argument('--import-csv', type=str, help='指定されたCSVファイルをインポートしてアプリを起動')
     args = parser.parse_args()
+
+    # 多重起動防止：ロックファイルを使用
+    lock_file_path = os.path.join(tempfile.gettempdir(), 'billing_manager_app.lock')
+    lock_file = open(lock_file_path, 'w')
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        print("エラー: アプリケーションは既に起動しています")
+        print("複数のインスタンスを起動することはできません")
+        sys.exit(1)
 
     app = QApplication(sys.argv)
 
