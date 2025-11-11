@@ -188,7 +188,7 @@ class OrderContractEditDialog(QDialog):
         program_name_label = QLabel("<b>番組名 *:</b>")
         program_layout_main.addRow(program_name_label, program_layout)
 
-        # 案件指定（ラジオボタン）
+        # 案件指定（ラジオボタン）- 案件機能は使用しないため非表示
         project_type_layout = QHBoxLayout()
         self.rb_normal = QRadioButton("通常放送（レギュラー放送用）")
         self.rb_project = QRadioButton("特定案件（イベント・特番用）")
@@ -202,7 +202,7 @@ class OrderContractEditDialog(QDialog):
         project_type_layout.addWidget(self.rb_normal)
         project_type_layout.addWidget(self.rb_project)
         project_type_layout.addStretch()
-        program_layout_main.addRow("案件指定:", project_type_layout)
+        # program_layout_main.addRow("案件指定:", project_type_layout)  # 非表示
 
         # 案件選択コンボボックス（インデントして階層表示）
         project_select_widget = QWidget()
@@ -225,10 +225,10 @@ class OrderContractEditDialog(QDialog):
         self.project_select_widget = project_select_widget
         self.project_select_widget.setVisible(False)
 
-        # ヘルプテキスト
-        help_label = QLabel("<i><font color='#666'>ヒント: 通常放送はレギュラー番組の定期発注、特定案件はイベントや特番などの単発発注です</font></i>")
-        help_label.setWordWrap(True)
-        program_layout_main.addRow("", help_label)
+        # ヘルプテキスト - 案件機能は使用しないため非表示
+        # help_label = QLabel("<i><font color='#666'>ヒント: 通常放送はレギュラー番組の定期発注、特定案件はイベントや特番などの単発発注です</font></i>")
+        # help_label.setWordWrap(True)
+        # program_layout_main.addRow("", help_label)
 
         # 費用項目
         self.item_name = QLineEdit()
@@ -613,12 +613,7 @@ class OrderContractEditDialog(QDialog):
             self.regular_payment_help.setVisible(False)
             self.spot_payment_widget.setVisible(True)
 
-        # 単発の場合は案件指定を「特定案件」に固定
-        if not is_regular:
-            self.rb_project.setChecked(True)
-            self.rb_normal.setEnabled(False)
-        else:
-            self.rb_normal.setEnabled(True)
+        # 案件機能は使用しないため、常に「通常放送」モード
 
     def on_project_type_changed(self):
         """案件区分が変更されたときの処理"""
@@ -930,10 +925,7 @@ class OrderContractEditDialog(QDialog):
             QMessageBox.warning(self, "警告", "番組を選択してください。")
             return
 
-        if self.rb_project.isChecked():
-            if self.project_combo.currentIndex() < 0 or self.project_combo.currentData() is None:
-                QMessageBox.warning(self, "警告", "案件を選択してください。")
-                return
+        # 案件機能は使用しないため、バリデーションをスキップ
 
         # 費用項目が空欄の場合はデフォルト値を設定
         if not self.item_name.text().strip():
@@ -1317,6 +1309,9 @@ class OrderContractEditDialog(QDialog):
         if self.preset_work_type:
             if self.preset_work_type == '出演':
                 self.work_type_cast.setChecked(True)
+                # 出演者テーブルに自動追加
+                if self.preset_partner_id:
+                    self._auto_add_cast_to_table(self.preset_partner_id)
             elif self.preset_work_type == '制作':
                 self.work_type_production.setChecked(True)
             # 業務種別を固定（編集不可）
@@ -1463,6 +1458,46 @@ class OrderContractEditDialog(QDialog):
                 delete_btn.setMaximumWidth(40)
                 delete_btn.clicked.connect(lambda checked, r=row: self.remove_cast_from_table(r))
                 self.cast_table.setCellWidget(row, 3, delete_btn)
+
+    def _auto_add_cast_to_table(self, partner_id):
+        """番組編集から呼び出された場合、出演者を自動的にテーブルに追加"""
+        # partner_idから取引先情報を取得
+        partner_info = self.pm.get_partner_by_id(partner_id)
+        if not partner_info:
+            return
+
+        # partner_info: (id, name, code, address, contact_person, phone, email,
+        #                payment_terms, notes, partner_type, bank_info, tax_id,
+        #                representative, department, position, created_at, updated_at)
+        partner_name = partner_info[1]
+
+        # 既に追加済みかチェック（重複防止）
+        for row in range(self.cast_table.rowCount()):
+            item = self.cast_table.item(row, 0)
+            if item and item.text() == partner_name:
+                return  # 既に追加済み
+
+        # テーブルに行を追加
+        row = self.cast_table.rowCount()
+        self.cast_table.insertRow(row)
+
+        # 出演者名
+        name_item = QTableWidgetItem(partner_name)
+        self.cast_table.setItem(row, 0, name_item)
+
+        # 所属（取引先名と同じ）
+        affiliation_item = QTableWidgetItem(partner_name)
+        self.cast_table.setItem(row, 1, affiliation_item)
+
+        # 役割（空白）
+        role_item = QTableWidgetItem("")
+        self.cast_table.setItem(row, 2, role_item)
+
+        # 削除ボタン
+        delete_btn = QPushButton("✕")
+        delete_btn.setMaximumWidth(40)
+        delete_btn.clicked.connect(lambda checked, r=row: self.remove_cast_from_table(r))
+        self.cast_table.setCellWidget(row, 3, delete_btn)
 
     def remove_cast_from_table(self, row):
         """テーブルから出演者を削除"""
