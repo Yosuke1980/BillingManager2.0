@@ -2,6 +2,41 @@
 
 ## 2025-11-11
 
+### 支払い情報との自動照合機能を実装
+
+**実装内容:**
+
+billing.dbの支払いデータとexpense_itemsの費用項目を自動的に照合し、支払済情報を反映する機能を実装しました。
+
+**変更点:**
+
+1. **支払い照合メソッドの実装** ([database_manager.py:3992-4121](order_management/database_manager.py#L3992-L4121))
+   - `reconcile_payments_with_expenses()`: billing.dbとorder_management.dbを照合
+   - 照合条件:
+     - 取引先名またはコードが一致
+     - 金額が±5%以内で一致
+     - 支払日と支払予定日が±7日以内
+
+2. **照合情報の反映**
+   - 一致した費用項目に以下を設定:
+     - payment_matched_id: 支払いID
+     - actual_payment_date: 実際の支払日
+     - payment_amount: 実際の支払金額
+     - payment_status: '支払済'
+
+3. **テストスクリプトの作成** ([test_payment_reconciliation.py](test_payment_reconciliation.py))
+   - 照合処理の実行と結果確認用スクリプト
+
+**テスト結果:**
+- 照合成功: 8件
+- 未照合費用項目: 445件
+- 未照合支払い: 191件
+
+**結果:**
+- 番組別費用詳細画面で支払済の項目が緑色で表示される
+- 実際の支払日と支払金額が反映される
+- 照合済の支払いデータの重複処理を防止
+
 ### 費用項目編集画面にコーナー選択機能を追加
 
 **実装内容:**

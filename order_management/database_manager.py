@@ -3988,3 +3988,134 @@ class OrderManagementDB:
             return cursor.fetchall()
         finally:
             conn.close()
+
+    def reconcile_payments_with_expenses(self, billing_db_path='billing.db'):
+        """billing.dbの支払いデータとexpense_itemsを照合して更新
+
+        Args:
+            billing_db_path: billing.dbのパス
+
+        Returns:
+            dict: {
+                'matched': 照合成功件数,
+                'unmatched_expenses': 未照合費用項目数,
+                'unmatched_payments': 未照合支払い数
+            }
+        """
+        import sqlite3
+        from datetime import datetime, timedelta
+
+        # billing.dbに接続
+        billing_conn = sqlite3.connect(billing_db_path)
+        billing_cursor = billing_conn.cursor()
+
+        # order_management.dbに接続
+        order_conn = self._get_connection()
+        order_cursor = order_conn.cursor()
+
+        try:
+            # billing.dbから支払いデータを取得
+            billing_cursor.execute("""
+                SELECT id, payee, payee_code, amount, payment_date, status
+                FROM payments
+                WHERE status != '照合済み'
+            """)
+            payments = billing_cursor.fetchall()
+
+            # 未照合の費用項目を取得
+            order_cursor.execute("""
+                SELECT ei.id, ei.item_name, p.name as partner_name, p.code as partner_code,
+                       ei.amount, ei.expected_payment_date, ei.payment_status
+                FROM expense_items ei
+                LEFT JOIN partners p ON ei.partner_id = p.id
+                WHERE ei.payment_matched_id IS NULL
+                  AND ei.payment_status != '支払済'
+                  AND (ei.archived = 0 OR ei.archived IS NULL)
+            """)
+            expenses = order_cursor.fetchall()
+
+            matched_count = 0
+
+            # 各支払いデータと費用項目を照合
+            for payment in payments:
+                payment_id, payee, payee_code, payment_amount, payment_date, payment_status = payment
+
+                for expense in expenses:
+                    (expense_id, item_name, partner_name, partner_code,
+                     expense_amount, expected_payment_date, expense_payment_status) = expense
+
+                    # 照合条件チェック
+                    # 1. 取引先名またはコードが一致
+                    name_match = (payee and partner_name and payee.strip() == partner_name.strip())
+                    code_match = (payee_code and partner_code and payee_code.strip() == partner_code.strip())
+
+                    if not (name_match or code_match):
+                        continue
+
+                    # 2. 金額が一致（±5%）
+                    if payment_amount and expense_amount:
+                        amount_diff = abs(payment_amount - expense_amount) / expense_amount
+                        if amount_diff > 0.05:  # 5%以上の差異
+                            continue
+                    else:
+                        continue
+
+                    # 3. 日付が近い（±7日）
+                    if payment_date and expected_payment_date:
+                        try:
+                            pay_date = datetime.strptime(payment_date, '%Y-%m-%d')
+                            exp_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
+                            date_diff = abs((pay_date - exp_date).days)
+                            if date_diff > 7:
+                                continue
+                        except:
+                            continue
+
+                    # 照合成功：expense_itemsを更新
+                    order_cursor.execute("""
+                        UPDATE expense_items
+                        SET payment_matched_id = ?,
+                            actual_payment_date = ?,
+                            payment_amount = ?,
+                            payment_status = '支払済'
+                        WHERE id = ?
+                    """, (payment_id, payment_date, payment_amount, expense_id))
+
+                    # paymentsの状態も更新
+                    billing_cursor.execute("""
+                        UPDATE payments
+                        SET status = '照合済み'
+                        WHERE id = ?
+                    """, (payment_id,))
+
+                    matched_count += 1
+                    break  # この支払いは照合済み
+
+            # 変更をコミット
+            order_conn.commit()
+            billing_conn.commit()
+
+            # 未照合件数を取得
+            order_cursor.execute("""
+                SELECT COUNT(*) FROM expense_items
+                WHERE payment_matched_id IS NULL
+                  AND payment_status != '支払済'
+                  AND (archived = 0 OR archived IS NULL)
+            """)
+            unmatched_expenses = order_cursor.fetchone()[0]
+
+            billing_cursor.execute("""
+                SELECT COUNT(*) FROM payments
+                WHERE status != '照合済み'
+            """)
+            unmatched_payments = billing_cursor.fetchone()[0]
+
+            return {
+                'matched': matched_count,
+                'unmatched_expenses': unmatched_expenses,
+                'unmatched_payments': unmatched_payments
+            }
+
+        finally:
+            billing_conn.close()
+            order_conn.close()
