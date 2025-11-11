@@ -1188,7 +1188,7 @@ class OrderManagementDB:
         try:
             query = """
                 SELECT c.id, c.name, p.name, p.code, c.notes
-                FROM cast c INNER JOIN partners p ON c.partner_id = p.id WHERE 1=1
+                FROM cast c LEFT JOIN partners p ON c.partner_id = p.id WHERE 1=1
             """
             params = []
             if search_term:
