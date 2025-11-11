@@ -461,7 +461,7 @@ class ProductionExpenseDetailWidget(QWidget):
                 from order_management.ui.production_edit_dialog import ProductionEditDialog
 
                 # 番組情報を取得
-                production = self.db.get_production(production_id)
+                production = self.db.get_production_by_id(production_id)
                 if production:
                     dialog = ProductionEditDialog(self, production)
                     if dialog.exec_():
