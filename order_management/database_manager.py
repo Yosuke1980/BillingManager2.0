@@ -3883,7 +3883,7 @@ class OrderManagementDB:
                 LEFT JOIN partners part ON ei.partner_id = part.id
                 WHERE ei.production_id = ?
                   AND (ei.archived = 0 OR ei.archived IS NULL)
-                ORDER BY ei.expected_payment_date DESC, ei.id DESC
+                ORDER BY ei.implementation_date ASC, ei.id ASC
             """, (production_id,))
             return cursor.fetchall()
         finally:
@@ -3914,7 +3914,7 @@ class OrderManagementDB:
                   AND (ei.archived = 0 OR ei.archived IS NULL)
                   AND ei.expected_payment_date IS NOT NULL
                 GROUP BY month
-                ORDER BY month DESC
+                ORDER BY month ASC
             """, (production_id,))
             return cursor.fetchall()
         finally:
@@ -3953,7 +3953,7 @@ class OrderManagementDB:
                 WHERE ei.production_id = ?
                   AND strftime('%Y-%m', ei.expected_payment_date) = ?
                   AND (ei.archived = 0 OR ei.archived IS NULL)
-                ORDER BY ei.expected_payment_date, ei.id
+                ORDER BY ei.implementation_date ASC, ei.id ASC
             """, (production_id, year_month))
             return cursor.fetchall()
         finally:
