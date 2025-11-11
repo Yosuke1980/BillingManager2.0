@@ -413,11 +413,11 @@ class ProductionExpenseDetailWidget(QWidget):
 
         # payment_matched_idがあれば、billing.dbと照合済み = 支払完了
         if payment_matched_id:
-            procedure_status = "✅ 完了"
+            procedure_status = "完了"
             procedure_status_color = QColor(220, 255, 220)  # 緑
         # payment_statusが「支払済」でもpayment_matched_idがなければ手動更新のみ
         elif payment_status == "支払済":
-            procedure_status = "✅ 完了"
+            procedure_status = "完了"
             procedure_status_color = QColor(220, 255, 220)  # 緑
         # 未払いの場合、手続き状況を細かくチェック
         elif payment_status == "未払い":
@@ -427,15 +427,15 @@ class ProductionExpenseDetailWidget(QWidget):
                 procedure_status_color = QColor(255, 255, 200)  # 黄
             elif not invoice_received_date:
                 # 書類不備（請求書未受領）
-                procedure_status = "⚠️ 書類不備"
+                procedure_status = "書類不備"
                 procedure_status_color = QColor(255, 255, 200)  # 黄
             else:
                 # 発注済み、書類OKだが支払未完了
-                procedure_status = "🚨 支払未"
+                procedure_status = "支払未"
                 procedure_status_color = QColor(255, 220, 220)  # 赤
         else:
             # その他
-            procedure_status = "✅ 完了"
+            procedure_status = "完了"
             procedure_status_color = QColor(220, 255, 220)  # 緑
 
         # テーブルにデータを設定（列順: 実施日、項目名、コーナー、金額、取引先、支払予定日、支払状態、手続状態）
