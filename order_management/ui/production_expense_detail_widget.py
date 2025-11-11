@@ -64,10 +64,18 @@ class ProductionExpenseDetailWidget(QWidget):
         search_layout.addWidget(self.search_input)
         filter_layout.addLayout(search_layout)
 
+        type_layout = QHBoxLayout()
+        type_layout.addWidget(QLabel("種別:"))
+        self.type_filter = QComboBox()
+        self.type_filter.addItems(["全て", "レギュラー", "イベント", "特番", "コーナー"])
+        self.type_filter.currentTextChanged.connect(self.load_production_list)
+        type_layout.addWidget(self.type_filter)
+        filter_layout.addLayout(type_layout)
+
         sort_layout = QHBoxLayout()
         sort_layout.addWidget(QLabel("並び替え:"))
         self.sort_combo = QComboBox()
-        self.sort_combo.addItems(["総費用額順", "未払い件数順", "費用項目数順"])
+        self.sort_combo.addItems(["総費用額順", "月額平均順", "未払い件数順", "費用項目数順"])
         self.sort_combo.currentTextChanged.connect(self.load_production_list)
         sort_layout.addWidget(self.sort_combo)
         filter_layout.addLayout(sort_layout)
@@ -76,18 +84,20 @@ class ProductionExpenseDetailWidget(QWidget):
 
         # 番組一覧テーブル
         self.production_table = QTableWidget()
-        self.production_table.setColumnCount(5)
+        self.production_table.setColumnCount(7)
         self.production_table.setHorizontalHeaderLabels([
-            "番組名", "総費用額", "項目数", "未払い", "支払済"
+            "番組名", "種別", "総費用額", "月額平均", "項目数", "未払い", "支払済"
         ])
 
         # 列幅の設定
         header = self.production_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)  # 番組名
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 総費用額
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 項目数
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 未払い
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 支払済
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # 種別
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 総費用額
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 月額平均
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 項目数
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 未払い
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 支払済
 
         self.production_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.production_table.setSelectionMode(QTableWidget.SingleSelection)
@@ -183,46 +193,73 @@ class ProductionExpenseDetailWidget(QWidget):
         """番組一覧を読み込み"""
         search_term = self.search_input.text()
         sort_text = self.sort_combo.currentText()
+        type_text = self.type_filter.currentText()
 
         # ソート基準を決定
         if sort_text == "未払い件数順":
             sort_by = 'unpaid_count'
         elif sort_text == "費用項目数順":
             sort_by = 'item_count'
+        elif sort_text == "月額平均順":
+            sort_by = 'monthly_average'
         else:
             sort_by = 'total_amount'
 
+        # 番組タイプフィルタ
+        production_type_filter = None if type_text == "全て" else type_text
+
         # データ取得
-        productions = self.db.get_production_expense_summary(search_term, sort_by)
+        productions = self.db.get_production_expense_summary(search_term, sort_by, production_type_filter)
 
         self.production_table.setRowCount(len(productions))
 
         for row, prod in enumerate(productions):
-            # データ構造: (production_id, production_name, item_count, total_amount,
-            #            unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count)
+            # データ構造: (production_id, production_name, production_type, item_count, total_amount,
+            #            unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count,
+            #            month_count, monthly_average)
             production_id = prod[0]
             production_name = prod[1]
-            item_count = prod[2]
-            total_amount = prod[3] or 0
-            unpaid_count = prod[4]
-            paid_count = prod[6]
+            production_type = prod[2] or "未設定"
+            item_count = prod[3]
+            total_amount = prod[4] or 0
+            unpaid_count = prod[5]
+            paid_count = prod[7]
+            month_count = prod[10]
+            monthly_average = prod[11] or 0
 
             # テーブルにデータを設定
             name_item = QTableWidgetItem(production_name)
             name_item.setData(Qt.UserRole, production_id)
             self.production_table.setItem(row, 0, name_item)
 
-            self.production_table.setItem(row, 1, QTableWidgetItem(f"¥{int(total_amount):,}"))
-            self.production_table.setItem(row, 2, QTableWidgetItem(str(item_count)))
-            self.production_table.setItem(row, 3, QTableWidgetItem(f"{unpaid_count}件"))
-            self.production_table.setItem(row, 4, QTableWidgetItem(f"{paid_count}件"))
+            self.production_table.setItem(row, 1, QTableWidgetItem(production_type))
+            self.production_table.setItem(row, 2, QTableWidgetItem(f"¥{int(total_amount):,}"))
 
-            # 未払いが多い場合は行を強調
-            if unpaid_count > 0:
+            # レギュラー番組は月額平均を強調、イベントは総額を強調
+            if production_type == "レギュラー" or production_type == "コーナー":
+                self.production_table.setItem(row, 3, QTableWidgetItem(f"¥{int(monthly_average):,}/月"))
+            elif production_type == "イベント" or production_type == "特番":
+                self.production_table.setItem(row, 3, QTableWidgetItem(f"({month_count}ヶ月)"))
+            else:
+                self.production_table.setItem(row, 3, QTableWidgetItem(f"¥{int(monthly_average):,}"))
+
+            self.production_table.setItem(row, 4, QTableWidgetItem(str(item_count)))
+            self.production_table.setItem(row, 5, QTableWidgetItem(f"{unpaid_count}件"))
+            self.production_table.setItem(row, 6, QTableWidgetItem(f"{paid_count}件"))
+
+            # 番組タイプに応じて行の色を変更
+            if production_type == "レギュラー" or production_type == "コーナー":
+                row_color = QColor(230, 240, 255) if unpaid_count > 0 else None  # 青系
+            elif production_type == "イベント" or production_type == "特番":
+                row_color = QColor(255, 250, 230) if unpaid_count > 0 else None  # 黄系
+            else:
+                row_color = QColor(255, 243, 224) if unpaid_count > 0 else None  # オレンジ系
+
+            if row_color:
                 for col in range(self.production_table.columnCount()):
                     item = self.production_table.item(row, col)
                     if item:
-                        item.setBackground(QColor(255, 243, 224))
+                        item.setBackground(row_color)
 
     def on_production_selected(self):
         """番組が選択されたときの処理"""
@@ -247,14 +284,17 @@ class ProductionExpenseDetailWidget(QWidget):
         production_data = next((p for p in productions if p[0] == production_id), None)
 
         if production_data:
+            # データ構造: (production_id, production_name, production_type, item_count, total_amount,
+            #            unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count,
+            #            month_count, monthly_average)
             production_name = production_data[1]
-            item_count = production_data[2]
-            total_amount = production_data[3] or 0
-            unpaid_count = production_data[4]
-            unpaid_amount = production_data[5] or 0
-            paid_count = production_data[6]
-            paid_amount = production_data[7] or 0
-            pending_count = production_data[8]
+            item_count = production_data[3]
+            total_amount = production_data[4] or 0
+            unpaid_count = production_data[5]
+            unpaid_amount = production_data[6] or 0
+            paid_count = production_data[7]
+            paid_amount = production_data[8] or 0
+            pending_count = production_data[9]
 
             # サマリーを更新
             self.production_name_label.setText(f"番組: {production_name}")

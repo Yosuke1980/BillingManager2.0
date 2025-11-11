@@ -3786,33 +3786,41 @@ class OrderManagementDB:
     # 番組別費用集計
     # ========================================
 
-    def get_production_expense_summary(self, search_term=None, sort_by='total_amount'):
+    def get_production_expense_summary(self, search_term=None, sort_by='total_amount', production_type_filter=None):
         """番組ごとの費用集計を取得
 
         Args:
             search_term: 検索キーワード（番組名）
-            sort_by: ソート基準（total_amount, unpaid_count, item_count）
+            sort_by: ソート基準（total_amount, unpaid_count, item_count, monthly_average）
+            production_type_filter: 番組タイプフィルタ（レギュラー、イベント、特番など）
 
         Returns:
-            list: [(production_id, production_name, item_count, total_amount,
-                   unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count), ...]
+            list: [(production_id, production_name, production_type, item_count, total_amount,
+                   unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count,
+                   month_count, monthly_average), ...]
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             query = """
-                SELECT 
+                SELECT
                     p.id,
                     p.name,
+                    p.production_type,
                     COUNT(*) as item_count,
                     SUM(CASE WHEN ei.amount_pending = 1 THEN 0 ELSE ei.amount END) as total_amount,
                     SUM(CASE WHEN ei.payment_status = '未払い' THEN 1 ELSE 0 END) as unpaid_count,
-                    SUM(CASE WHEN ei.payment_status = '未払い' AND ei.amount_pending = 0 
+                    SUM(CASE WHEN ei.payment_status = '未払い' AND ei.amount_pending = 0
                          THEN ei.amount ELSE 0 END) as unpaid_amount,
                     SUM(CASE WHEN ei.payment_status = '支払済' THEN 1 ELSE 0 END) as paid_count,
                     SUM(CASE WHEN ei.payment_status = '支払済' THEN ei.amount ELSE 0 END) as paid_amount,
-                    SUM(CASE WHEN ei.amount_pending = 1 THEN 1 ELSE 0 END) as pending_count
+                    SUM(CASE WHEN ei.amount_pending = 1 THEN 1 ELSE 0 END) as pending_count,
+                    COUNT(DISTINCT strftime('%Y-%m', ei.expected_payment_date)) as month_count,
+                    CASE WHEN COUNT(DISTINCT strftime('%Y-%m', ei.expected_payment_date)) > 0
+                         THEN SUM(CASE WHEN ei.amount_pending = 1 THEN 0 ELSE ei.amount END) /
+                              COUNT(DISTINCT strftime('%Y-%m', ei.expected_payment_date))
+                         ELSE 0 END as monthly_average
                 FROM expense_items ei
                 JOIN productions p ON ei.production_id = p.id
                 WHERE (ei.archived = 0 OR ei.archived IS NULL)
@@ -3823,13 +3831,19 @@ class OrderManagementDB:
                 query += " AND p.name LIKE ?"
                 params.append(f"%{search_term}%")
 
-            query += " GROUP BY p.id, p.name"
+            if production_type_filter:
+                query += " AND p.production_type = ?"
+                params.append(production_type_filter)
+
+            query += " GROUP BY p.id, p.name, p.production_type"
 
             # ソート
             if sort_by == 'unpaid_count':
                 query += " ORDER BY unpaid_count DESC, total_amount DESC"
             elif sort_by == 'item_count':
                 query += " ORDER BY item_count DESC, total_amount DESC"
+            elif sort_by == 'monthly_average':
+                query += " ORDER BY monthly_average DESC, total_amount DESC"
             else:  # total_amount
                 query += " ORDER BY total_amount DESC, item_count DESC"
 
