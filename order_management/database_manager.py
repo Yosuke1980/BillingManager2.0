@@ -4039,10 +4039,13 @@ class OrderManagementDB:
                 LEFT JOIN partners part ON ei.partner_id = part.id
                 LEFT JOIN productions corner ON ei.corner_id = corner.id
                 LEFT JOIN contracts c ON ei.contract_id = c.id
-                WHERE ei.production_id = ?
+                WHERE (ei.production_id = ?
+                       OR ei.production_id IN (
+                           SELECT id FROM productions WHERE parent_production_id = ?
+                       ))
                   AND (ei.archived = 0 OR ei.archived IS NULL)
                 ORDER BY ei.implementation_date ASC, ei.id ASC
-            """, (production_id,))
+            """, (production_id, production_id))
             return cursor.fetchall()
         finally:
             conn.close()
@@ -4117,11 +4120,14 @@ class OrderManagementDB:
                 LEFT JOIN partners p ON ei.partner_id = p.id
                 LEFT JOIN productions corner ON ei.corner_id = corner.id
                 LEFT JOIN contracts c ON ei.contract_id = c.id
-                WHERE ei.production_id = ?
+                WHERE (ei.production_id = ?
+                       OR ei.production_id IN (
+                           SELECT id FROM productions WHERE parent_production_id = ?
+                       ))
                   AND strftime('%Y-%m', ei.expected_payment_date) = ?
                   AND (ei.archived = 0 OR ei.archived IS NULL)
                 ORDER BY ei.implementation_date ASC, ei.id ASC
-            """, (production_id, year_month))
+            """, (production_id, production_id, year_month))
             return cursor.fetchall()
         finally:
             conn.close()
