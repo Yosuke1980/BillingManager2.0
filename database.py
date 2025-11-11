@@ -2531,6 +2531,15 @@ class DatabaseManager:
                     actual_amount = scheduled_amount
                     matched_payment_keys.add(key)  # マッチング記録
 
+                    # 照合成功時：expense_itemsを更新
+                    if sched['order_contract_id']:
+                        self._update_expense_items_payment_status(
+                            contract_id=sched['order_contract_id'],
+                            year_month=sched['year_month'],
+                            payment_id=actual_payment['id'],
+                            payment_date=actual_payment['payment_date']
+                        )
+
                 # ステータス判定
                 missing_items = []
                 status_color = "green"  # デフォルトは完了
@@ -2633,6 +2642,50 @@ class DatabaseManager:
             return []
         finally:
             conn.close()
+
+    def _update_expense_items_payment_status(self, contract_id, year_month, payment_id, payment_date):
+        """照合成功時にexpense_itemsの支払情報を更新
+
+        Args:
+            contract_id: 契約ID
+            year_month: 支払年月 "YYYY-MM" 形式
+            payment_id: billing.dbのpayments.id
+            payment_date: 支払日 "YYYY/MM/DD" 形式
+        """
+        try:
+            order_conn = sqlite3.connect(self.order_db_path)
+            order_cursor = order_conn.cursor()
+
+            # payment_dateを"YYYY-MM-DD"形式に変換
+            from datetime import datetime
+            if '/' in payment_date:
+                payment_date_obj = datetime.strptime(payment_date, '%Y/%m/%d')
+                payment_date_formatted = payment_date_obj.strftime('%Y-%m-%d')
+            else:
+                payment_date_formatted = payment_date
+
+            # contract_idと支払月が一致するexpense_itemsを更新
+            order_cursor.execute("""
+                UPDATE expense_items
+                SET payment_matched_id = ?,
+                    payment_status = '支払済',
+                    actual_payment_date = ?
+                WHERE contract_id = ?
+                  AND strftime('%Y-%m', expected_payment_date) = ?
+                  AND (payment_matched_id IS NULL OR payment_matched_id = '')
+            """, (payment_id, payment_date_formatted, contract_id, year_month))
+
+            updated_count = order_cursor.rowcount
+            if updated_count > 0:
+                log_message(f"expense_items更新: contract_id={contract_id}, 月={year_month}, {updated_count}件")
+
+            order_conn.commit()
+            order_conn.close()
+
+        except Exception as e:
+            log_message(f"expense_items更新エラー: {e}")
+            import traceback
+            log_message(f"エラー詳細: {traceback.format_exc()}")
 
 
 # ファイル終了確認用のコメント - database.py完了

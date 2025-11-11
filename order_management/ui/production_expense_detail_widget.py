@@ -412,8 +412,8 @@ class ProductionExpenseDetailWidget(QWidget):
         procedure_status = ""
         procedure_status_color = None
 
-        # 支払実績チェック（payment_matched_idまたはpayment_statusで判定）
-        payment_ok = bool(payment_matched_id) or payment_status == "支払済"
+        # 支払実績チェック（payment_matched_idがあればbilling.dbと照合済み）
+        payment_ok = bool(payment_matched_id)
 
         # 発注チェック
         has_order = bool(contract_id) and contract_id != "" and contract_id != 0
