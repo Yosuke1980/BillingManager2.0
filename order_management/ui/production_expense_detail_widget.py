@@ -410,8 +410,12 @@ class ProductionExpenseDetailWidget(QWidget):
         procedure_status = ""
         procedure_status_color = None
 
-        if not actual_payment_date:
-            # 支払未完了（最優先）
+        # payment_statusが「支払済」なら、actual_payment_dateの有無に関係なく完了扱い
+        if payment_status == "支払済":
+            procedure_status = "✅ 完了"
+            procedure_status_color = QColor(220, 255, 220)  # 緑
+        elif not actual_payment_date and payment_status == "未払い":
+            # 支払未完了（未払いかつactual_payment_dateなし）
             procedure_status = "🚨 支払未"
             procedure_status_color = QColor(255, 220, 220)  # 赤
         elif not contract_id or (isinstance(contract_id, str) and contract_id == ""):
