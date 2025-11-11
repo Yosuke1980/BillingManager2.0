@@ -23,7 +23,7 @@ from partner_manager import PartnerManager
 class OrderContractEditDialog(QDialog):
     """発注書編集ダイアログ"""
 
-    def __init__(self, parent=None, contract_id=None, production_id=None, partner_id=None, work_type=None):
+    def __init__(self, parent=None, contract_id=None, production_id=None, partner_id=None, work_type=None, production_type=None, implementation_date=None):
         super().__init__(parent)
         try:
             self.db = OrderManagementDB()
@@ -36,6 +36,8 @@ class OrderContractEditDialog(QDialog):
             self.preset_production_id = production_id
             self.preset_partner_id = partner_id
             self.preset_work_type = work_type  # '出演' or '制作'
+            self.preset_production_type = production_type  # 'レギュラー', 'イベント', etc.
+            self.preset_implementation_date = implementation_date  # 単発の場合の実施日
 
             self.setWindowTitle("発注書編集" if contract_id else "新規発注書")
 
@@ -1318,6 +1320,23 @@ class OrderContractEditDialog(QDialog):
             # 業務種別を固定（編集不可）
             self.work_type_cast.setEnabled(False)
             self.work_type_production.setEnabled(False)
+
+        # 発注種別を番組種別に基づいて自動選択
+        if self.preset_production_type:
+            if self.preset_production_type == 'レギュラー':
+                self.order_type_regular.setChecked(True)
+            else:
+                # イベント、特別企画など、レギュラー以外は単発
+                self.order_type_spot.setChecked(True)
+                # 実施日を設定
+                if self.preset_implementation_date:
+                    from PyQt5.QtCore import QDate
+                    from datetime import datetime
+                    try:
+                        impl_date = datetime.strptime(self.preset_implementation_date, '%Y-%m-%d')
+                        self.implementation_date.setDate(QDate(impl_date.year, impl_date.month, impl_date.day))
+                    except:
+                        pass  # 日付パース失敗時はデフォルト値のまま
 
     def add_cast_to_contract(self):
         """出演者を契約に追加"""

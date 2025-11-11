@@ -774,13 +774,19 @@ class ProductionEditDialog(QDialog):
         production_id = self.production[0]
         partner_id = data['partner_id']
 
+        # 番組種別と実施日を取得
+        production_type = self.production[3] if len(self.production) > 3 else 'レギュラー'
+        implementation_date = self.production[4] if len(self.production) > 4 else None
+
         # 契約編集ダイアログを開く
         from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
         contract_dialog = OrderContractEditDialog(
             self,
             production_id=production_id,
             partner_id=partner_id,
-            work_type='出演'
+            work_type='出演',
+            production_type=production_type,
+            implementation_date=implementation_date
         )
         if contract_dialog.exec_():
             QMessageBox.information(self, "成功", "契約を作成しました")
@@ -942,13 +948,19 @@ class ProductionEditDialog(QDialog):
         production_id = self.production[0]
         partner_id = data['partner_id']
 
+        # 番組種別と実施日を取得
+        production_type = self.production[3] if len(self.production) > 3 else 'レギュラー'
+        implementation_date = self.production[4] if len(self.production) > 4 else None
+
         # 契約編集ダイアログを開く
         from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
         contract_dialog = OrderContractEditDialog(
             self,
             production_id=production_id,
             partner_id=partner_id,
-            work_type='制作'
+            work_type='制作',
+            production_type=production_type,
+            implementation_date=implementation_date
         )
         if contract_dialog.exec_():
             QMessageBox.information(self, "成功", "契約を作成しました")
