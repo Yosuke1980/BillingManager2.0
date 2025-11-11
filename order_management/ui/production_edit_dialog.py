@@ -528,7 +528,7 @@ class ProductionEditDialog(QDialog):
                     'contract_id': contract_id,
                     'item_name': row[7] or "",
                     'unit_price': row[8] or 0,
-                    'order_status': row[9] or "",
+                    'document_status': row[9] or "",
                     'payment_timing': row[10] or "",
                 }
                 cast_groups[cast_id]['contracts'].append(contract_info)
@@ -694,7 +694,7 @@ class ProductionEditDialog(QDialog):
                     'contract_id': contract_id,
                     'item_name': row[4] or "",
                     'unit_price': row[5] or 0,
-                    'order_status': row[6] or "",
+                    'document_status': row[6] or "",
                     'payment_timing': row[7] or "",
                 }
                 producer_groups[partner_id]['contracts'].append(contract_info)
@@ -736,7 +736,7 @@ class ProductionEditDialog(QDialog):
                     # 契約情報を表示
                     self.producer_table.setItem(row, 1, QTableWidgetItem(contract['item_name']))
                     self.producer_table.setItem(row, 2, QTableWidgetItem(f"{contract['unit_price']:,.0f}"))
-                    self.producer_table.setItem(row, 3, QTableWidgetItem(contract.get('order_status', '')))
+                    self.producer_table.setItem(row, 3, QTableWidgetItem(contract.get('document_status', '')))
                     self.producer_table.setItem(row, 4, QTableWidgetItem(contract['payment_timing']))
                     self.producer_table.setItem(row, 5, QTableWidgetItem(""))
 
