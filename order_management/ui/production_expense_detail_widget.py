@@ -371,7 +371,7 @@ class ProductionExpenseDetailWidget(QWidget):
         # データ構造: (id, partner_name, item_name, amount, implementation_date,
         #            expected_payment_date, payment_status, status, notes, amount_pending,
         #            work_type, corner_name, corner_id, contract_id, invoice_received_date,
-        #            actual_payment_date, payment_matched_id)
+        #            actual_payment_date, payment_matched_id, document_status)
         item_id = detail[0]
         partner_name = detail[1] or ""
         item_name = detail[2] or ""
@@ -388,6 +388,7 @@ class ProductionExpenseDetailWidget(QWidget):
         invoice_received_date = detail[14] if len(detail) > 14 else None
         actual_payment_date = detail[15] if len(detail) > 15 else None
         payment_matched_id = detail[16] if len(detail) > 16 else None
+        document_status = detail[17] if len(detail) > 17 else None
 
         # 金額のフォーマット
         if amount_pending == 1:
