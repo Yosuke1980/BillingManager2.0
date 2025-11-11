@@ -314,7 +314,8 @@ class ExpenseItemsWidget(QWidget):
             self.table.setItem(row, 9, QTableWidgetItem(payment_status))
 
             # 発注（契約）の有無を分かりやすく表示
-            contract_display = "✓ あり" if contract_id else "✗ なし"
+            # contract_idがNone、空文字列、0以外の場合に「あり」と表示
+            contract_display = "✓ あり" if (contract_id is not None and contract_id != "" and contract_id != 0) else "✗ なし"
             contract_item = QTableWidgetItem(contract_display)
             contract_item.setData(Qt.UserRole, contract_id)  # 契約IDを保存
             self.table.setItem(row, 10, contract_item)
