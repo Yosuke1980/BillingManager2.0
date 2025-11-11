@@ -1309,9 +1309,10 @@ class OrderContractEditDialog(QDialog):
         if self.preset_work_type:
             if self.preset_work_type == '出演':
                 self.work_type_cast.setChecked(True)
-                # 出演者テーブルに自動追加
-                if self.preset_partner_id:
-                    self._auto_add_cast_to_table(self.preset_partner_id)
+                # 注: 出演者テーブルへの自動追加は行わない
+                # 理由: 1つの取引先に複数の出演者が所属している場合があり、
+                #       どの出演者を選ぶべきか判断できないため
+                # ユーザーは「➕ 出演者を追加」ボタンで手動追加する
             elif self.preset_work_type == '制作':
                 self.work_type_production.setChecked(True)
             # 業務種別を固定（編集不可）
@@ -1458,46 +1459,6 @@ class OrderContractEditDialog(QDialog):
                 delete_btn.setMaximumWidth(40)
                 delete_btn.clicked.connect(lambda checked, r=row: self.remove_cast_from_table(r))
                 self.cast_table.setCellWidget(row, 3, delete_btn)
-
-    def _auto_add_cast_to_table(self, partner_id):
-        """番組編集から呼び出された場合、出演者を自動的にテーブルに追加"""
-        # partner_idから取引先情報を取得
-        partner_info = self.pm.get_partner_by_id(partner_id)
-        if not partner_info:
-            return
-
-        # partner_info: (id, name, code, address, contact_person, phone, email,
-        #                payment_terms, notes, partner_type, bank_info, tax_id,
-        #                representative, department, position, created_at, updated_at)
-        partner_name = partner_info[1]
-
-        # 既に追加済みかチェック（重複防止）
-        for row in range(self.cast_table.rowCount()):
-            item = self.cast_table.item(row, 0)
-            if item and item.text() == partner_name:
-                return  # 既に追加済み
-
-        # テーブルに行を追加
-        row = self.cast_table.rowCount()
-        self.cast_table.insertRow(row)
-
-        # 出演者名
-        name_item = QTableWidgetItem(partner_name)
-        self.cast_table.setItem(row, 0, name_item)
-
-        # 所属（取引先名と同じ）
-        affiliation_item = QTableWidgetItem(partner_name)
-        self.cast_table.setItem(row, 1, affiliation_item)
-
-        # 役割（空白）
-        role_item = QTableWidgetItem("")
-        self.cast_table.setItem(row, 2, role_item)
-
-        # 削除ボタン
-        delete_btn = QPushButton("✕")
-        delete_btn.setMaximumWidth(40)
-        delete_btn.clicked.connect(lambda checked, r=row: self.remove_cast_from_table(r))
-        self.cast_table.setCellWidget(row, 3, delete_btn)
 
     def remove_cast_from_table(self, row):
         """テーブルから出演者を削除"""
