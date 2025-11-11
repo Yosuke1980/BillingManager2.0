@@ -131,19 +131,20 @@ class ProductionExpenseDetailWidget(QWidget):
         layout.addWidget(detail_label)
 
         self.detail_table = QTableWidget()
-        self.detail_table.setColumnCount(6)
+        self.detail_table.setColumnCount(7)
         self.detail_table.setHorizontalHeaderLabels([
-            "実施日", "項目名", "金額", "取引先", "支払予定日", "支払状態"
+            "実施日", "項目名", "コーナー", "金額", "取引先", "支払予定日", "支払状態"
         ])
 
         # 列幅の設定
         header = self.detail_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # 実施日
         header.setSectionResizeMode(1, QHeaderView.Stretch)  # 項目名
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # 金額
-        header.setSectionResizeMode(3, QHeaderView.Stretch)  # 取引先
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # 支払予定日
-        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 支払状態
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # コーナー
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # 金額
+        header.setSectionResizeMode(4, QHeaderView.Stretch)  # 取引先
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # 支払予定日
+        header.setSectionResizeMode(6, QHeaderView.ResizeToContents)  # 支払状態
 
         self.detail_table.setAlternatingRowColors(True)
         self.detail_table.itemDoubleClicked.connect(self.on_expense_item_double_clicked)
@@ -324,7 +325,7 @@ class ProductionExpenseDetailWidget(QWidget):
             self.detail_table.setItem(row_index, 0, header_item)
 
             # ヘッダー行は全列を結合
-            self.detail_table.setSpan(row_index, 0, 1, 6)
+            self.detail_table.setSpan(row_index, 0, 1, 7)
             row_index += 1
 
             # その月の費用項目を取得
@@ -337,7 +338,7 @@ class ProductionExpenseDetailWidget(QWidget):
 
         # 列幅を内容に合わせて自動調整
         self.detail_table.resizeColumnToContents(0)  # 実施日
-        self.detail_table.resizeColumnToContents(4)  # 支払予定日
+        self.detail_table.resizeColumnToContents(5)  # 支払予定日
 
     def load_all_details(self, production_id):
         """全費用項目を表示（イベント・特番用）"""
@@ -351,12 +352,13 @@ class ProductionExpenseDetailWidget(QWidget):
 
         # 列幅を内容に合わせて自動調整
         self.detail_table.resizeColumnToContents(0)  # 実施日
-        self.detail_table.resizeColumnToContents(4)  # 支払予定日
+        self.detail_table.resizeColumnToContents(5)  # 支払予定日
 
     def _populate_detail_row(self, row, detail):
         """詳細テーブルの1行にデータを設定する共通ヘルパーメソッド"""
         # データ構造: (id, partner_name, item_name, amount, implementation_date,
-        #            expected_payment_date, payment_status, status, notes, amount_pending, work_type)
+        #            expected_payment_date, payment_status, status, notes, amount_pending,
+        #            work_type, corner_name, parent_production_id)
         item_id = detail[0]
         partner_name = detail[1] or ""
         item_name = detail[2] or ""
@@ -367,6 +369,8 @@ class ProductionExpenseDetailWidget(QWidget):
         status = detail[7] or ""
         notes = detail[8] or ""
         amount_pending = detail[9] if len(detail) > 9 else 0
+        corner_name = detail[11] if len(detail) > 11 else ""
+        parent_production_id = detail[12] if len(detail) > 12 else None
 
         # 金額のフォーマット
         if amount_pending == 1:
@@ -374,15 +378,19 @@ class ProductionExpenseDetailWidget(QWidget):
         else:
             amount_text = f"¥{int(amount):,}"
 
-        # テーブルにデータを設定（列順: 実施日、項目名、金額、取引先、支払予定日、支払状態）
+        # コーナー名の設定（parent_production_idがある場合のみ表示）
+        corner_display = corner_name if parent_production_id else ""
+
+        # テーブルにデータを設定（列順: 実施日、項目名、コーナー、金額、取引先、支払予定日、支払状態）
         implementation_date_item = QTableWidgetItem(implementation_date)
         implementation_date_item.setData(Qt.UserRole, item_id)  # expense_item_idを保存
         self.detail_table.setItem(row, 0, implementation_date_item)
         self.detail_table.setItem(row, 1, QTableWidgetItem(item_name))
-        self.detail_table.setItem(row, 2, QTableWidgetItem(amount_text))
-        self.detail_table.setItem(row, 3, QTableWidgetItem(partner_name))
-        self.detail_table.setItem(row, 4, QTableWidgetItem(expected_payment_date))
-        self.detail_table.setItem(row, 5, QTableWidgetItem(payment_status))
+        self.detail_table.setItem(row, 2, QTableWidgetItem(corner_display))
+        self.detail_table.setItem(row, 3, QTableWidgetItem(amount_text))
+        self.detail_table.setItem(row, 4, QTableWidgetItem(partner_name))
+        self.detail_table.setItem(row, 5, QTableWidgetItem(expected_payment_date))
+        self.detail_table.setItem(row, 6, QTableWidgetItem(payment_status))
 
         # 支払い状態に応じて行の色を変更
         if payment_status == "支払済":

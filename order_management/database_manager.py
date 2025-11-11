@@ -3868,7 +3868,7 @@ class OrderManagementDB:
 
         try:
             cursor.execute("""
-                SELECT 
+                SELECT
                     ei.id,
                     part.name as partner_name,
                     ei.item_name,
@@ -3879,9 +3879,12 @@ class OrderManagementDB:
                     ei.status,
                     ei.notes,
                     ei.amount_pending,
-                    ei.work_type
+                    ei.work_type,
+                    prod.name as corner_name,
+                    prod.parent_production_id
                 FROM expense_items ei
                 LEFT JOIN partners part ON ei.partner_id = part.id
+                LEFT JOIN productions prod ON ei.production_id = prod.id
                 WHERE ei.production_id = ?
                   AND (ei.archived = 0 OR ei.archived IS NULL)
                 ORDER BY ei.implementation_date ASC, ei.id ASC
@@ -3948,9 +3951,12 @@ class OrderManagementDB:
                     ei.status,
                     ei.notes,
                     ei.amount_pending,
-                    ei.work_type
+                    ei.work_type,
+                    prod.name as corner_name,
+                    prod.parent_production_id
                 FROM expense_items ei
                 LEFT JOIN partners p ON ei.partner_id = p.id
+                LEFT JOIN productions prod ON ei.production_id = prod.id
                 WHERE ei.production_id = ?
                   AND strftime('%Y-%m', ei.expected_payment_date) = ?
                   AND (ei.archived = 0 OR ei.archived IS NULL)
