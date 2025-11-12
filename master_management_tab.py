@@ -66,3 +66,5 @@ class MasterManagementTab(QWidget):
         """タブ切り替え時の処理"""
         if index == 0:  # タイムラインタブ
             self.timeline_widget.load_timeline()
+        elif index == 3:  # 番組・イベント管理タブ
+            self.production_widget.load_productions()
