@@ -1,16 +1,20 @@
 # ========================================
-# Database files - managed by migrations
+# Database files - shared via Git
 # ========================================
-*.db
-!migrations/**/*.db  # マイグレーション用のテンプレートDBは許可（もしあれば）
+# メインのデータベースファイルはGitで共有
+!order_management.db
+!billing.db
 
-# Database backups
+# Database backups（除外）
 *.db.backup*
 *.db.old
 *.db.emergency_backup
 *.db-journal
 *.db-wal
 *.db-shm
+
+# その他のDBファイルは除外
+*.db
 
 # ========================================
 # Log files
