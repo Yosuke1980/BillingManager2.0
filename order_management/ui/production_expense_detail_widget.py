@@ -315,8 +315,12 @@ class ProductionExpenseDetailWidget(QWidget):
         # 月別集計を取得
         monthly_summary = self.db.get_production_expense_monthly_summary(production_id)
 
-        # テーブルをクリア
+        # テーブルを完全にクリア（セル結合も含む）
+        self.detail_table.clear()
         self.detail_table.setRowCount(0)
+        self.detail_table.setHorizontalHeaderLabels(
+            ["実施日", "項目名", "コーナー", "金額", "取引先", "支払予定日", "支払状態", "手続状態"]
+        )
 
         row_index = 0
         for month_data in monthly_summary:
@@ -355,7 +359,12 @@ class ProductionExpenseDetailWidget(QWidget):
         # 費用項目詳細を取得
         details = self.db.get_production_expense_details(production_id)
 
+        # テーブルを完全にクリア（セル結合も含む）
+        self.detail_table.clear()
         self.detail_table.setRowCount(len(details))
+        self.detail_table.setHorizontalHeaderLabels(
+            ["実施日", "項目名", "コーナー", "金額", "取引先", "支払予定日", "支払状態", "手続状態"]
+        )
 
         for row, detail in enumerate(details):
             self._populate_detail_row(row, detail)
