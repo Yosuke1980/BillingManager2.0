@@ -1436,16 +1436,19 @@ class OrderManagementDB:
         finally:
             conn.close()
 
-    def check_duplicate_contract(self, production_id: int, partner_id: int, work_type: str, exclude_contract_id: int = None) -> Optional[Tuple]:
+    def check_duplicate_contract(self, production_id: int, partner_id: int, work_type: str,
+                                  exclude_contract_id: int = None, cast_ids: list = None) -> Optional[Tuple]:
         """重複契約をチェック
 
         番組ID、取引先ID、業務種別が同じ契約が既に存在するかチェックします。
+        出演契約の場合、出演者IDも含めて重複判定を行います。
 
         Args:
             production_id: 番組ID
             partner_id: 取引先ID
             work_type: 業務種別（制作/出演）
             exclude_contract_id: 除外する契約ID（編集時に自分自身を除外）
+            cast_ids: 出演者IDのリスト（出演契約の場合のみ）
 
         Returns:
             重複する契約が存在する場合は契約データ、存在しない場合はNone
@@ -1454,51 +1457,116 @@ class OrderManagementDB:
         cursor = conn.cursor()
 
         try:
-            if exclude_contract_id:
-                # 編集時: 自分自身を除外して検索
-                cursor.execute("""
-                    SELECT
-                        c.id,
-                        prod.name as production_name,
-                        part.name as partner_name,
-                        c.work_type,
-                        c.contract_start_date,
-                        c.contract_end_date,
-                        c.unit_price,
-                        c.spot_amount,
-                        c.item_name
-                    FROM contracts c
-                    LEFT JOIN productions prod ON c.production_id = prod.id
-                    LEFT JOIN partners part ON c.partner_id = part.id
-                    WHERE c.production_id = ?
-                      AND c.partner_id = ?
-                      AND c.work_type = ?
-                      AND c.id != ?
-                    LIMIT 1
-                """, (production_id, partner_id, work_type, exclude_contract_id))
-            else:
-                # 新規作成時: すべて検索
-                cursor.execute("""
-                    SELECT
-                        c.id,
-                        prod.name as production_name,
-                        part.name as partner_name,
-                        c.work_type,
-                        c.contract_start_date,
-                        c.contract_end_date,
-                        c.unit_price,
-                        c.spot_amount,
-                        c.item_name
-                    FROM contracts c
-                    LEFT JOIN productions prod ON c.production_id = prod.id
-                    LEFT JOIN partners part ON c.partner_id = part.id
-                    WHERE c.production_id = ?
-                      AND c.partner_id = ?
-                      AND c.work_type = ?
-                    LIMIT 1
-                """, (production_id, partner_id, work_type))
+            # 出演契約の場合、出演者も含めて重複判定
+            if work_type == '出演' and cast_ids:
+                # 出演者IDでソート（順序に関係なく同じ出演者グループを判定）
+                sorted_cast_ids = sorted(cast_ids)
 
-            return cursor.fetchone()
+                # 同じ番組・取引先・業務種別の契約を検索
+                if exclude_contract_id:
+                    cursor.execute("""
+                        SELECT
+                            c.id,
+                            prod.name as production_name,
+                            part.name as partner_name,
+                            c.work_type,
+                            c.contract_start_date,
+                            c.contract_end_date,
+                            c.unit_price,
+                            c.spot_amount,
+                            c.item_name
+                        FROM contracts c
+                        LEFT JOIN productions prod ON c.production_id = prod.id
+                        LEFT JOIN partners part ON c.partner_id = part.id
+                        WHERE c.production_id = ?
+                          AND c.partner_id = ?
+                          AND c.work_type = ?
+                          AND c.id != ?
+                    """, (production_id, partner_id, work_type, exclude_contract_id))
+                else:
+                    cursor.execute("""
+                        SELECT
+                            c.id,
+                            prod.name as production_name,
+                            part.name as partner_name,
+                            c.work_type,
+                            c.contract_start_date,
+                            c.contract_end_date,
+                            c.unit_price,
+                            c.spot_amount,
+                            c.item_name
+                        FROM contracts c
+                        LEFT JOIN productions prod ON c.production_id = prod.id
+                        LEFT JOIN partners part ON c.partner_id = part.id
+                        WHERE c.production_id = ?
+                          AND c.partner_id = ?
+                          AND c.work_type = ?
+                    """, (production_id, partner_id, work_type))
+
+                # 候補契約をすべて取得して、出演者が完全一致するものを探す
+                candidates = cursor.fetchall()
+                for candidate in candidates:
+                    candidate_id = candidate[0]
+                    # この契約の出演者を取得
+                    cursor.execute("""
+                        SELECT cast_id FROM contract_cast
+                        WHERE contract_id = ?
+                        ORDER BY cast_id
+                    """, (candidate_id,))
+                    existing_cast_ids = sorted([row[0] for row in cursor.fetchall()])
+
+                    # 出演者が完全一致する場合は重複
+                    if existing_cast_ids == sorted_cast_ids:
+                        return candidate
+
+                # 出演者が異なる場合は重複ではない
+                return None
+
+            else:
+                # 制作契約の場合、または出演契約でもcast_idsがない場合は従来通り
+                if exclude_contract_id:
+                    cursor.execute("""
+                        SELECT
+                            c.id,
+                            prod.name as production_name,
+                            part.name as partner_name,
+                            c.work_type,
+                            c.contract_start_date,
+                            c.contract_end_date,
+                            c.unit_price,
+                            c.spot_amount,
+                            c.item_name
+                        FROM contracts c
+                        LEFT JOIN productions prod ON c.production_id = prod.id
+                        LEFT JOIN partners part ON c.partner_id = part.id
+                        WHERE c.production_id = ?
+                          AND c.partner_id = ?
+                          AND c.work_type = ?
+                          AND c.id != ?
+                        LIMIT 1
+                    """, (production_id, partner_id, work_type, exclude_contract_id))
+                else:
+                    cursor.execute("""
+                        SELECT
+                            c.id,
+                            prod.name as production_name,
+                            part.name as partner_name,
+                            c.work_type,
+                            c.contract_start_date,
+                            c.contract_end_date,
+                            c.unit_price,
+                            c.spot_amount,
+                            c.item_name
+                        FROM contracts c
+                        LEFT JOIN productions prod ON c.production_id = prod.id
+                        LEFT JOIN partners part ON c.partner_id = part.id
+                        WHERE c.production_id = ?
+                          AND c.partner_id = ?
+                          AND c.work_type = ?
+                        LIMIT 1
+                    """, (production_id, partner_id, work_type))
+
+                return cursor.fetchone()
         finally:
             conn.close()
 

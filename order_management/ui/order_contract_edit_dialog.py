@@ -1121,10 +1121,22 @@ class OrderContractEditDialog(QDialog):
 
         # 重複契約チェック（新規作成時のみ）
         if not self.contract_id:
+            # 出演契約の場合、出演者IDリストを取得
+            cast_ids = None
+            if contract_data['work_type'] == '出演':
+                cast_ids = []
+                for row in range(self.cast_table.rowCount()):
+                    cast_id_item = self.cast_table.item(row, 0)
+                    if cast_id_item:
+                        cast_id = cast_id_item.data(Qt.UserRole)
+                        if cast_id:
+                            cast_ids.append(cast_id)
+
             duplicate = self.db.check_duplicate_contract(
                 production_id=contract_data['production_id'],
                 partner_id=contract_data['partner_id'],
-                work_type=contract_data['work_type']
+                work_type=contract_data['work_type'],
+                cast_ids=cast_ids
             )
 
             if duplicate:
