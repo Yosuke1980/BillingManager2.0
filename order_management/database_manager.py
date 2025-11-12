@@ -3836,8 +3836,8 @@ class OrderManagementDB:
                     ))
                     generated_count = 1
 
-            # 月額固定契約の場合
-            elif unit_price and unit_price > 0 and start_date_str and end_date_str:
+            # 月額固定契約の場合（回数ベースを除く）
+            elif payment_type != '回数ベース' and unit_price and unit_price > 0 and start_date_str and end_date_str:
                 start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
                 end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
 
