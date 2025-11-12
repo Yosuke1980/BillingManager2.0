@@ -3672,14 +3672,15 @@ class OrderManagementDB:
         cursor = conn.cursor()
 
         try:
-            # 契約情報を取得
+            # 契約情報と番組のstart_dateを取得
             cursor.execute("""
-                SELECT id, production_id, partner_id, item_name,
-                       contract_start_date, contract_end_date, contract_type,
-                       payment_type, unit_price, spot_amount, payment_timing,
-                       implementation_date, work_type
-                FROM contracts
-                WHERE id = ?
+                SELECT c.id, c.production_id, c.partner_id, c.item_name,
+                       c.contract_start_date, c.contract_end_date, c.contract_type,
+                       c.payment_type, c.unit_price, c.spot_amount, c.payment_timing,
+                       c.implementation_date, c.work_type, p.start_date
+                FROM contracts c
+                LEFT JOIN productions p ON c.production_id = p.id
+                WHERE c.id = ?
             """, (contract_id,))
 
             contract = cursor.fetchone()
@@ -3688,7 +3689,11 @@ class OrderManagementDB:
 
             (cid, production_id, partner_id, item_name, start_date_str, end_date_str,
              contract_type, payment_type, unit_price, spot_amount, payment_timing,
-             implementation_date, work_type) = contract
+             implementation_date, work_type, production_start_date) = contract
+
+            # implementation_dateがNULLの場合、番組のstart_dateを使用
+            if not implementation_date and production_start_date:
+                implementation_date = production_start_date
 
             generated_count = 0
 
