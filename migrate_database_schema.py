@@ -7,6 +7,29 @@ import os
 
 # 必要なカラム定義（テーブル名: [(カラム名, 型, デフォルト値), ...]）
 REQUIRED_COLUMNS = {
+    'productions': [
+        ('broadcast_days', 'TEXT', None),
+        ('broadcast_time', 'TEXT', None),
+        ('description', 'TEXT', None),
+        ('end_date', 'DATE', None),
+        ('end_time', 'TEXT', None),
+        ('name', 'TEXT', None),
+        ('parent_production_id', 'INTEGER', None),
+        ('production_type', 'TEXT', "'レギュラー'"),
+        ('start_date', 'DATE', None),
+        ('start_time', 'TEXT', None),
+        ('status', 'TEXT', "'進行中'"),
+    ],
+    'partners': [
+        ('address', 'TEXT', None),
+        ('code', 'TEXT', None),
+        ('contact_person', 'TEXT', None),
+        ('email', 'TEXT', None),
+        ('name', 'TEXT', None),
+        ('notes', 'TEXT', None),
+        ('partner_type', 'TEXT', None),
+        ('phone', 'TEXT', None),
+    ],
     'contracts': [
         ('amount_pending', 'INTEGER', '0'),
         ('auto_renewal_enabled', 'INTEGER', '0'),
