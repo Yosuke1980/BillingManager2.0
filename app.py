@@ -503,7 +503,6 @@ def main():
     """メイン関数"""
     import argparse
     import platform
-    import fcntl
     import tempfile
 
     # コマンドライン引数の解析
@@ -511,15 +510,29 @@ def main():
     parser.add_argument('--import-csv', type=str, help='指定されたCSVファイルをインポートしてアプリを起動')
     args = parser.parse_args()
 
-    # 多重起動防止：ロックファイルを使用
+    # 多重起動防止：プラットフォームに応じたロック機構
     lock_file_path = os.path.join(tempfile.gettempdir(), 'billing_manager_app.lock')
-    lock_file = open(lock_file_path, 'w')
-    try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except IOError:
-        print("エラー: アプリケーションは既に起動しています")
-        print("複数のインスタンスを起動することはできません")
-        sys.exit(1)
+
+    if platform.system() == 'Windows':
+        # Windowsの場合：ファイルの排他ロックを使用
+        try:
+            lock_file = open(lock_file_path, 'w')
+            import msvcrt
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        except (IOError, OSError):
+            print("エラー: アプリケーションは既に起動しています")
+            print("複数のインスタンスを起動することはできません")
+            sys.exit(1)
+    else:
+        # Unix/Linux/macOSの場合：fcntlを使用
+        import fcntl
+        lock_file = open(lock_file_path, 'w')
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except IOError:
+            print("エラー: アプリケーションは既に起動しています")
+            print("複数のインスタンスを起動することはできません")
+            sys.exit(1)
 
     app = QApplication(sys.argv)
 
