@@ -886,7 +886,12 @@ class OrderManagementDB:
                 LEFT JOIN contracts oc ON
                     oc.production_id = pc.production_id
                     AND oc.partner_id = p.id
+                    AND oc.work_type = '出演'
+                LEFT JOIN contract_cast cc ON
+                    cc.contract_id = oc.id
+                    AND cc.cast_id = c.id
                 WHERE pc.production_id = ?
+                  AND (oc.id IS NULL OR cc.id IS NOT NULL)
                 ORDER BY c.name, oc.item_name
             """, (production_id,))
 
