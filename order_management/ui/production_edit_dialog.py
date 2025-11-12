@@ -372,15 +372,19 @@ class ProductionEditDialog(QDialog):
     def on_production_type_changed(self):
         """種別変更時の処理"""
         is_regular = self.type_regular.isChecked()
+        is_corner = self.type_corner.isChecked()
 
-        # レギュラー番組の場合は放送時間・放送曜日を表示
+        # レギュラー番組の場合は放送時間を表示
         self.broadcast_time_edit.setVisible(is_regular)
         self.broadcast_time_label.setVisible(is_regular)
-        for checkbox in self.day_checkboxes.values():
-            checkbox.setVisible(is_regular)
-        self.broadcast_days_label.setVisible(is_regular)
 
-        # 特別番組等の場合は親制作物を表示
+        # レギュラー番組またはコーナーの場合は放送曜日を表示
+        show_broadcast_days = is_regular or is_corner
+        for checkbox in self.day_checkboxes.values():
+            checkbox.setVisible(show_broadcast_days)
+        self.broadcast_days_label.setVisible(show_broadcast_days)
+
+        # 特別番組等の場合は親制作物を表示（コーナーも親制作物を持つ）
         show_parent = not is_regular
         self.parent_production_combo.setVisible(show_parent)
         self.parent_production_label.setVisible(show_parent)
@@ -1343,7 +1347,7 @@ class ProductionEditDialog(QDialog):
             'start_time': self.start_time_edit.time().toString("HH:mm:ss"),
             'end_time': self.end_time_edit.time().toString("HH:mm:ss"),
             'broadcast_time': self.broadcast_time_edit.text().strip() if self.type_regular.isChecked() else None,
-            'broadcast_days': ",".join(selected_days) if self.type_regular.isChecked() else None,
+            'broadcast_days': ",".join(selected_days) if (self.type_regular.isChecked() or self.type_corner.isChecked()) else None,
             'status': status,
             'parent_production_id': parent_production_id
         }
