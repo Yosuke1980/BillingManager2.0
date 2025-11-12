@@ -3729,6 +3729,46 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def _count_weekdays_in_month(self, year, month, weekdays):
+        """指定月の指定曜日の出現回数を計算
+
+        Args:
+            year: 年
+            month: 月
+            weekdays: 曜日のリスト ['月', '火', '水']
+
+        Returns:
+            int: 合計出現回数
+        """
+        from datetime import datetime
+        import calendar
+
+        # 曜日マッピング
+        weekday_map = {
+            '月': 0, '火': 1, '水': 2, '木': 3,
+            '金': 4, '土': 5, '日': 6
+        }
+
+        total_count = 0
+        for weekday_name in weekdays:
+            if weekday_name not in weekday_map:
+                continue
+
+            target_weekday = weekday_map[weekday_name]
+
+            # その月の日数を取得
+            _, last_day = calendar.monthrange(year, month)
+
+            count = 0
+            for day in range(1, last_day + 1):
+                date = datetime(year, month, day)
+                if date.weekday() == target_weekday:
+                    count += 1
+
+            total_count += count
+
+        return total_count
+
     def generate_expense_items_from_contract(self, contract_id):
         """契約から費用項目を自動生成
 
@@ -3836,6 +3876,72 @@ class OrderManagementDB:
                         """, (
                             contract_id, production_id, partner_id, item_name,
                             unit_price, impl_date_str, payment_date, work_type
+                        ))
+                        generated_count += 1
+
+                    current_date = current_date + relativedelta(months=1)
+
+            # 回数ベース契約の場合
+            elif payment_type == '回数ベース' and unit_price and unit_price > 0 and start_date_str and end_date_str:
+                # 番組の放送曜日を取得
+                cursor.execute("""
+                    SELECT broadcast_days FROM productions WHERE id = ?
+                """, (production_id,))
+
+                result = cursor.fetchone()
+                broadcast_days = result[0] if result else None
+
+                if not broadcast_days or not broadcast_days.strip():
+                    # 放送曜日が設定されていない場合はエラー
+                    raise ValueError(f"回数ベース契約（ID: {contract_id}）の番組に放送曜日が設定されていません")
+
+                # 曜日を分割（例: "月,火,水" → ['月', '火', '水']）
+                weekdays = [day.strip() for day in broadcast_days.split(',')]
+
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+
+                # 月初に設定
+                current_date = start_date.replace(day=1)
+                end_month = end_date.replace(day=1)
+
+                while current_date <= end_month:
+                    # その月の実施回数を計算
+                    count = self._count_weekdays_in_month(current_date.year, current_date.month, weekdays)
+
+                    # 金額 = 回数 × 単価
+                    amount = count * unit_price
+
+                    # 支払予定日を計算
+                    if payment_timing == '当月末払い':
+                        # 当月末
+                        payment_date = (current_date + relativedelta(months=1, days=-1)).strftime('%Y-%m-%d')
+                    else:  # 翌月末払い
+                        # 翌月末
+                        payment_date = (current_date + relativedelta(months=2, days=-1)).strftime('%Y-%m-%d')
+
+                    impl_date_str = current_date.strftime('%Y-%m-%d')
+
+                    # 重複チェック
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM expense_items
+                        WHERE contract_id = ?
+                          AND implementation_date = ?
+                    """, (contract_id, impl_date_str))
+
+                    exists = cursor.fetchone()[0] > 0
+
+                    if not exists:
+                        cursor.execute("""
+                            INSERT INTO expense_items (
+                                contract_id, production_id, partner_id, item_name,
+                                amount, implementation_date, expected_payment_date,
+                                status, payment_status, work_type, notes
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, '発注予定', '未払い', ?, ?)
+                        """, (
+                            contract_id, production_id, partner_id, item_name,
+                            amount, impl_date_str, payment_date, work_type,
+                            f"実施回数: {count}回 × ¥{int(unit_price):,} = ¥{int(amount):,}"
                         ))
                         generated_count += 1
 
