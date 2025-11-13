@@ -841,56 +841,90 @@ class ProductionEditDialog(QDialog):
             self._load_expenses()
 
     def delete_cast(self):
-        """出演者削除（契約も削除）"""
+        """出演者削除（契約も削除、複数選択対応）"""
         if not self.is_edit:
             return
 
-        current_row = self.cast_table.currentRow()
-        if current_row < 0:
+        selected_rows = self.cast_table.selectionModel().selectedRows()
+        if not selected_rows:
             QMessageBox.warning(self, "警告", "削除する出演者を選択してください")
             return
 
-        item = self.cast_table.item(current_row, 0)
-        if not item:
-            return
-
-        data = item.data(Qt.UserRole)
-        production_cast_id = data['production_cast_id']
         production_id = self.production[0]
-        partner_id = data['partner_id']
 
-        # 関連する契約を取得
-        contracts = self.db.get_contracts_by_production_and_partner(production_id, partner_id)
+        # 選択された出演者のデータを取得
+        casts_to_delete = []
+        total_contracts = 0
+
+        for index in selected_rows:
+            row = index.row()
+            item = self.cast_table.item(row, 0)
+            if not item:
+                continue
+
+            data = item.data(Qt.UserRole)
+            production_cast_id = data['production_cast_id']
+            partner_id = data['partner_id']
+            cast_name = self.cast_table.item(row, 0).text() if self.cast_table.item(row, 0) else "不明"
+
+            # 関連する契約を取得
+            contracts = self.db.get_contracts_by_production_and_partner(production_id, partner_id)
+            total_contracts += len(contracts)
+
+            casts_to_delete.append((production_cast_id, partner_id, cast_name, data['cast_id'], contracts))
 
         # 確認ダイアログ
-        cast_name = self.cast_table.item(current_row, 0).text() if self.cast_table.item(current_row, 0) else "この出演者"
-        message = f"出演者「{cast_name}」を削除すると、"
-        if contracts:
-            message += "以下の契約も削除されます：\n\n"
-            for contract in contracts:
-                # contract: (contract_id, item_name, unit_price, order_status, payment_timing)
-                message += f"・{contract[1]}: ¥{contract[2]:,.0f}\n"
+        if len(casts_to_delete) == 1:
+            cast_name = casts_to_delete[0][2]
+            contracts = casts_to_delete[0][4]
+            message = f"出演者「{cast_name}」を削除すると、"
+            if contracts:
+                message += "以下の契約も削除されます：\n\n"
+                for contract in contracts:
+                    message += f"・{contract[1]}: ¥{contract[2]:,.0f}\n"
+            else:
+                message += "契約はありません。\n"
+            message += "\n本当に削除してもよろしいですか？"
         else:
-            message += "契約はありません。\n"
-        message += "\n本当に削除してもよろしいですか？"
+            message = f"{len(casts_to_delete)}人の出演者を削除します。\n\n削除対象：\n"
+            for _, _, cast_name, _, contracts in casts_to_delete[:5]:
+                contract_count = len(contracts)
+                message += f"・{cast_name}（契約{contract_count}件）\n"
+            if len(casts_to_delete) > 5:
+                message += f"...他{len(casts_to_delete) - 5}人\n"
+            message += f"\n合計{total_contracts}件の契約も削除されます。\n"
+            message += "\n本当に削除してもよろしいですか？"
 
         reply = QMessageBox.question(
-            self, "確認",
-            message,
+            self, "確認", message,
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                self.db.delete_cast_from_production(production_cast_id, production_id, partner_id)
-                QMessageBox.information(self, "成功", "出演者と契約を削除しました")
-                # データを再読み込み
-                self._load_cast_data()
-                self._load_expenses()
-                # cast_dataも更新
-                self.cast_data = [c for c in self.cast_data if c['cast_id'] != data['cast_id']]
-            except Exception as e:
-                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{str(e)}")
+            success_count = 0
+            failed_items = []
+
+            for production_cast_id, partner_id, cast_name, cast_id, _ in casts_to_delete:
+                try:
+                    self.db.delete_cast_from_production(production_cast_id, production_id, partner_id)
+                    self.cast_data = [c for c in self.cast_data if c['cast_id'] != cast_id]
+                    success_count += 1
+                except Exception as e:
+                    failed_items.append(f"{cast_name}: {str(e)}")
+
+            # データを再読み込み
+            self._load_cast_data()
+            self._load_expenses()
+
+            # 結果を表示
+            if failed_items:
+                QMessageBox.warning(
+                    self, "削除結果",
+                    f"{success_count}人削除しました。\n\n以下の削除に失敗しました：\n" +
+                    "\n".join(failed_items)
+                )
+            else:
+                QMessageBox.information(self, "成功", f"{success_count}人の出演者と契約を削除しました")
 
     def create_new_cast(self):
         """新規出演者登録"""
@@ -1015,56 +1049,90 @@ class ProductionEditDialog(QDialog):
             self._load_expenses()
 
     def delete_producer(self):
-        """制作会社削除（契約も削除）"""
+        """制作会社削除（契約も削除、複数選択対応）"""
         if not self.is_edit:
             return
 
-        current_row = self.producer_table.currentRow()
-        if current_row < 0:
+        selected_rows = self.producer_table.selectionModel().selectedRows()
+        if not selected_rows:
             QMessageBox.warning(self, "警告", "削除する制作会社を選択してください")
             return
 
-        item = self.producer_table.item(current_row, 0)
-        if not item:
-            return
-
-        data = item.data(Qt.UserRole)
-        production_producer_id = data['production_producer_id']
         production_id = self.production[0]
-        partner_id = data['partner_id']
 
-        # 関連する契約を取得
-        contracts = self.db.get_contracts_by_production_and_partner(production_id, partner_id)
+        # 選択された制作会社のデータを取得
+        producers_to_delete = []
+        total_contracts = 0
+
+        for index in selected_rows:
+            row = index.row()
+            item = self.producer_table.item(row, 0)
+            if not item:
+                continue
+
+            data = item.data(Qt.UserRole)
+            production_producer_id = data['production_producer_id']
+            partner_id = data['partner_id']
+            producer_name = self.producer_table.item(row, 0).text() if self.producer_table.item(row, 0) else "不明"
+
+            # 関連する契約を取得
+            contracts = self.db.get_contracts_by_production_and_partner(production_id, partner_id)
+            total_contracts += len(contracts)
+
+            producers_to_delete.append((production_producer_id, partner_id, producer_name, contracts))
 
         # 確認ダイアログ
-        producer_name = self.producer_table.item(current_row, 0).text() if self.producer_table.item(current_row, 0) else "この制作会社"
-        message = f"制作会社「{producer_name}」を削除すると、"
-        if contracts:
-            message += "以下の契約も削除されます：\n\n"
-            for contract in contracts:
-                # contract: (contract_id, item_name, unit_price, order_status, payment_timing)
-                message += f"・{contract[1]}: ¥{contract[2]:,.0f}\n"
+        if len(producers_to_delete) == 1:
+            producer_name = producers_to_delete[0][2]
+            contracts = producers_to_delete[0][3]
+            message = f"制作会社「{producer_name}」を削除すると、"
+            if contracts:
+                message += "以下の契約も削除されます：\n\n"
+                for contract in contracts:
+                    message += f"・{contract[1]}: ¥{contract[2]:,.0f}\n"
+            else:
+                message += "契約はありません。\n"
+            message += "\n本当に削除してもよろしいですか？"
         else:
-            message += "契約はありません。\n"
-        message += "\n本当に削除してもよろしいですか？"
+            message = f"{len(producers_to_delete)}社の制作会社を削除します。\n\n削除対象：\n"
+            for _, _, producer_name, contracts in producers_to_delete[:5]:
+                contract_count = len(contracts)
+                message += f"・{producer_name}（契約{contract_count}件）\n"
+            if len(producers_to_delete) > 5:
+                message += f"...他{len(producers_to_delete) - 5}社\n"
+            message += f"\n合計{total_contracts}件の契約も削除されます。\n"
+            message += "\n本当に削除してもよろしいですか？"
 
         reply = QMessageBox.question(
-            self, "確認",
-            message,
+            self, "確認", message,
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                self.db.delete_producer_from_production(production_producer_id, production_id, partner_id)
-                QMessageBox.information(self, "成功", "制作会社と契約を削除しました")
-                # データを再読み込み
-                self._load_producer_data()
-                self._load_expenses()
-                # producer_dataも更新
-                self.producer_data = [p for p in self.producer_data if p['id'] != partner_id]
-            except Exception as e:
-                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{str(e)}")
+            success_count = 0
+            failed_items = []
+
+            for production_producer_id, partner_id, producer_name, _ in producers_to_delete:
+                try:
+                    self.db.delete_producer_from_production(production_producer_id, production_id, partner_id)
+                    self.producer_data = [p for p in self.producer_data if p['id'] != partner_id]
+                    success_count += 1
+                except Exception as e:
+                    failed_items.append(f"{producer_name}: {str(e)}")
+
+            # データを再読み込み
+            self._load_producer_data()
+            self._load_expenses()
+
+            # 結果を表示
+            if failed_items:
+                QMessageBox.warning(
+                    self, "削除結果",
+                    f"{success_count}社削除しました。\n\n以下の削除に失敗しました：\n" +
+                    "\n".join(failed_items)
+                )
+            else:
+                QMessageBox.information(self, "成功", f"{success_count}社の制作会社と契約を削除しました")
 
     def _load_expenses(self):
         """費用項目を読み込んでテーブルに表示（契約由来 + 手動追加）"""
@@ -1273,48 +1341,87 @@ class ProductionEditDialog(QDialog):
                 QMessageBox.critical(self, "エラー", f"費用項目の更新に失敗しました:\n{str(e)}")
 
     def delete_expense(self):
-        """費用項目を削除（契約由来の項目は削除不可）"""
-        current_row = self.expense_table.currentRow()
-        if current_row < 0:
+        """費用項目を削除（契約由来の項目は削除不可、複数選択対応）"""
+        selected_rows = self.expense_table.selectionModel().selectedRows()
+        if not selected_rows:
             QMessageBox.warning(self, "警告", "削除する費用項目を選択してください")
             return
 
-        item = self.expense_table.item(current_row, 0)
-        if not item:
-            return
+        # 選択された項目のデータを取得
+        expenses_to_delete = []
+        contract_items = []
 
-        expense_data = item.data(Qt.UserRole)
+        for index in selected_rows:
+            row = index.row()
+            item = self.expense_table.item(row, 0)
+            if not item:
+                continue
 
-        # 契約由来の項目は削除不可
-        if expense_data.get('source') == 'contract':
+            expense_data = item.data(Qt.UserRole)
+
+            # 契約由来の項目は削除不可
+            if expense_data.get('source') == 'contract':
+                contract_items.append(expense_data.get('item_name', ''))
+                continue
+
+            expense_id = expense_data.get('id')
+            item_name = expense_data.get('item_name', '')
+
+            if expense_id:
+                expenses_to_delete.append((expense_id, item_name, row))
+
+        # 契約由来の項目が含まれている場合は警告
+        if contract_items:
             QMessageBox.warning(
                 self, "削除不可",
-                "契約由来の費用項目は直接削除できません。\n"
-                "出演者タブまたは制作会社タブから契約を削除してください。"
+                f"以下の項目は契約由来のため直接削除できません：\n\n" +
+                "\n".join([f"・{name}" for name in contract_items]) +
+                "\n\n出演者タブまたは制作会社タブから契約を削除してください。"
             )
+
+        if not expenses_to_delete:
             return
 
-        expense_id = expense_data.get('id')
-        item_name = expense_data.get('item_name', '')
-
-        if not expense_id:
-            return
+        # 確認ダイアログ
+        if len(expenses_to_delete) == 1:
+            message = f"費用項目「{expenses_to_delete[0][1]}」を削除してもよろしいですか？"
+        else:
+            message = f"{len(expenses_to_delete)}件の費用項目を削除してもよろしいですか？\n\n削除対象：\n"
+            for _, name, _ in expenses_to_delete[:5]:
+                message += f"・{name}\n"
+            if len(expenses_to_delete) > 5:
+                message += f"...他{len(expenses_to_delete) - 5}件\n"
 
         reply = QMessageBox.question(
-            self, "確認",
-            f"費用項目「{item_name}」を削除してもよろしいですか？",
+            self, "確認", message,
             QMessageBox.Yes | QMessageBox.No
         )
 
         if reply == QMessageBox.Yes:
-            try:
-                self.db.delete_expense_order(expense_id)
-                self.expense_table.removeRow(current_row)
-                self.expense_data = [e for e in self.expense_data if e.get('id') != expense_id]
-                self._update_expense_total()
-                QMessageBox.information(self, "成功", "費用項目を削除しました")
-            except Exception as e:
-                QMessageBox.critical(self, "エラー", f"削除に失敗しました:\n{str(e)}")
+            success_count = 0
+            failed_items = []
+
+            # 行番号の大きい順に削除（インデックスのずれを防ぐ）
+            for expense_id, item_name, row in sorted(expenses_to_delete, key=lambda x: x[2], reverse=True):
+                try:
+                    self.db.delete_expense_order(expense_id)
+                    self.expense_table.removeRow(row)
+                    self.expense_data = [e for e in self.expense_data if e.get('id') != expense_id]
+                    success_count += 1
+                except Exception as e:
+                    failed_items.append(f"{item_name}: {str(e)}")
+
+            self._update_expense_total()
+
+            # 結果を表示
+            if failed_items:
+                QMessageBox.warning(
+                    self, "削除結果",
+                    f"{success_count}件削除しました。\n\n以下の削除に失敗しました：\n" +
+                    "\n".join(failed_items)
+                )
+            else:
+                QMessageBox.information(self, "成功", f"{success_count}件の費用項目を削除しました")
 
     def save(self):
         """保存"""
