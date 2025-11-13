@@ -398,17 +398,19 @@ class ProductionExpenseDetailWidget(QWidget):
         # 月別詳細を取得
         details = self.db.get_production_expense_details_by_month(production_id, year_month)
 
-        # テーブルをクリア
+        # テーブルを完全にクリア（セル結合も含む）
         self.detail_table.clear()
-        self.detail_table.setRowCount(0)
+        self.detail_table.setRowCount(len(details))
         self.detail_table.setHorizontalHeaderLabels([
             "実施日", "項目名", "コーナー", "金額", "取引先", "支払予定日", "支払状態", "手続状態"
         ])
 
-        self.detail_table.setRowCount(len(details))
-
         for row, detail in enumerate(details):
             self._populate_detail_row(row, detail)
+
+        # 列幅を内容に合わせて自動調整
+        self.detail_table.resizeColumnToContents(0)  # 実施日
+        self.detail_table.resizeColumnToContents(5)  # 支払予定日
 
     def load_monthly_grouped_details(self, production_id):
         """月別にグループ化して詳細を表示（レギュラー番組用）"""
