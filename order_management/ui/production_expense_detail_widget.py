@@ -18,6 +18,7 @@ class ProductionExpenseDetailWidget(QWidget):
         super().__init__(parent)
         self.db = OrderManagementDB()
         self.current_production_id = None
+        self.current_month_filter = None  # None = 全期間
 
         self.init_ui()
         self.load_production_list()
@@ -125,14 +126,25 @@ class ProductionExpenseDetailWidget(QWidget):
         self.summary_group = self._create_summary_panel()
         layout.addWidget(self.summary_group)
 
+        # 月別フィルタと集計ボタン
+        filter_button_layout = QHBoxLayout()
+
+        # 月別フィルタ
+        filter_button_layout.addWidget(QLabel("表示月:"))
+        self.month_filter = QComboBox()
+        self.month_filter.setMinimumWidth(150)
+        self.month_filter.currentTextChanged.connect(self.on_month_filter_changed)
+        filter_button_layout.addWidget(self.month_filter)
+
+        filter_button_layout.addStretch()
+
         # 月別集計ボタン
-        button_layout = QHBoxLayout()
         self.monthly_button = QPushButton("📈 月別集計を表示")
         self.monthly_button.clicked.connect(self.show_monthly_summary)
         self.monthly_button.setEnabled(False)
-        button_layout.addWidget(self.monthly_button)
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
+        filter_button_layout.addWidget(self.monthly_button)
+
+        layout.addLayout(filter_button_layout)
 
         # 費用項目一覧テーブル
         detail_label = QLabel("💰 費用項目一覧")
@@ -197,7 +209,7 @@ class ProductionExpenseDetailWidget(QWidget):
         return group
 
     def load_production_list(self):
-        """番組一覧を読み込み"""
+        """番組一覧を読み込み（グループ分け表示対応）"""
         search_term = self.search_input.text()
         sort_text = self.sort_combo.currentText()
         type_text = self.type_filter.currentText()
@@ -218,45 +230,104 @@ class ProductionExpenseDetailWidget(QWidget):
         # データ取得
         productions = self.db.get_production_expense_summary(search_term, sort_by, production_type_filter)
 
-        self.production_table.setRowCount(len(productions))
+        # 継続番組と単発制作に分類
+        continuous_productions = []  # レギュラー、コーナー
+        single_productions = []  # イベント、特番、公開放送、公開収録、特別企画
 
-        for row, prod in enumerate(productions):
-            # データ構造: (production_id, production_name, production_type, item_count, total_amount,
-            #            unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count,
-            #            month_count, monthly_average)
-            production_id = prod[0]
-            production_name = prod[1]
+        for prod in productions:
             production_type = prod[2] or "未設定"
-            item_count = prod[3]
-            total_amount = prod[4] or 0
-            unpaid_count = prod[5]
-            paid_count = prod[7]
-            month_count = prod[10]
-            monthly_average = prod[11] or 0
-
-            # テーブルにデータを設定（列順: 番組名、種別、総費用額、未払い、支払済）
-            name_item = QTableWidgetItem(production_name)
-            name_item.setData(Qt.UserRole, production_id)
-            self.production_table.setItem(row, 0, name_item)
-
-            self.production_table.setItem(row, 1, QTableWidgetItem(production_type))
-            self.production_table.setItem(row, 2, QTableWidgetItem(f"¥{int(total_amount):,}"))
-            self.production_table.setItem(row, 3, QTableWidgetItem(f"{unpaid_count}件"))
-            self.production_table.setItem(row, 4, QTableWidgetItem(f"{paid_count}件"))
-
-            # 番組タイプに応じて行の色を変更
-            if production_type == "レギュラー" or production_type == "コーナー":
-                row_color = QColor(230, 240, 255) if unpaid_count > 0 else None  # 青系
-            elif production_type == "イベント" or production_type == "特番":
-                row_color = QColor(255, 250, 230) if unpaid_count > 0 else None  # 黄系
+            if production_type in ["レギュラー", "コーナー"]:
+                continuous_productions.append(prod)
             else:
-                row_color = QColor(255, 243, 224) if unpaid_count > 0 else None  # オレンジ系
+                single_productions.append(prod)
 
-            if row_color:
-                for col in range(self.production_table.columnCount()):
-                    item = self.production_table.item(row, col)
-                    if item:
-                        item.setBackground(row_color)
+        # グループヘッダー分の行を追加して計算
+        total_rows = 0
+        if continuous_productions:
+            total_rows += 1 + len(continuous_productions)  # ヘッダー + データ
+        if single_productions:
+            total_rows += 1 + len(single_productions)  # ヘッダー + データ
+
+        self.production_table.setRowCount(total_rows)
+
+        current_row = 0
+
+        # 継続番組グループ
+        if continuous_productions:
+            # グループヘッダー
+            self._add_group_header(current_row, "📺 継続番組（レギュラー・コーナー）", QColor(200, 220, 255))
+            current_row += 1
+
+            # データ行
+            for prod in continuous_productions:
+                self._add_production_row(current_row, prod, is_continuous=True)
+                current_row += 1
+
+        # 単発制作グループ
+        if single_productions:
+            # グループヘッダー
+            self._add_group_header(current_row, "🎬 単発制作（イベント・特番等）", QColor(255, 245, 220))
+            current_row += 1
+
+            # データ行
+            for prod in single_productions:
+                self._add_production_row(current_row, prod, is_continuous=False)
+                current_row += 1
+
+    def _add_group_header(self, row, title, color):
+        """グループヘッダー行を追加"""
+        header_item = QTableWidgetItem(title)
+        header_item.setBackground(color)
+        header_item.setFlags(Qt.ItemIsEnabled)  # 選択不可
+        header_font = header_item.font()
+        header_font.setBold(True)
+        header_item.setFont(header_font)
+
+        self.production_table.setItem(row, 0, header_item)
+
+        # 他の列も同じ色で埋める
+        for col in range(1, self.production_table.columnCount()):
+            empty_item = QTableWidgetItem("")
+            empty_item.setBackground(color)
+            empty_item.setFlags(Qt.ItemIsEnabled)  # 選択不可
+            self.production_table.setItem(row, col, empty_item)
+
+    def _add_production_row(self, row, prod, is_continuous):
+        """番組データ行を追加"""
+        # データ構造: (production_id, production_name, production_type, item_count, total_amount,
+        #            unpaid_count, unpaid_amount, paid_count, paid_amount, pending_count,
+        #            month_count, monthly_average)
+        production_id = prod[0]
+        production_name = prod[1]
+        production_type = prod[2] or "未設定"
+        item_count = prod[3]
+        total_amount = prod[4] or 0
+        unpaid_count = prod[5]
+        paid_count = prod[7]
+        month_count = prod[10]
+        monthly_average = prod[11] or 0
+
+        # テーブルにデータを設定（列順: 番組名、種別、総費用額、未払い、支払済）
+        name_item = QTableWidgetItem(production_name)
+        name_item.setData(Qt.UserRole, production_id)
+        self.production_table.setItem(row, 0, name_item)
+
+        self.production_table.setItem(row, 1, QTableWidgetItem(production_type))
+        self.production_table.setItem(row, 2, QTableWidgetItem(f"¥{int(total_amount):,}"))
+        self.production_table.setItem(row, 3, QTableWidgetItem(f"{unpaid_count}件"))
+        self.production_table.setItem(row, 4, QTableWidgetItem(f"{paid_count}件"))
+
+        # 番組タイプに応じて行の色を変更（グループ内での強調色）
+        if is_continuous:
+            row_color = QColor(240, 248, 255) if unpaid_count > 0 else QColor(250, 252, 255)  # 青系（薄い）
+        else:
+            row_color = QColor(255, 253, 240) if unpaid_count > 0 else QColor(255, 255, 250)  # 黄系（薄い）
+
+        # すべての列に背景色を設定
+        for col in range(self.production_table.columnCount()):
+            item = self.production_table.item(row, col)
+            if item:
+                item.setBackground(row_color)
 
     def on_production_selected(self):
         """番組が選択されたときの処理"""
@@ -266,7 +337,15 @@ class ProductionExpenseDetailWidget(QWidget):
 
         # 選択された番組のIDを取得
         production_id = selected_items[0].data(Qt.UserRole)
+
+        # グループヘッダー行を選択した場合は無視
+        if production_id is None:
+            return
+
         self.current_production_id = production_id
+
+        # 月フィルタを更新
+        self.update_month_filter()
 
         # 詳細を読み込み
         self.load_production_detail(production_id)
@@ -304,11 +383,32 @@ class ProductionExpenseDetailWidget(QWidget):
         self.paid_label.setText(f"支払済: {paid_count}件 (¥{int(paid_amount):,})")
         self.pending_label.setText(f"金額未定: {pending_count}件")
 
-        # レギュラー番組は月別表示、それ以外は全件表示
-        if production_type == "レギュラー" or production_type == "コーナー":
+        # 月フィルタが設定されている場合は、その月のデータのみを表示
+        if self.current_month_filter:
+            self.load_filtered_details(production_id, self.current_month_filter)
+        elif production_type == "レギュラー" or production_type == "コーナー":
+            # レギュラー番組は月別表示
             self.load_monthly_grouped_details(production_id)
         else:
+            # それ以外は全件表示
             self.load_all_details(production_id)
+
+    def load_filtered_details(self, production_id, year_month):
+        """指定月の費用項目のみを表示"""
+        # 月別詳細を取得
+        details = self.db.get_production_expense_details_by_month(production_id, year_month)
+
+        # テーブルをクリア
+        self.detail_table.clear()
+        self.detail_table.setRowCount(0)
+        self.detail_table.setHorizontalHeaderLabels([
+            "実施日", "項目名", "コーナー", "金額", "取引先", "支払予定日", "支払状態", "手続状態"
+        ])
+
+        self.detail_table.setRowCount(len(details))
+
+        for row, detail in enumerate(details):
+            self._populate_detail_row(row, detail)
 
     def load_monthly_grouped_details(self, production_id):
         """月別にグループ化して詳細を表示（レギュラー番組用）"""
@@ -586,3 +686,43 @@ class ProductionExpenseDetailWidget(QWidget):
                 self.load_production_list()
                 if self.current_production_id:
                     self.load_production_detail(self.current_production_id)
+
+    def update_month_filter(self):
+        """月フィルタのコンボボックスを更新"""
+        if not self.current_production_id:
+            return
+
+        # シグナルを一時的にブロック
+        self.month_filter.blockSignals(True)
+        self.month_filter.clear()
+
+        # 「全期間」オプションを追加
+        self.month_filter.addItem("全期間", None)
+
+        # 番組の費用項目が存在する月を取得
+        months = self.db.get_expense_months_by_production(self.current_production_id)
+
+        for month_str in months:
+            # month_str は "2025-10" 形式
+            year, month = month_str.split('-')
+            display_text = f"{year}年{int(month)}月"
+            self.month_filter.addItem(display_text, month_str)
+
+        # デフォルトで「全期間」を選択
+        self.month_filter.setCurrentIndex(0)
+        self.current_month_filter = None
+
+        # シグナルを再び有効化
+        self.month_filter.blockSignals(False)
+
+    def on_month_filter_changed(self):
+        """月フィルタが変更されたときの処理"""
+        if not self.current_production_id:
+            return
+
+        # 選択された月を取得
+        selected_month = self.month_filter.currentData()
+        self.current_month_filter = selected_month
+
+        # 詳細を再読み込み
+        self.load_production_detail(self.current_production_id)

@@ -4265,6 +4265,35 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def get_expense_months_by_production(self, production_id):
+        """指定した番組の費用項目が存在する月のリストを取得
+
+        Args:
+            production_id: 番組ID
+
+        Returns:
+            list: ['2025-10', '2025-11', ...] のような年月文字列のリスト（昇順）
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT DISTINCT strftime('%Y-%m', ei.implementation_date) as year_month
+                FROM expense_items ei
+                WHERE (ei.production_id = ?
+                       OR ei.production_id IN (
+                           SELECT id FROM productions WHERE parent_production_id = ?
+                       ))
+                  AND ei.implementation_date IS NOT NULL
+                  AND (ei.archived = 0 OR ei.archived IS NULL)
+                ORDER BY year_month ASC
+            """, (production_id, production_id))
+
+            return [row[0] for row in cursor.fetchall() if row[0]]
+        finally:
+            conn.close()
+
     def get_production_expense_details_by_month(self, production_id, year_month):
         """指定した番組の特定月の費用項目詳細を取得
 
