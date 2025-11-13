@@ -144,12 +144,13 @@ class ProductionEditDialog(QDialog):
         self.description_edit.setMaximumHeight(80)
         form_layout.addRow("備考:", self.description_edit)
 
-        # 開始日
+        # 開始日（レギュラー・コーナーの場合は「開始日」、それ以外は「実施日」）
         self.start_date_edit = ImprovedDateEdit()
         self.start_date_edit.setDate(QDate.currentDate())
         form_layout.addRow("開始日:", self.start_date_edit)
+        self.start_date_label = form_layout.labelForField(self.start_date_edit)
 
-        # 終了日（空欄可能）
+        # 終了日（空欄可能、レギュラー・コーナーのみ表示）
         self.end_date_edit = ImprovedDateEdit()
         self.end_date_edit.setSpecialValueText("（未定）")
         self.end_date_edit.setDate(QDate(2000, 1, 1))  # 最小値
@@ -164,6 +165,7 @@ class ProductionEditDialog(QDialog):
         end_date_widget = QWidget()
         end_date_widget.setLayout(end_date_layout)
         form_layout.addRow("終了日:", end_date_widget)
+        self.end_date_label = form_layout.labelForField(end_date_widget)
 
         # 開始時間
         self.start_time_edit = QTimeEdit()
@@ -373,6 +375,19 @@ class ProductionEditDialog(QDialog):
         """種別変更時の処理"""
         is_regular = self.type_regular.isChecked()
         is_corner = self.type_corner.isChecked()
+
+        # レギュラー・コーナーは期間、それ以外は単日
+        is_period_based = is_regular or is_corner
+
+        # 開始日のラベルを変更
+        if is_period_based:
+            self.start_date_label.setText("開始日:")
+        else:
+            self.start_date_label.setText("実施日:")
+
+        # 終了日フィールドの表示/非表示
+        self.end_date_edit.setVisible(is_period_based)
+        self.end_date_label.setVisible(is_period_based)
 
         # レギュラー番組の場合は放送時間を表示
         self.broadcast_time_edit.setVisible(is_regular)
@@ -1329,20 +1344,31 @@ class ProductionEditDialog(QDialog):
         # 親制作物IDを取得
         parent_production_id = self.parent_production_combo.currentData()
 
-        # 終了日の処理（未定の場合はNULL）
-        end_date = self.end_date_edit.date()
-        if end_date == QDate(2000, 1, 1):
-            end_date_str = None
-        elif end_date.isValid():
-            end_date_str = end_date.toString("yyyy-MM-dd")
+        # 開始日の取得
+        start_date_str = self.start_date_edit.date().toString("yyyy-MM-dd") if self.start_date_edit.date().isValid() else None
+
+        # 終了日の処理
+        # レギュラー・コーナー以外（単日制作物）の場合は、終了日を開始日と同じにする
+        is_period_based = production_type in ["レギュラー", "コーナー"]
+
+        if is_period_based:
+            # 期間ベースの場合は通常の終了日処理（未定の場合はNULL）
+            end_date = self.end_date_edit.date()
+            if end_date == QDate(2000, 1, 1):
+                end_date_str = None
+            elif end_date.isValid():
+                end_date_str = end_date.toString("yyyy-MM-dd")
+            else:
+                end_date_str = None
         else:
-            end_date_str = None
+            # 単日制作物の場合は終了日を開始日と同じにする
+            end_date_str = start_date_str
 
         production_data = {
             'name': self.name_edit.text().strip(),
             'description': self.description_edit.toPlainText().strip(),
             'production_type': production_type,
-            'start_date': self.start_date_edit.date().toString("yyyy-MM-dd") if self.start_date_edit.date().isValid() else None,
+            'start_date': start_date_str,
             'end_date': end_date_str,
             'start_time': self.start_time_edit.time().toString("HH:mm:ss"),
             'end_time': self.end_time_edit.time().toString("HH:mm:ss"),
