@@ -175,6 +175,10 @@ class RadioBillingApp(QMainWindow):
         """初期データの読み込み"""
         # 起動時はダイアログを表示せずに追記モードでインポート
         self.import_latest_csv(show_dialog=False)
+
+        # 支払いデータと費用項目の自動照合
+        self._auto_reconcile_payments()
+
         self.payment_tab.refresh_data()
         # データ管理タブ内のサブタブのデータを更新
         self.data_management_tab.expense_tab.refresh_data()
@@ -185,6 +189,30 @@ class RadioBillingApp(QMainWindow):
 
         # 起動時アラートとバッジ更新を統合（パフォーマンス最適化）
         self._check_and_update_urgent_status()
+
+    def _auto_reconcile_payments(self):
+        """支払いデータと費用項目を自動照合
+
+        billing.dbの支払いデータとorder_management.dbの費用項目を照合し、
+        条件が一致するものを自動的に「支払済」として更新する。
+        """
+        try:
+            log_message("支払いデータの自動照合を開始...")
+            result = self.order_db.reconcile_payments_with_expenses('billing.db')
+
+            matched = result.get('matched', 0)
+            unmatched_expenses = result.get('unmatched_expenses', 0)
+            unmatched_payments = result.get('unmatched_payments', 0)
+
+            log_message(f"自動照合完了: 照合成功={matched}件, 未照合費用={unmatched_expenses}件, 未照合支払={unmatched_payments}件")
+
+            if matched > 0:
+                log_message(f"✓ {matched}件の費用項目を支払い済みに更新しました")
+
+        except Exception as e:
+            log_message(f"自動照合中にエラーが発生しました: {e}")
+            import traceback
+            log_message(traceback.format_exc())
 
     def _check_auto_renewal_on_startup(self):
         """起動時に契約自動延長をチェック（通知のみ、自動実行はしない）"""
@@ -380,6 +408,9 @@ class RadioBillingApp(QMainWindow):
             row_count = self.db_manager.import_csv_data(csv_file, self.header_mapping, overwrite)
             mode_text = "上書きで" if overwrite else "追記で"
             log_message(f"{row_count}件のデータをCSVから{mode_text}インポートしました: {file_name}")
+
+            # 支払いデータと費用項目の自動照合
+            self._auto_reconcile_payments()
 
             # データを表示
             self.payment_tab.refresh_data()
