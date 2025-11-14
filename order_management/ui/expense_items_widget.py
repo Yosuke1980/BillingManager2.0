@@ -62,6 +62,12 @@ class ExpenseItemsWidget(QWidget):
         self.overdue_label.mousePressEvent = self._show_overdue_items
         dashboard_layout.addWidget(self.overdue_label, 2, 0)
 
+        self.no_contract_label = QLabel("📝 契約なし: 0件")
+        self.no_contract_label.setStyleSheet("font-size: 13px; color: #ff6f00; font-weight: bold;")
+        self.no_contract_label.setCursor(Qt.PointingHandCursor)
+        self.no_contract_label.mousePressEvent = self._show_no_contract_items
+        dashboard_layout.addWidget(self.no_contract_label, 2, 1)
+
         dashboard_group.setLayout(dashboard_layout)
         layout.addWidget(dashboard_group)
 
@@ -92,6 +98,12 @@ class ExpenseItemsWidget(QWidget):
         self._populate_payment_months()
         self.payment_month_filter.currentTextChanged.connect(self.load_expense_items)
         filter_layout.addWidget(self.payment_month_filter)
+
+        filter_layout.addWidget(QLabel("契約:"))
+        self.contract_filter = QComboBox()
+        self.contract_filter.addItems(["すべて", "契約あり", "契約なし"])
+        self.contract_filter.currentTextChanged.connect(self.load_expense_items)
+        filter_layout.addWidget(self.contract_filter)
 
         self.show_archived_checkbox = QCheckBox("アーカイブ済みを表示")
         self.show_archived_checkbox.stateChanged.connect(self.load_expense_items)
@@ -203,6 +215,7 @@ class ExpenseItemsWidget(QWidget):
         payment_status = self.payment_status_filter.currentText()
         status = self.status_filter.currentText()
         payment_month = self.payment_month_filter.currentData()
+        contract_filter = self.contract_filter.currentText()
         show_archived = self.show_archived_checkbox.isChecked()
 
         if payment_status == "すべて":
@@ -219,6 +232,12 @@ class ExpenseItemsWidget(QWidget):
             show_archived=show_archived
         )
 
+        # 契約フィルターを適用（クライアント側でフィルタリング）
+        if contract_filter == "契約あり":
+            expense_items = [item for item in expense_items if item[11] is not None and item[11] != "" and item[11] != 0]
+        elif contract_filter == "契約なし":
+            expense_items = [item for item in expense_items if item[11] is None or item[11] == "" or item[11] == 0]
+
         self.table.setRowCount(len(expense_items))
 
         # 統計用カウンタ
@@ -227,6 +246,7 @@ class ExpenseItemsWidget(QWidget):
         paid_count = 0
         pending_count = 0
         overdue_count = 0
+        no_contract_count = 0
 
         for row, item in enumerate(expense_items):
             # データ構造: (id, production_id, production_name, partner_id, partner_name,
@@ -273,6 +293,10 @@ class ExpenseItemsWidget(QWidget):
                 # 期限超過チェック
                 if payment_date and days_until is not None and days_until < 0:
                     overdue_count += 1
+
+            # 契約なしチェック
+            if contract_id is None or contract_id == "" or contract_id == 0:
+                no_contract_count += 1
 
             # 金額のフォーマット
             if amount_pending == 1:
@@ -330,9 +354,9 @@ class ExpenseItemsWidget(QWidget):
                         item.setBackground(row_color)
 
         # ダッシュボードを更新
-        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count, pending_count, overdue_count)
+        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count, pending_count, overdue_count, no_contract_count)
 
-    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count, pending_count, overdue_count):
+    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count, pending_count, overdue_count, no_contract_count):
         """ダッシュボードの統計を更新"""
         self.total_label.setText(f"総件数: {total_count}件")
         self.amount_label.setText(f"総額: ¥{int(total_amount):,}")
@@ -340,6 +364,17 @@ class ExpenseItemsWidget(QWidget):
         self.paid_label.setText(f"支払済: {paid_count}件")
         self.pending_label.setText(f"金額未定: {pending_count}件")
         self.overdue_label.setText(f"⚠️ 期限超過: {overdue_count}件")
+
+        # 契約なし件数の表示を更新（既存のno_contract_labelを使用）
+        if hasattr(self, 'no_contract_label'):
+            self.no_contract_label.setText(f"📝 契約なし: {no_contract_count}件")
+
+    def _show_no_contract_items(self, event):
+        """契約なし項目のみを表示"""
+        # 契約フィルターを「契約なし」に設定
+        self.contract_filter.setCurrentText("契約なし")
+        # データを再読み込み
+        self.load_expense_items()
 
     def _show_overdue_items(self, event):
         """期限超過項目のみを表示"""

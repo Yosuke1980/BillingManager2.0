@@ -132,7 +132,10 @@ class RadioBillingApp(QMainWindow):
         return tab_control
 
     def _add_tabs(self, tab_control):
-        """各タブを追加"""
+        """各タブを追加
+
+        タブの順序: 使用頻度の高い日常業務用タブを前に配置
+        """
         # メインタブ1: 支払い情報（毎日使う）
         self.payment_tab = PaymentTab(tab_control, self)
         tab_control.addTab(self.payment_tab, self.config.TAB_NAMES['payment'])
@@ -141,21 +144,21 @@ class RadioBillingApp(QMainWindow):
         self.payment_order_check_tab = PaymentOrderCheckTab()
         self.payment_check_tab_index = tab_control.addTab(self.payment_order_check_tab, self.config.TAB_NAMES['payment_order_check'])
 
-        # メインタブ3: 発注管理（契約一覧）
-        self.order_contract_widget = OrderContractWidget()
-        self.order_management_tab_index = tab_control.addTab(self.order_contract_widget, self.config.TAB_NAMES['order_management'])
-
-        # メインタブ4: 費用項目管理（新設）
+        # メインタブ3: 費用項目管理（毎日使う - 番組・イベント管理）
         self.expense_items_widget = ExpenseItemsWidget()
-        self.expense_items_tab_index = tab_control.addTab(self.expense_items_widget, "費用項目管理")
+        self.expense_items_tab_index = tab_control.addTab(self.expense_items_widget, "📺 費用項目管理")
 
-        # メインタブ5: 番組別費用詳細（新設）
+        # メインタブ4: 番組別費用詳細（毎日使う - 番組・イベント管理）
         self.production_expense_detail_widget = ProductionExpenseDetailWidget()
-        self.production_expense_tab_index = tab_control.addTab(self.production_expense_detail_widget, "番組別費用詳細")
+        self.production_expense_tab_index = tab_control.addTab(self.production_expense_detail_widget, "📊 番組別費用詳細")
 
-        # メインタブ6: マスター管理
+        # メインタブ5: マスター管理（たまに使う）
         self.master_management_tab = MasterManagementTab(tab_control, self)
         tab_control.addTab(self.master_management_tab, self.config.TAB_NAMES['master_management'])
+
+        # メインタブ6: 発注管理 - 契約一覧（たまに使う）
+        self.order_contract_widget = OrderContractWidget()
+        self.order_management_tab_index = tab_control.addTab(self.order_contract_widget, self.config.TAB_NAMES['order_management'])
 
         # メインタブ7: データ管理（たまに使う、サブタブあり）
         self.data_management_tab = DataManagementTab(tab_control, self)
