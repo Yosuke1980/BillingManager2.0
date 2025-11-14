@@ -4419,8 +4419,27 @@ class OrderManagementDB:
                     # 3. 日付が近い（±7日）
                     if payment_date and expected_payment_date:
                         try:
-                            pay_date = datetime.strptime(payment_date, '%Y-%m-%d')
-                            exp_date = datetime.strptime(expected_payment_date, '%Y-%m-%d')
+                            # 複数の日付形式に対応
+                            pay_date = None
+                            exp_date = None
+
+                            for fmt in ['%Y-%m-%d', '%Y/%m/%d']:
+                                try:
+                                    pay_date = datetime.strptime(payment_date, fmt)
+                                    break
+                                except:
+                                    pass
+
+                            for fmt in ['%Y-%m-%d', '%Y/%m/%d']:
+                                try:
+                                    exp_date = datetime.strptime(expected_payment_date, fmt)
+                                    break
+                                except:
+                                    pass
+
+                            if not (pay_date and exp_date):
+                                continue
+
                             date_diff = abs((pay_date - exp_date).days)
                             if date_diff > 7:
                                 continue
