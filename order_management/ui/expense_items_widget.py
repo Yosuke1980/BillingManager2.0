@@ -310,6 +310,9 @@ class ExpenseItemsWidget(QWidget):
                 unmatched_payments = []
 
         # テーブルを完全にクリア
+        # ソートを一時的に無効化（データ設定中のソートによる行ズレを防止）
+        self.table.setSortingEnabled(False)
+
         # 1. 行数を0にしてすべてのアイテムオブジェクトを削除
         self.table.setRowCount(0)
         # 2. 念のためclearContents()も実行
@@ -503,6 +506,9 @@ class ExpenseItemsWidget(QWidget):
 
         # ダッシュボードを更新
         self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count, pending_count, overdue_count, no_contract_count, unmatched_payments_count)
+
+        # データ設定完了後、ソートを再有効化
+        self.table.setSortingEnabled(True)
 
     def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count, pending_count, overdue_count, no_contract_count, unmatched_payments_count=0):
         """ダッシュボードの統計を更新"""
