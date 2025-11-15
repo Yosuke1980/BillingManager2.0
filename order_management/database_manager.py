@@ -4494,3 +4494,34 @@ class OrderManagementDB:
         finally:
             billing_conn.close()
             order_conn.close()
+
+    def get_unmatched_payments_from_billing(self, billing_db_path='billing.db'):
+        """billing.dbから費用項目に未登録の支払いデータを取得
+
+        Args:
+            billing_db_path: billing.dbのパス
+
+        Returns:
+            list: 未登録支払いデータのリスト
+                  [(payment_id, subject, project_name, payee, payee_code, amount, payment_date, status), ...]
+        """
+        import sqlite3
+
+        # billing.dbに接続
+        billing_conn = sqlite3.connect(billing_db_path)
+        billing_cursor = billing_conn.cursor()
+
+        try:
+            # billing.dbから未照合の支払いデータを取得
+            billing_cursor.execute("""
+                SELECT id, subject, project_name, payee, payee_code, amount, payment_date, status
+                FROM payments
+                WHERE status != '照合済み'
+                ORDER BY payment_date DESC
+            """)
+            unmatched_payments = billing_cursor.fetchall()
+
+            return unmatched_payments
+
+        finally:
+            billing_conn.close()

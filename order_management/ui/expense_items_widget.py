@@ -68,6 +68,12 @@ class ExpenseItemsWidget(QWidget):
         self.no_contract_label.mousePressEvent = self._show_no_contract_items
         dashboard_layout.addWidget(self.no_contract_label, 2, 1)
 
+        self.unmatched_payments_label = QLabel("📋 未登録支払い: 0件")
+        self.unmatched_payments_label.setStyleSheet("font-size: 13px; color: #ff9800; font-weight: bold;")
+        self.unmatched_payments_label.setCursor(Qt.PointingHandCursor)
+        self.unmatched_payments_label.mousePressEvent = self._show_unmatched_payments
+        dashboard_layout.addWidget(self.unmatched_payments_label, 2, 2)
+
         dashboard_group.setLayout(dashboard_layout)
         layout.addWidget(dashboard_group)
 
@@ -104,6 +110,12 @@ class ExpenseItemsWidget(QWidget):
         self.contract_filter.addItems(["すべて", "契約あり", "契約なし"])
         self.contract_filter.currentTextChanged.connect(self.load_expense_items)
         filter_layout.addWidget(self.contract_filter)
+
+        filter_layout.addWidget(QLabel("データ種別:"))
+        self.data_type_filter = QComboBox()
+        self.data_type_filter.addItems(["すべて", "登録済み費用項目のみ", "未登録支払いのみ"])
+        self.data_type_filter.currentTextChanged.connect(self.load_expense_items)
+        filter_layout.addWidget(self.data_type_filter)
 
         self.show_archived_checkbox = QCheckBox("アーカイブ済みを表示")
         self.show_archived_checkbox.stateChanged.connect(self.load_expense_items)
@@ -210,12 +222,13 @@ class ExpenseItemsWidget(QWidget):
         self.payment_month_filter.setCurrentIndex(1)
 
     def load_expense_items(self):
-        """費用項目を読み込んで表示"""
+        """費用項目と未登録支払いデータを読み込んで表示"""
         search_term = self.search_input.text()
         payment_status = self.payment_status_filter.currentText()
         status = self.status_filter.currentText()
         payment_month = self.payment_month_filter.currentData()
         contract_filter = self.contract_filter.currentText()
+        data_type_filter = self.data_type_filter.currentText()
         show_archived = self.show_archived_checkbox.isChecked()
 
         if payment_status == "すべて":
@@ -223,22 +236,46 @@ class ExpenseItemsWidget(QWidget):
         if status == "すべて":
             status = None
 
-        # データベースから費用項目を取得
-        expense_items = self.db.get_expense_items_with_details(
-            search_term=search_term,
-            payment_status=payment_status,
-            status=status,
-            payment_month=payment_month,
-            show_archived=show_archived
-        )
+        # データ種別フィルタに応じてデータを取得
+        expense_items = []
+        unmatched_payments = []
 
-        # 契約フィルターを適用（クライアント側でフィルタリング）
-        if contract_filter == "契約あり":
-            expense_items = [item for item in expense_items if item[11] is not None and item[11] != "" and item[11] != 0]
-        elif contract_filter == "契約なし":
-            expense_items = [item for item in expense_items if item[11] is None or item[11] == "" or item[11] == 0]
+        if data_type_filter != "未登録支払いのみ":
+            # データベースから費用項目を取得
+            expense_items = self.db.get_expense_items_with_details(
+                search_term=search_term,
+                payment_status=payment_status,
+                status=status,
+                payment_month=payment_month,
+                show_archived=show_archived
+            )
 
-        self.table.setRowCount(len(expense_items))
+            # 契約フィルターを適用（クライアント側でフィルタリング）
+            if contract_filter == "契約あり":
+                expense_items = [item for item in expense_items if item[11] is not None and item[11] != "" and item[11] != 0]
+            elif contract_filter == "契約なし":
+                expense_items = [item for item in expense_items if item[11] is None or item[11] == "" or item[11] == 0]
+
+        if data_type_filter != "登録済み費用項目のみ":
+            # billing.dbから未登録支払いデータを取得
+            try:
+                all_unmatched = self.db.get_unmatched_payments_from_billing('billing.db')
+                # 検索フィルタを適用
+                if search_term:
+                    unmatched_payments = [
+                        p for p in all_unmatched
+                        if (p[3] and search_term.lower() in p[3].lower()) or  # payee
+                           (p[2] and search_term.lower() in p[2].lower())     # project_name
+                    ]
+                else:
+                    unmatched_payments = all_unmatched
+            except Exception as e:
+                print(f"未登録支払いデータ取得エラー: {e}")
+                unmatched_payments = []
+
+        # テーブルの行数を設定
+        total_rows = len(expense_items) + len(unmatched_payments)
+        self.table.setRowCount(total_rows)
 
         # 統計用カウンタ
         total_amount = 0
@@ -247,8 +284,13 @@ class ExpenseItemsWidget(QWidget):
         pending_count = 0
         overdue_count = 0
         no_contract_count = 0
+        unmatched_payments_count = len(unmatched_payments)
 
-        for row, item in enumerate(expense_items):
+        # 現在の行番号
+        current_row = 0
+
+        # 1. 登録済み費用項目を表示
+        for item in expense_items:
             # データ構造: (id, production_id, production_name, partner_id, partner_name,
             #            item_name, amount, implementation_date, expected_payment_date,
             #            status, payment_status, contract_id, notes, work_type,
@@ -326,37 +368,92 @@ class ExpenseItemsWidget(QWidget):
             # テーブルにデータを設定
             id_item = QTableWidgetItem(str(item_id))
             id_item.setData(Qt.UserRole, item_id)
-            self.table.setItem(row, 0, id_item)
-            self.table.setItem(row, 1, QTableWidgetItem(production_name))
-            self.table.setItem(row, 2, QTableWidgetItem(partner_name))
-            self.table.setItem(row, 3, QTableWidgetItem(item_name))
-            self.table.setItem(row, 4, QTableWidgetItem(work_type))
-            self.table.setItem(row, 5, QTableWidgetItem(amount_text))
-            self.table.setItem(row, 6, QTableWidgetItem(implementation_date))
-            self.table.setItem(row, 7, QTableWidgetItem(expected_payment_date))
-            self.table.setItem(row, 8, QTableWidgetItem(item_status))
-            self.table.setItem(row, 9, QTableWidgetItem(payment_status))
+            self.table.setItem(current_row, 0, id_item)
+            self.table.setItem(current_row, 1, QTableWidgetItem(production_name))
+            self.table.setItem(current_row, 2, QTableWidgetItem(partner_name))
+            self.table.setItem(current_row, 3, QTableWidgetItem(item_name))
+            self.table.setItem(current_row, 4, QTableWidgetItem(work_type))
+            self.table.setItem(current_row, 5, QTableWidgetItem(amount_text))
+            self.table.setItem(current_row, 6, QTableWidgetItem(implementation_date))
+            self.table.setItem(current_row, 7, QTableWidgetItem(expected_payment_date))
+            self.table.setItem(current_row, 8, QTableWidgetItem(item_status))
+            self.table.setItem(current_row, 9, QTableWidgetItem(payment_status))
 
             # 発注（契約）の有無を分かりやすく表示
             # contract_idがNone、空文字列、0以外の場合に「あり」と表示
             contract_display = "✓ あり" if (contract_id is not None and contract_id != "" and contract_id != 0) else "✗ なし"
             contract_item = QTableWidgetItem(contract_display)
             contract_item.setData(Qt.UserRole, contract_id)  # 契約IDを保存
-            self.table.setItem(row, 10, contract_item)
+            self.table.setItem(current_row, 10, contract_item)
 
-            self.table.setItem(row, 11, QTableWidgetItem(notes))
+            self.table.setItem(current_row, 11, QTableWidgetItem(notes))
 
             # 行全体に背景色を適用
             if row_color:
                 for col in range(self.table.columnCount()):
-                    item = self.table.item(row, col)
+                    item = self.table.item(current_row, col)
                     if item:
                         item.setBackground(row_color)
 
-        # ダッシュボードを更新
-        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count, pending_count, overdue_count, no_contract_count)
+            current_row += 1
 
-    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count, pending_count, overdue_count, no_contract_count):
+        # 2. 未登録支払いデータを表示
+        unmatched_row_color = QColor(255, 235, 200)  # 薄いオレンジ色
+        for payment in unmatched_payments:
+            # payment: (payment_id, subject, project_name, payee, payee_code, amount, payment_date, status)
+            payment_id, subject, project_name, payee, payee_code, amount, payment_date, payment_status = payment
+
+            # ID列に "P-" プレフィックスを付けて表示
+            id_item = QTableWidgetItem(f"P-{payment_id}")
+            id_item.setData(Qt.UserRole, f"unmatched_{payment_id}")  # 未登録支払いを識別
+            self.table.setItem(current_row, 0, id_item)
+
+            # 番組名
+            self.table.setItem(current_row, 1, QTableWidgetItem(project_name or ""))
+
+            # 取引先名
+            self.table.setItem(current_row, 2, QTableWidgetItem(payee or ""))
+
+            # 項目名
+            self.table.setItem(current_row, 3, QTableWidgetItem("（未登録支払い）"))
+
+            # 業務種別
+            self.table.setItem(current_row, 4, QTableWidgetItem(""))
+
+            # 金額
+            amount_text = f"¥{int(amount):,}" if amount else "¥0"
+            self.table.setItem(current_row, 5, QTableWidgetItem(amount_text))
+
+            # 実施日
+            self.table.setItem(current_row, 6, QTableWidgetItem(""))
+
+            # 支払予定日
+            self.table.setItem(current_row, 7, QTableWidgetItem(payment_date or ""))
+
+            # 状態
+            self.table.setItem(current_row, 8, QTableWidgetItem("未登録"))
+
+            # 支払状態
+            self.table.setItem(current_row, 9, QTableWidgetItem(payment_status or ""))
+
+            # 契約
+            self.table.setItem(current_row, 10, QTableWidgetItem("―"))
+
+            # 備考（件名を表示）
+            self.table.setItem(current_row, 11, QTableWidgetItem(subject or ""))
+
+            # 行全体に背景色を適用（薄いオレンジ）
+            for col in range(self.table.columnCount()):
+                item = self.table.item(current_row, col)
+                if item:
+                    item.setBackground(unmatched_row_color)
+
+            current_row += 1
+
+        # ダッシュボードを更新
+        self._update_dashboard(len(expense_items), total_amount, unpaid_count, paid_count, pending_count, overdue_count, no_contract_count, unmatched_payments_count)
+
+    def _update_dashboard(self, total_count, total_amount, unpaid_count, paid_count, pending_count, overdue_count, no_contract_count, unmatched_payments_count=0):
         """ダッシュボードの統計を更新"""
         self.total_label.setText(f"総件数: {total_count}件")
         self.amount_label.setText(f"総額: ¥{int(total_amount):,}")
@@ -368,6 +465,10 @@ class ExpenseItemsWidget(QWidget):
         # 契約なし件数の表示を更新（既存のno_contract_labelを使用）
         if hasattr(self, 'no_contract_label'):
             self.no_contract_label.setText(f"📝 契約なし: {no_contract_count}件")
+
+        # 未登録支払い件数の表示を更新
+        if hasattr(self, 'unmatched_payments_label'):
+            self.unmatched_payments_label.setText(f"📋 未登録支払い: {unmatched_payments_count}件")
 
     def _show_no_contract_items(self, event):
         """契約なし項目のみを表示"""
@@ -384,6 +485,12 @@ class ExpenseItemsWidget(QWidget):
         idx = self.payment_month_filter.findData(None)
         if idx >= 0:
             self.payment_month_filter.setCurrentIndex(idx)
+        # load_expense_itemsは自動的に呼ばれる
+
+    def _show_unmatched_payments(self, event):
+        """未登録支払いのみを表示"""
+        # データ種別フィルターを「未登録支払いのみ」に設定
+        self.data_type_filter.setCurrentText("未登録支払いのみ")
         # load_expense_itemsは自動的に呼ばれる
 
     def archive_old_items(self):

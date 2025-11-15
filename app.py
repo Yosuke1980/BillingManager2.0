@@ -136,13 +136,13 @@ class RadioBillingApp(QMainWindow):
 
         タブの順序: 使用頻度の高い日常業務用タブを前に配置
         """
-        # メインタブ1: 支払い情報（毎日使う）
-        self.payment_tab = PaymentTab(tab_control, self)
-        tab_control.addTab(self.payment_tab, self.config.TAB_NAMES['payment'])
-
-        # メインタブ2: 費用項目管理（毎日使う）
+        # メインタブ1: 費用項目管理（毎日使う - 最優先）
         self.expense_items_widget = ExpenseItemsWidget()
         self.expense_items_tab_index = tab_control.addTab(self.expense_items_widget, "📺 費用項目管理")
+
+        # メインタブ2: 支払い情報（毎日使う）
+        self.payment_tab = PaymentTab(tab_control, self)
+        tab_control.addTab(self.payment_tab, self.config.TAB_NAMES['payment'])
 
         # メインタブ3: 番組別費用詳細（毎日使う）
         self.production_expense_detail_widget = ProductionExpenseDetailWidget()
