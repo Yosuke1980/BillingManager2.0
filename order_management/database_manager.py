@@ -4729,9 +4729,10 @@ class OrderManagementDB:
 
         try:
             cursor.execute("""
-                SELECT ei.item_name, ei.work_type, ei.amount, p.name as partner_name
+                SELECT ei.item_name, ei.work_type, ei.amount, p.name as partner_name, c.name as cast_name
                 FROM expense_items ei
                 LEFT JOIN partners p ON ei.partner_id = p.id
+                LEFT JOIN cast c ON c.partner_id = p.id
                 WHERE ei.production_id = ?
                 ORDER BY
                     CASE
@@ -4743,12 +4744,19 @@ class OrderManagementDB:
 
             rows = cursor.fetchall()
             expenses = []
+            seen_cast = {}  # 重複排除用
             for row in rows:
+                key = (row[0], row[1], row[2], row[3])  # item_name, work_type, amount, partner_name
+                if key in seen_cast:
+                    continue  # 同じ出演者で重複している場合はスキップ
+                seen_cast[key] = True
+
                 expenses.append({
                     'item_name': row[0],
                     'work_type': row[1],
                     'amount': row[2],
-                    'partner_name': row[3]
+                    'partner_name': row[3],
+                    'cast_name': row[4]
                 })
 
             return expenses
@@ -4785,9 +4793,10 @@ class OrderManagementDB:
 
             cursor.execute("""
                 SELECT ei.item_name, ei.work_type, ei.amount, p.name as partner_name,
-                       ei.implementation_date
+                       ei.implementation_date, c.name as cast_name
                 FROM expense_items ei
                 LEFT JOIN partners p ON ei.partner_id = p.id
+                LEFT JOIN cast c ON c.partner_id = p.id
                 WHERE ei.production_id = ?
                   AND ei.implementation_date >= ?
                   AND ei.implementation_date < ?
@@ -4802,13 +4811,20 @@ class OrderManagementDB:
 
             rows = cursor.fetchall()
             expenses = []
+            seen_cast = {}  # 重複排除用
             for row in rows:
+                key = (row[0], row[1], row[2], row[3], row[4])  # item_name, work_type, amount, partner_name, implementation_date
+                if key in seen_cast:
+                    continue  # 同じ出演者で重複している場合はスキップ
+                seen_cast[key] = True
+
                 expenses.append({
                     'item_name': row[0],
                     'work_type': row[1],
                     'amount': row[2],
                     'partner_name': row[3],
-                    'implementation_date': row[4]
+                    'implementation_date': row[4],
+                    'cast_name': row[5]
                 })
 
             return expenses
