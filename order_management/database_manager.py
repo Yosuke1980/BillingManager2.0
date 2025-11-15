@@ -4498,6 +4498,9 @@ class OrderManagementDB:
     def get_unmatched_payments_from_billing(self, billing_db_path='billing.db'):
         """billing.dbから費用項目に未登録の支払いデータを取得
 
+        billing.dbに存在する支払いデータのうち、expense_itemsテーブルに
+        対応する費用項目が存在しないものを「未登録支払い」として抽出します。
+
         Args:
             billing_db_path: billing.dbのパス
 
@@ -4511,20 +4514,47 @@ class OrderManagementDB:
         billing_conn = sqlite3.connect(billing_db_path)
         billing_cursor = billing_conn.cursor()
 
+        # order_management.dbに接続
+        om_conn = self._get_connection()
+        om_cursor = om_conn.cursor()
+
         try:
-            # billing.dbから未照合の支払いデータを取得
+            # billing.dbからすべての支払いデータを取得
             billing_cursor.execute("""
                 SELECT id, subject, project_name, payee, payee_code, amount, payment_date, status
                 FROM payments
-                WHERE status != '照合済み'
                 ORDER BY payment_date DESC
             """)
-            unmatched_payments = billing_cursor.fetchall()
+            all_payments = billing_cursor.fetchall()
+
+            # 未登録の支払いデータを格納するリスト
+            unmatched_payments = []
+
+            for payment in all_payments:
+                payment_id, subject, project_name, payee, payee_code, amount, payment_date, status = payment
+
+                # expense_itemsテーブルで対応する費用項目を検索
+                # 照合キー: partner名 (payee) と amount の完全一致
+                # または item_name、partner名、amount の完全一致
+                om_cursor.execute("""
+                    SELECT ei.id
+                    FROM expense_items ei
+                    LEFT JOIN partners p ON ei.partner_id = p.id
+                    WHERE p.name = ?
+                      AND ei.amount = ?
+                      AND (ei.item_name = ? OR ei.item_name LIKE '%' || ? || '%' OR ? LIKE '%' || ei.item_name || '%')
+                    LIMIT 1
+                """, (payee, amount, subject, subject, subject))
+
+                # 対応する費用項目が見つからない場合のみ未登録として追加
+                if om_cursor.fetchone() is None:
+                    unmatched_payments.append(payment)
 
             return unmatched_payments
 
         finally:
             billing_conn.close()
+            om_conn.close()
 
     def get_productions_for_month(self, month_str):
         """指定月の番組を取得
