@@ -524,13 +524,13 @@ class ProductionDetailWidget(QWidget):
                 # 重複を除外
                 cast_names = {}
                 for expense in cast_expenses:
-                    item_name = expense.get('item_name', '')
+                    partner_name = expense.get('partner_name', '')
                     work_type = expense.get('work_type', '')
-                    if item_name and item_name not in cast_names:
-                        cast_names[item_name] = work_type
+                    if partner_name and partner_name not in cast_names:
+                        cast_names[partner_name] = work_type
 
-                for item_name, work_type in cast_names.items():
-                    html += f'<div class="item">{work_type}　{item_name}</div>'
+                for partner_name, work_type in cast_names.items():
+                    html += f'<div class="item">{partner_name}　{work_type}</div>'
 
             # 制作会社
             production_expenses = [e for e in all_expenses if '出演' not in (e.get('work_type', '') or '')]
@@ -637,7 +637,7 @@ class ProductionDetailWidget(QWidget):
                 html += '<div class="category">出演料</div>'
                 cast_total = 0
                 for expense in cast_expenses:
-                    item_name = expense.get('item_name', '')
+                    partner_name = expense.get('partner_name', '')
                     work_type = expense.get('work_type', '')
                     amount = expense.get('amount', 0)
                     impl_date = expense.get('implementation_date', '')
@@ -652,7 +652,7 @@ class ProductionDetailWidget(QWidget):
                         except:
                             pass
 
-                    html += f'<div class="item">{date_str}{item_name}　{work_type}　{amount_str}</div>'
+                    html += f'<div class="item">{date_str}{partner_name}　{work_type}　{amount_str}</div>'
                     if amount:
                         cast_total += amount
 
