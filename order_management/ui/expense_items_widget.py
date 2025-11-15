@@ -309,8 +309,12 @@ class ExpenseItemsWidget(QWidget):
                 print(f"未登録支払いデータ取得エラー: {e}")
                 unmatched_payments = []
 
-        # テーブルを完全にクリアしてから新しいデータを設定
+        # テーブルを完全にクリア
+        # 1. 行数を0にしてすべてのアイテムオブジェクトを削除
+        self.table.setRowCount(0)
+        # 2. 念のためclearContents()も実行
         self.table.clearContents()
+        # 3. 新しい行数を設定
         total_rows = len(expense_items) + len(unmatched_payments)
         self.table.setRowCount(total_rows)
 
