@@ -610,10 +610,16 @@ class ProductionDetailWidget(QWidget):
             return
 
         try:
+            # 番組情報を取得
+            production = self.db.get_production_by_id(self.current_production_id)
+            if not production:
+                QMessageBox.warning(self, "エラー", "番組情報が見つかりません")
+                return
+
             # 番組編集ダイアログを開く
             from order_management.ui.production_edit_dialog import ProductionEditDialog
 
-            dialog = ProductionEditDialog(self, production_id=self.current_production_id)
+            dialog = ProductionEditDialog(self, production=production)
             if dialog.exec_():
                 # 編集が完了したら詳細を再表示
                 self.display_production_detail(self.current_production_id)
