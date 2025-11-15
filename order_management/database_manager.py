@@ -5163,3 +5163,72 @@ class OrderManagementDB:
 
         finally:
             conn.close()
+
+    def get_all_partners(self):
+        """全取引先を取得
+
+        Returns:
+            list: [(id, name, ...), ...] の形式
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT * FROM partners ORDER BY name")
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def add_cast(self, cast_data):
+        """出演者を追加
+
+        Args:
+            cast_data: dict with keys:
+                - name: 出演者名（必須）
+                - partner_id: 事務所ID（任意）
+                - notes: 備考（任意）
+
+        Returns:
+            int: 追加した出演者のID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO cast (name, partner_id, notes)
+                VALUES (?, ?, ?)
+            """, (
+                cast_data.get('name'),
+                cast_data.get('partner_id'),
+                cast_data.get('notes', '')
+            ))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            conn.close()
+
+    def add_partner(self, partner_data):
+        """取引先を追加
+
+        Args:
+            partner_data: dict with keys:
+                - name: 取引先名（必須）
+                - notes: 備考（任意）
+                - その他のフィールド
+
+        Returns:
+            int: 追加した取引先のID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO partners (name, notes)
+                VALUES (?, ?)
+            """, (
+                partner_data.get('name'),
+                partner_data.get('notes', '')
+            ))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            conn.close()

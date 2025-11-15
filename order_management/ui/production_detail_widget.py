@@ -1084,9 +1084,36 @@ class ProductionDetailWidget(QWidget):
             # 番組情報を更新
             self.db.update_production(self.current_production_id, production_data)
 
-            # 費用項目を更新
-            # TODO: 出演者と制作項目の保存処理を実装
-            # 現時点では基本情報のみ保存
+            # 既存の費用項目を取得
+            existing_expenses = self.db.get_expenses_by_production(self.current_production_id)
+            existing_expense_ids = set(e.get('id') for e in existing_expenses if e.get('id'))
+
+            # 保存された費用項目のIDを追跡
+            saved_expense_ids = set()
+
+            # 出演者の保存
+            for row in range(self.cast_table.rowCount()):
+                expense_data = self._get_cast_row_data(row)
+                if expense_data:
+                    expense_id = self._save_expense_item(expense_data, '出演')
+                    if expense_id:
+                        saved_expense_ids.add(expense_id)
+
+            # 制作項目の保存
+            for row in range(self.production_table.rowCount()):
+                expense_data = self._get_production_row_data(row)
+                if expense_data:
+                    expense_id = self._save_expense_item(expense_data, '制作')
+                    if expense_id:
+                        saved_expense_ids.add(expense_id)
+
+            # 削除された費用項目を削除
+            deleted_ids = existing_expense_ids - saved_expense_ids
+            for expense_id in deleted_ids:
+                try:
+                    self.db.delete_expense_item(expense_id)
+                except Exception as e:
+                    print(f"費用項目削除エラー (ID: {expense_id}): {e}")
 
             QMessageBox.information(self, "保存完了", "変更を保存しました")
 
@@ -1104,3 +1131,186 @@ class ProductionDetailWidget(QWidget):
             print(f"保存エラー: {e}")
             import traceback
             traceback.print_exc()
+
+    def _get_cast_row_data(self, row):
+        """出演者テーブルから行データを取得"""
+        try:
+            # 各セルのウィジェットを取得
+            role_widget = self.cast_table.cellWidget(row, 0)
+            name_widget = self.cast_table.cellWidget(row, 1)
+            amount_widget = self.cast_table.cellWidget(row, 2)
+            impl_date_widget = self.cast_table.cellWidget(row, 3)
+            payment_date_widget = self.cast_table.cellWidget(row, 4)
+
+            if not name_widget or not amount_widget:
+                return None
+
+            # 既存のexpense_idを取得（更新の場合）
+            expense_id = None
+            id_item = self.cast_table.item(row, 0)
+            if id_item and id_item.text():
+                try:
+                    expense_id = int(id_item.text())
+                except:
+                    pass
+
+            data = {
+                'id': expense_id,
+                'role': role_widget.text() if role_widget else '',
+                'cast_name': name_widget.currentText() if hasattr(name_widget, 'currentText') else '',
+                'amount': amount_widget.value() if amount_widget else 0,
+                'implementation_date': impl_date_widget.date().toString('yyyy-MM-dd') if impl_date_widget else None,
+                'expected_payment_date': payment_date_widget.date().toString('yyyy-MM-dd') if payment_date_widget else None,
+            }
+
+            return data
+
+        except Exception as e:
+            print(f"出演者行データ取得エラー (row {row}): {e}")
+            return None
+
+    def _get_production_row_data(self, row):
+        """制作テーブルから行データを取得"""
+        try:
+            # 各セルのウィジェットを取得
+            item_widget = self.production_table.cellWidget(row, 0)
+            company_widget = self.production_table.cellWidget(row, 1)
+            amount_widget = self.production_table.cellWidget(row, 2)
+            impl_date_widget = self.production_table.cellWidget(row, 3)
+            payment_date_widget = self.production_table.cellWidget(row, 4)
+
+            if not item_widget or not company_widget or not amount_widget:
+                return None
+
+            # 既存のexpense_idを取得（更新の場合）
+            expense_id = None
+            id_item = self.production_table.item(row, 0)
+            if id_item and id_item.text():
+                try:
+                    expense_id = int(id_item.text())
+                except:
+                    pass
+
+            data = {
+                'id': expense_id,
+                'item_name': item_widget.text() if item_widget else '',
+                'partner_name': company_widget.currentText() if hasattr(company_widget, 'currentText') else '',
+                'amount': amount_widget.value() if amount_widget else 0,
+                'implementation_date': impl_date_widget.date().toString('yyyy-MM-dd') if impl_date_widget else None,
+                'expected_payment_date': payment_date_widget.date().toString('yyyy-MM-dd') if payment_date_widget else None,
+            }
+
+            return data
+
+        except Exception as e:
+            print(f"制作行データ取得エラー (row {row}): {e}")
+            return None
+
+    def _save_expense_item(self, data, work_type):
+        """費用項目を保存（新規または更新）"""
+        try:
+            expense_data = {
+                'production_id': self.current_production_id,
+                'work_type': work_type,
+                'amount': data.get('amount', 0),
+                'implementation_date': data.get('implementation_date'),
+                'expected_payment_date': data.get('expected_payment_date'),
+                'status': '発注予定',
+                'payment_status': '未払い',
+            }
+
+            # 出演者の場合
+            if work_type == '出演':
+                cast_name = data.get('cast_name', '').strip()
+                if not cast_name:
+                    return None
+
+                # 出演者を検索または作成
+                cast_id = self._get_or_create_cast(cast_name)
+                if not cast_id:
+                    print(f"出演者の取得/作成に失敗: {cast_name}")
+                    return None
+
+                expense_data['cast_id'] = cast_id
+                expense_data['item_name'] = f"{data.get('role', '')} {cast_name}".strip()
+
+                # パートナー（事務所）を取得
+                try:
+                    cast_info = self.db.get_cast_by_id(cast_id)
+                    if cast_info and cast_info[2]:  # partner_id
+                        expense_data['partner_id'] = cast_info[2]
+                except:
+                    pass
+
+            # 制作の場合
+            else:
+                partner_name = data.get('partner_name', '').strip()
+                item_name = data.get('item_name', '').strip()
+
+                if not partner_name or not item_name:
+                    return None
+
+                # 取引先を検索または作成
+                partner_id = self._get_or_create_partner(partner_name)
+                if not partner_id:
+                    print(f"取引先の取得/作成に失敗: {partner_name}")
+                    return None
+
+                expense_data['partner_id'] = partner_id
+                expense_data['item_name'] = item_name
+
+            # 既存のIDがある場合は更新、なければ新規作成
+            if data.get('id'):
+                expense_data['id'] = data['id']
+
+            # 保存
+            expense_id = self.db.save_expense_item(expense_data)
+            return expense_id
+
+        except Exception as e:
+            print(f"費用項目保存エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _get_or_create_cast(self, cast_name):
+        """出演者を検索、なければ作成"""
+        try:
+            # 既存の出演者を検索
+            all_cast = self.db.get_all_cast()
+            for cast in all_cast:
+                if cast[1] == cast_name:  # cast[1] is name
+                    return cast[0]  # cast[0] is id
+
+            # 見つからない場合は新規作成
+            cast_data = {
+                'name': cast_name,
+                'notes': '番組詳細画面から自動作成'
+            }
+            cast_id = self.db.add_cast(cast_data)
+            return cast_id
+
+        except Exception as e:
+            print(f"出演者取得/作成エラー: {e}")
+            return None
+
+    def _get_or_create_partner(self, partner_name):
+        """取引先を検索、なければ作成"""
+        try:
+            # 既存の取引先を検索
+            all_partners = self.db.get_all_partners()
+            for partner in all_partners:
+                if partner[1] == partner_name:  # partner[1] is name
+                    return partner[0]  # partner[0] is id
+
+            # 見つからない場合は新規作成
+            partner_data = {
+                'name': partner_name,
+                'notes': '番組詳細画面から自動作成'
+            }
+            partner_id = self.db.add_partner(partner_data)
+            return partner_id
+
+        except Exception as e:
+            print(f"取引先取得/作成エラー: {e}")
+            return None
