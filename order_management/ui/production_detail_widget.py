@@ -5,7 +5,7 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QListWidget, QListWidgetItem, QSplitter, QTextBrowser, QFrame,
-    QRadioButton, QButtonGroup
+    QRadioButton, QButtonGroup, QPushButton, QMessageBox
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -22,6 +22,7 @@ class ProductionDetailWidget(QWidget):
         # デフォルトを前月に設定
         previous_month = datetime.now() - timedelta(days=30)
         self.current_month = previous_month.strftime('%Y-%m')
+        self.current_production_id = None  # 現在選択されている番組ID
         self._setup_ui()
         self.load_productions_for_month()
 
@@ -141,11 +142,38 @@ class ProductionDetailWidget(QWidget):
         widget.setFrameShape(QFrame.StyledPanel)
         layout = QVBoxLayout(widget)
 
-        # タイトル
+        # タイトルと編集ボタンのレイアウト
+        title_layout = QHBoxLayout()
+
         self.detail_title_label = QLabel("番組を選択してください")
         self.detail_title_label.setFont(QFont("", 16, QFont.Bold))
         self.detail_title_label.setStyleSheet("padding: 10px; background-color: #f0f0f0;")
-        layout.addWidget(self.detail_title_label)
+        title_layout.addWidget(self.detail_title_label)
+
+        # 編集ボタン
+        self.edit_button = QPushButton("編集")
+        self.edit_button.setFixedWidth(80)
+        self.edit_button.setFixedHeight(35)
+        self.edit_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        self.edit_button.setEnabled(False)
+        self.edit_button.clicked.connect(self._on_edit_clicked)
+        title_layout.addWidget(self.edit_button)
+
+        layout.addLayout(title_layout)
 
         # 詳細内容（HTML表示）
         self.detail_browser = QTextBrowser()
@@ -246,10 +274,17 @@ class ProductionDetailWidget(QWidget):
     def display_production_detail(self, production_id):
         """番組詳細を表示"""
         try:
+            # 現在選択されている番組IDを保存
+            self.current_production_id = production_id
+
+            # 編集ボタンを有効化
+            self.edit_button.setEnabled(True)
+
             # 番組基本情報を取得
             production = self.db.get_production_by_id(production_id)
             if not production:
                 self.detail_browser.setHtml("<p>番組情報が見つかりません</p>")
+                self.edit_button.setEnabled(False)
                 return
 
             # タイトルを更新
@@ -280,26 +315,25 @@ class ProductionDetailWidget(QWidget):
             <style>
                 body {
                     font-family: "メイリオ", "Meiryo", sans-serif;
-                    font-size: 14px;
-                    line-height: 1.8;
+                    font-size: 13px;
+                    line-height: 1.3;
                 }
                 .info-row {
-                    margin: 8px 0;
+                    margin: 3px 0;
                 }
                 .label {
                     font-weight: bold;
-                    margin-right: 10px;
-                    display: inline-block;
-                    min-width: 60px;
+                    margin-right: 8px;
                 }
                 .section-title {
                     font-weight: bold;
-                    margin-top: 20px;
-                    margin-bottom: 8px;
+                    margin-top: 12px;
+                    margin-bottom: 4px;
+                    font-size: 14px;
                 }
                 .item {
-                    margin-left: 80px;
-                    margin-top: 3px;
+                    margin-left: 20px;
+                    margin-top: 1px;
                 }
             </style>
         </head>
@@ -372,37 +406,38 @@ class ProductionDetailWidget(QWidget):
             <style>
                 body {
                     font-family: "メイリオ", "Meiryo", sans-serif;
-                    font-size: 14px;
-                    line-height: 1.8;
+                    font-size: 13px;
+                    line-height: 1.3;
                 }
                 .info-row {
-                    margin: 8px 0;
+                    margin: 3px 0;
                 }
                 .label {
                     font-weight: bold;
-                    margin-right: 10px;
+                    margin-right: 8px;
                     display: inline-block;
-                    min-width: 80px;
+                    min-width: 70px;
                 }
                 .section-title {
                     font-weight: bold;
-                    margin-top: 20px;
-                    margin-bottom: 8px;
+                    margin-top: 12px;
+                    margin-bottom: 4px;
+                    font-size: 14px;
                 }
                 .item {
-                    margin-left: 80px;
-                    margin-top: 3px;
+                    margin-left: 20px;
+                    margin-top: 1px;
                 }
                 .corner-section {
                     border: 1px solid #ccc;
-                    padding: 15px;
-                    margin-top: 20px;
+                    padding: 10px;
+                    margin-top: 15px;
                     background-color: #f9f9f9;
                 }
                 .corner-title {
                     font-weight: bold;
-                    font-size: 15px;
-                    margin-bottom: 10px;
+                    font-size: 14px;
+                    margin-bottom: 6px;
                 }
             </style>
         </head>
@@ -569,3 +604,24 @@ class ProductionDetailWidget(QWidget):
         """
 
         return html
+    def _on_edit_clicked(self):
+        """編集ボタンがクリックされたときの処理"""
+        if not self.current_production_id:
+            return
+
+        try:
+            # 番組編集ダイアログを開く
+            from order_management.ui.production_edit_dialog import ProductionEditDialog
+
+            dialog = ProductionEditDialog(self, production_id=self.current_production_id)
+            if dialog.exec_():
+                # 編集が完了したら詳細を再表示
+                self.display_production_detail(self.current_production_id)
+                # 一覧も再読み込み
+                self.load_productions_for_month()
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"編集ダイアログを開けませんでした: {e}")
+            print(f"編集ダイアログエラー: {e}")
+            import traceback
+            traceback.print_exc()
