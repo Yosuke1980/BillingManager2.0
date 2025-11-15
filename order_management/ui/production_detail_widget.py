@@ -5,9 +5,12 @@
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QListWidget, QListWidgetItem, QSplitter, QTextBrowser, QFrame,
-    QRadioButton, QButtonGroup, QPushButton, QMessageBox
+    QRadioButton, QButtonGroup, QPushButton, QMessageBox,
+    QLineEdit, QTextEdit, QDateEdit, QTimeEdit, QSpinBox,
+    QTableWidget, QTableWidgetItem, QHeaderView, QCheckBox,
+    QScrollArea, QGroupBox, QFormLayout
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QDate, QTime
 from PyQt5.QtGui import QFont
 from datetime import datetime, timedelta
 from order_management.database_manager import OrderManagementDB
@@ -23,6 +26,8 @@ class ProductionDetailWidget(QWidget):
         previous_month = datetime.now() - timedelta(days=30)
         self.current_month = previous_month.strftime('%Y-%m')
         self.current_production_id = None  # 現在選択されている番組ID
+        self.is_edit_mode = False  # 編集モードフラグ
+        self.current_production_data = None  # 現在の番組データ
         self._setup_ui()
         self.load_productions_for_month()
 
@@ -142,7 +147,7 @@ class ProductionDetailWidget(QWidget):
         widget.setFrameShape(QFrame.StyledPanel)
         layout = QVBoxLayout(widget)
 
-        # タイトルと編集ボタンのレイアウト
+        # タイトル・モード切替・編集ボタンのレイアウト
         title_layout = QHBoxLayout()
 
         self.detail_title_label = QLabel("番組を選択してください")
@@ -150,20 +155,29 @@ class ProductionDetailWidget(QWidget):
         self.detail_title_label.setStyleSheet("padding: 10px; background-color: #f0f0f0;")
         title_layout.addWidget(self.detail_title_label)
 
-        # 編集ボタン
-        self.edit_button = QPushButton("編集")
-        self.edit_button.setFixedWidth(80)
+        # モード切替コンボボックス
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("表示モード")
+        self.mode_combo.addItem("編集モード")
+        self.mode_combo.setFixedWidth(120)
+        self.mode_combo.setEnabled(False)
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        title_layout.addWidget(self.mode_combo)
+
+        # 編集ボタン（別ダイアログで開く用 - 将来削除予定）
+        self.edit_button = QPushButton("別ウィンドウで編集")
+        self.edit_button.setFixedWidth(140)
         self.edit_button.setFixedHeight(35)
         self.edit_button.setStyleSheet("""
             QPushButton {
-                background-color: #4CAF50;
+                background-color: #2196F3;
                 color: white;
                 border: none;
                 border-radius: 3px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #45a049;
+                background-color: #0b7dda;
             }
             QPushButton:disabled {
                 background-color: #cccccc;
@@ -175,7 +189,11 @@ class ProductionDetailWidget(QWidget):
 
         layout.addLayout(title_layout)
 
-        # 詳細内容（HTML表示）
+        # 表示モードエリア（HTML表示）
+        self.display_area = QWidget()
+        display_layout = QVBoxLayout(self.display_area)
+        display_layout.setContentsMargins(0, 0, 0, 0)
+
         self.detail_browser = QTextBrowser()
         self.detail_browser.setStyleSheet("""
             QTextBrowser {
@@ -186,7 +204,16 @@ class ProductionDetailWidget(QWidget):
             }
         """)
         self.detail_browser.setOpenExternalLinks(False)
-        layout.addWidget(self.detail_browser)
+        display_layout.addWidget(self.detail_browser)
+
+        # 編集モードエリア（フォーム）
+        self.edit_area = QWidget()
+        self.edit_area.setVisible(False)  # 初期は非表示
+        self._create_edit_form()
+
+        # 両エリアを追加
+        layout.addWidget(self.display_area)
+        layout.addWidget(self.edit_area)
 
         return widget
 
@@ -277,15 +304,23 @@ class ProductionDetailWidget(QWidget):
             # 現在選択されている番組IDを保存
             self.current_production_id = production_id
 
-            # 編集ボタンを有効化
-            self.edit_button.setEnabled(True)
-
             # 番組基本情報を取得
             production = self.db.get_production_by_id(production_id)
             if not production:
                 self.detail_browser.setHtml("<p>番組情報が見つかりません</p>")
                 self.edit_button.setEnabled(False)
+                self.mode_combo.setEnabled(False)
                 return
+
+            # 現在の番組データを保存
+            self.current_production_data = production
+
+            # 編集ボタンとモード切替を有効化
+            self.edit_button.setEnabled(True)
+            self.mode_combo.setEnabled(True)
+
+            # 表示モードに戻す
+            self.mode_combo.setCurrentIndex(0)
 
             # タイトルを更新
             self.detail_title_label.setText(production['name'])
@@ -629,5 +664,443 @@ class ProductionDetailWidget(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "エラー", f"編集ダイアログを開けませんでした: {e}")
             print(f"編集ダイアログエラー: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _create_edit_form(self):
+        """編集フォームを作成"""
+        layout = QVBoxLayout(self.edit_area)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # スクロールエリア
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: 1px solid #ccc; background-color: white; }")
+
+        # フォームコンテナ
+        form_container = QWidget()
+        form_layout = QVBoxLayout(form_container)
+        form_layout.setSpacing(15)
+
+        # 基本情報グループ
+        self.basic_group = QGroupBox("基本情報")
+        basic_layout = QFormLayout()
+        basic_layout.setSpacing(8)
+
+        # 番組名
+        self.name_edit = QLineEdit()
+        basic_layout.addRow("番組名:", self.name_edit)
+
+        # 日付（単発用）
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("yyyy-MM-dd")
+        basic_layout.addRow("日付:", self.date_edit)
+
+        # 開始日（レギュラー用）
+        self.start_date_edit = QDateEdit()
+        self.start_date_edit.setCalendarPopup(True)
+        self.start_date_edit.setDisplayFormat("yyyy-MM-dd")
+        basic_layout.addRow("放送開始日:", self.start_date_edit)
+
+        # 終了日（レギュラー用）
+        self.end_date_edit = QDateEdit()
+        self.end_date_edit.setCalendarPopup(True)
+        self.end_date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.end_date_edit.setSpecialValueText("未設定")
+        basic_layout.addRow("放送終了日:", self.end_date_edit)
+
+        # 開始時間
+        self.start_time_edit = QTimeEdit()
+        self.start_time_edit.setDisplayFormat("HH:mm")
+        basic_layout.addRow("開始時間:", self.start_time_edit)
+
+        # 終了時間
+        self.end_time_edit = QTimeEdit()
+        self.end_time_edit.setDisplayFormat("HH:mm")
+        basic_layout.addRow("終了時間:", self.end_time_edit)
+
+        # 放送曜日（レギュラー用）
+        days_layout = QHBoxLayout()
+        self.day_checkboxes = {}
+        for day in ['月', '火', '水', '木', '金', '土', '日']:
+            cb = QCheckBox(day)
+            self.day_checkboxes[day] = cb
+            days_layout.addWidget(cb)
+        days_layout.addStretch()
+        basic_layout.addRow("放送曜日:", days_layout)
+
+        # 説明
+        self.description_edit = QTextEdit()
+        self.description_edit.setMaximumHeight(60)
+        basic_layout.addRow("説明:", self.description_edit)
+
+        # ステータス
+        self.status_combo = QComboBox()
+        self.status_combo.addItems(['active', '終了', '休止'])
+        basic_layout.addRow("ステータス:", self.status_combo)
+
+        self.basic_group.setLayout(basic_layout)
+        form_layout.addWidget(self.basic_group)
+
+        # 出演者グループ
+        self.cast_group = QGroupBox("出演者")
+        cast_layout = QVBoxLayout()
+
+        self.cast_table = QTableWidget()
+        self.cast_table.setColumnCount(6)
+        self.cast_table.setHorizontalHeaderLabels(['役割', '出演者名', '金額', '実施日', '支払予定日', '削除'])
+        self.cast_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.cast_table.setMaximumHeight(200)
+        cast_layout.addWidget(self.cast_table)
+
+        add_cast_btn = QPushButton("+ 出演者を追加")
+        add_cast_btn.clicked.connect(self._add_cast_row)
+        cast_layout.addWidget(add_cast_btn)
+
+        self.cast_group.setLayout(cast_layout)
+        form_layout.addWidget(self.cast_group)
+
+        # 制作グループ
+        self.production_group = QGroupBox("制作")
+        production_layout = QVBoxLayout()
+
+        self.production_table = QTableWidget()
+        self.production_table.setColumnCount(6)
+        self.production_table.setHorizontalHeaderLabels(['項目名', '制作会社', '金額', '実施日', '支払予定日', '削除'])
+        self.production_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.production_table.setMaximumHeight(200)
+        production_layout.addWidget(self.production_table)
+
+        add_production_btn = QPushButton("+ 制作項目を追加")
+        add_production_btn.clicked.connect(self._add_production_row)
+        production_layout.addWidget(add_production_btn)
+
+        self.production_group.setLayout(production_layout)
+        form_layout.addWidget(self.production_group)
+
+        # 保存・キャンセルボタン
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        cancel_btn = QPushButton("キャンセル")
+        cancel_btn.setFixedWidth(100)
+        cancel_btn.clicked.connect(self._cancel_edit)
+        button_layout.addWidget(cancel_btn)
+
+        save_btn = QPushButton("保存")
+        save_btn.setFixedWidth(100)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                font-weight: bold;
+                padding: 8px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        save_btn.clicked.connect(self._save_changes)
+        button_layout.addWidget(save_btn)
+
+        form_layout.addLayout(button_layout)
+        form_layout.addStretch()
+
+        scroll.setWidget(form_container)
+        layout.addWidget(scroll)
+
+    def _on_mode_changed(self, index):
+        """モード切替時の処理"""
+        if index == 0:  # 表示モード
+            self.is_edit_mode = False
+            self.display_area.setVisible(True)
+            self.edit_area.setVisible(False)
+        else:  # 編集モード
+            if not self.current_production_id:
+                self.mode_combo.setCurrentIndex(0)
+                return
+
+            self.is_edit_mode = True
+            self._load_edit_form()
+            self.display_area.setVisible(False)
+            self.edit_area.setVisible(True)
+
+
+    def _load_edit_form(self):
+        """編集フォームにデータを読み込む"""
+        if not self.current_production_data:
+            return
+
+        production = self.current_production_data
+        is_regular = self.regular_radio.isChecked()
+
+        # 基本情報
+        self.name_edit.setText(production.get('name', ''))
+        self.description_edit.setPlainText(production.get('description', ''))
+        self.status_combo.setCurrentText(production.get('status', 'active'))
+
+        # 日付・時間の処理
+        if production.get('start_date'):
+            try:
+                date = QDate.fromString(production['start_date'], 'yyyy-MM-dd')
+                if is_regular:
+                    self.start_date_edit.setDate(date)
+                    self.start_date_edit.setVisible(True)
+                    self.date_edit.setVisible(False)
+                else:
+                    self.date_edit.setDate(date)
+                    self.date_edit.setVisible(True)
+                    self.start_date_edit.setVisible(False)
+            except:
+                pass
+
+        if production.get('end_date') and is_regular:
+            try:
+                date = QDate.fromString(production['end_date'], 'yyyy-MM-dd')
+                self.end_date_edit.setDate(date)
+                self.end_date_edit.setVisible(True)
+            except:
+                self.end_date_edit.setVisible(False)
+        else:
+            self.end_date_edit.setVisible(is_regular)
+
+        # 時間
+        if production.get('start_time'):
+            try:
+                time = QTime.fromString(production['start_time'], 'HH:mm:ss')
+                self.start_time_edit.setTime(time)
+            except:
+                pass
+
+        if production.get('end_time'):
+            try:
+                time = QTime.fromString(production['end_time'], 'HH:mm:ss')
+                self.end_time_edit.setTime(time)
+            except:
+                pass
+
+        # 放送曜日（レギュラーのみ）
+        if is_regular and production.get('broadcast_days'):
+            days_str = production['broadcast_days']
+            for day, cb in self.day_checkboxes.items():
+                cb.setChecked(day in days_str)
+                cb.setVisible(True)
+        else:
+            for cb in self.day_checkboxes.values():
+                cb.setVisible(is_regular)
+
+        # 費用項目を取得
+        expenses = self.db.get_expenses_by_production(self.current_production_id)
+
+        # 出演者テーブルをクリアして読み込み
+        self.cast_table.setRowCount(0)
+        cast_expenses = [e for e in expenses if '出演' in (e.get('work_type', '') or '')] if expenses else []
+
+        for expense in cast_expenses:
+            self._add_cast_row(expense)
+
+        # 制作テーブルをクリアして読み込み
+        self.production_table.setRowCount(0)
+        production_expenses = [e for e in expenses if '出演' not in (e.get('work_type', '') or '')] if expenses else []
+
+        for expense in production_expenses:
+            self._add_production_row(expense)
+
+    def _add_cast_row(self, data=None):
+        """出演者行を追加"""
+        row = self.cast_table.rowCount()
+        self.cast_table.insertRow(row)
+
+        # 役割
+        role_edit = QLineEdit(data.get('role', 'MC') if data else 'MC')
+        self.cast_table.setCellWidget(row, 0, role_edit)
+
+        # 出演者名
+        name_edit = QComboBox()
+        name_edit.setEditable(True)
+        # 既存の出演者を取得して追加
+        try:
+            cast_list = self.db.get_all_cast()
+            for cast in cast_list:
+                name_edit.addItem(cast[1])  # cast[1] is name
+        except:
+            pass
+        if data:
+            name_edit.setCurrentText(data.get('cast_name', '') or data.get('partner_name', ''))
+        self.cast_table.setCellWidget(row, 1, name_edit)
+
+        # 金額
+        amount_spin = QSpinBox()
+        amount_spin.setMaximum(10000000)
+        amount_spin.setSingleStep(1000)
+        amount_spin.setValue(int(data.get('amount', 0)) if data else 0)
+        self.cast_table.setCellWidget(row, 2, amount_spin)
+
+        # 実施日
+        impl_date = QDateEdit()
+        impl_date.setCalendarPopup(True)
+        impl_date.setDisplayFormat("yyyy-MM-dd")
+        if data and data.get('implementation_date'):
+            try:
+                date = QDate.fromString(data['implementation_date'], 'yyyy-MM-dd')
+                impl_date.setDate(date)
+            except:
+                impl_date.setDate(QDate.currentDate())
+        else:
+            impl_date.setDate(QDate.currentDate())
+        self.cast_table.setCellWidget(row, 3, impl_date)
+
+        # 支払予定日
+        payment_date = QDateEdit()
+        payment_date.setCalendarPopup(True)
+        payment_date.setDisplayFormat("yyyy-MM-dd")
+        if data and data.get('expected_payment_date'):
+            try:
+                date = QDate.fromString(data['expected_payment_date'], 'yyyy-MM-dd')
+                payment_date.setDate(date)
+            except:
+                payment_date.setDate(QDate.currentDate())
+        else:
+            payment_date.setDate(QDate.currentDate())
+        self.cast_table.setCellWidget(row, 4, payment_date)
+
+        # 削除ボタン
+        delete_btn = QPushButton("×")
+        delete_btn.setFixedWidth(30)
+        delete_btn.clicked.connect(lambda: self.cast_table.removeRow(row))
+        self.cast_table.setCellWidget(row, 5, delete_btn)
+
+        # expense_id を保存（更新用）
+        if data and data.get('id'):
+            self.cast_table.setItem(row, 0, QTableWidgetItem(str(data['id'])))
+
+    def _add_production_row(self, data=None):
+        """制作項目行を追加"""
+        row = self.production_table.rowCount()
+        self.production_table.insertRow(row)
+
+        # 項目名
+        item_edit = QLineEdit(data.get('item_name', '') if data else '')
+        self.production_table.setCellWidget(row, 0, item_edit)
+
+        # 制作会社名
+        company_edit = QComboBox()
+        company_edit.setEditable(True)
+        # 既存の取引先を取得して追加
+        try:
+            partners = self.db.get_all_partners()
+            for partner in partners:
+                company_edit.addItem(partner[1])  # partner[1] is name
+        except:
+            pass
+        if data:
+            company_edit.setCurrentText(data.get('partner_name', ''))
+        self.production_table.setCellWidget(row, 1, company_edit)
+
+        # 金額
+        amount_spin = QSpinBox()
+        amount_spin.setMaximum(10000000)
+        amount_spin.setSingleStep(1000)
+        amount_spin.setValue(int(data.get('amount', 0)) if data else 0)
+        self.production_table.setCellWidget(row, 2, amount_spin)
+
+        # 実施日
+        impl_date = QDateEdit()
+        impl_date.setCalendarPopup(True)
+        impl_date.setDisplayFormat("yyyy-MM-dd")
+        if data and data.get('implementation_date'):
+            try:
+                date = QDate.fromString(data['implementation_date'], 'yyyy-MM-dd')
+                impl_date.setDate(date)
+            except:
+                impl_date.setDate(QDate.currentDate())
+        else:
+            impl_date.setDate(QDate.currentDate())
+        self.production_table.setCellWidget(row, 3, impl_date)
+
+        # 支払予定日
+        payment_date = QDateEdit()
+        payment_date.setCalendarPopup(True)
+        payment_date.setDisplayFormat("yyyy-MM-dd")
+        if data and data.get('expected_payment_date'):
+            try:
+                date = QDate.fromString(data['expected_payment_date'], 'yyyy-MM-dd')
+                payment_date.setDate(date)
+            except:
+                payment_date.setDate(QDate.currentDate())
+        else:
+            payment_date.setDate(QDate.currentDate())
+        self.production_table.setCellWidget(row, 4, payment_date)
+
+        # 削除ボタン
+        delete_btn = QPushButton("×")
+        delete_btn.setFixedWidth(30)
+        delete_btn.clicked.connect(lambda: self.production_table.removeRow(row))
+        self.production_table.setCellWidget(row, 5, delete_btn)
+
+        # expense_id を保存（更新用）
+        if data and data.get('id'):
+            self.production_table.setItem(row, 0, QTableWidgetItem(str(data['id'])))
+
+    def _cancel_edit(self):
+        """編集をキャンセル"""
+        self.mode_combo.setCurrentIndex(0)  # 表示モードに戻る
+
+    def _save_changes(self):
+        """変更を保存"""
+        try:
+            # バリデーション
+            if not self.name_edit.text().strip():
+                QMessageBox.warning(self, "入力エラー", "番組名を入力してください")
+                return
+
+            # 番組情報を更新
+            is_regular = self.regular_radio.isChecked()
+            
+            production_data = {
+                'name': self.name_edit.text().strip(),
+                'description': self.description_edit.toPlainText().strip(),
+                'status': self.status_combo.currentText(),
+            }
+
+            if is_regular:
+                production_data['start_date'] = self.start_date_edit.date().toString('yyyy-MM-dd')
+                if self.end_date_edit.date().isValid():
+                    production_data['end_date'] = self.end_date_edit.date().toString('yyyy-MM-dd')
+                
+                # 放送曜日
+                checked_days = [day for day, cb in self.day_checkboxes.items() if cb.isChecked()]
+                production_data['broadcast_days'] = ','.join(checked_days)
+            else:
+                production_data['start_date'] = self.date_edit.date().toString('yyyy-MM-dd')
+
+            # 時間
+            production_data['start_time'] = self.start_time_edit.time().toString('HH:mm:ss')
+            production_data['end_time'] = self.end_time_edit.time().toString('HH:mm:ss')
+
+            # 番組情報を更新
+            self.db.update_production(self.current_production_id, production_data)
+
+            # 費用項目を更新
+            # TODO: 出演者と制作項目の保存処理を実装
+            # 現時点では基本情報のみ保存
+
+            QMessageBox.information(self, "保存完了", "変更を保存しました")
+
+            # 表示モードに戻る
+            self.mode_combo.setCurrentIndex(0)
+
+            # 詳細を再表示
+            self.display_production_detail(self.current_production_id)
+
+            # 一覧を再読み込み
+            self.load_productions_for_month()
+
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"保存中にエラーが発生しました: {e}")
+            print(f"保存エラー: {e}")
             import traceback
             traceback.print_exc()
