@@ -273,49 +273,38 @@ class ProductionDetailWidget(QWidget):
             self.detail_browser.setHtml(f"<p>エラーが発生しました: {e}</p>")
 
     def _generate_detail_html(self, production, production_id):
-        """番組詳細のHTMLを生成"""
+        """単発番組詳細のHTMLを生成（新デザイン対応）"""
         html = """
         <html>
         <head>
             <style>
-                body { font-family: "メイリオ", "Meiryo", sans-serif; }
-                .section {
-                    border: 2px solid #333;
-                    padding: 15px;
-                    margin-bottom: 20px;
-                    background-color: #fafafa;
-                }
-                .section-title {
-                    font-size: 16px;
-                    font-weight: bold;
-                    margin-bottom: 10px;
-                    color: #333;
+                body {
+                    font-family: "メイリオ", "Meiryo", sans-serif;
+                    font-size: 14px;
+                    line-height: 1.8;
                 }
                 .info-row {
-                    margin: 5px 0;
-                    padding-left: 10px;
+                    margin: 8px 0;
                 }
                 .label {
                     font-weight: bold;
                     margin-right: 10px;
+                    display: inline-block;
+                    min-width: 60px;
                 }
-                .category {
+                .section-title {
                     font-weight: bold;
-                    color: #555;
-                    margin-top: 8px;
+                    margin-top: 20px;
+                    margin-bottom: 8px;
                 }
                 .item {
-                    margin-left: 20px;
+                    margin-left: 80px;
                     margin-top: 3px;
                 }
             </style>
         </head>
         <body>
         """
-
-        # 【情報】セクション
-        html += '<div class="section">'
-        html += '<div class="section-title">情報</div>'
 
         # 日時
         if production.get('start_date'):
@@ -325,83 +314,48 @@ class ProductionDetailWidget(QWidget):
                 weekday = ['月', '火', '水', '木', '金', '土', '日'][date_obj.weekday()]
 
                 time_str = ""
-                # 有効な時間データがあるかチェック（"00:00:00"や空文字列は除外）
                 start_time = production.get('start_time', '')
                 end_time = production.get('end_time', '')
                 broadcast_time = production.get('broadcast_time', '')
 
-                # "00:00:00"は無効な時間として扱う
                 if start_time and start_time != "00:00:00" and end_time and end_time != "00:00:00":
-                    time_str = f" {start_time}～{end_time}"
+                    time_str = f"{start_time}～{end_time}"
                 elif broadcast_time and broadcast_time != "00:00:00":
-                    time_str = f" {broadcast_time}"
+                    time_str = f"{broadcast_time}"
 
                 html += f'<div class="info-row"><span class="label">日時</span>{date_str}（{weekday}）{time_str}</div>'
             except:
                 pass
 
-        # 場所
-        if production.get('location'):
-            html += f'<div class="info-row"><span class="label">場所</span>{production["location"]}</div>'
+        # 説明
+        if production.get('description'):
+            html += f'<div class="info-row"><span class="label">説明</span>{production["description"]}</div>'
 
-        # 出演者
-        casts = self.db.get_production_casts(production_id)
-        if casts:
-            html += '<div class="info-row"><span class="label">出演者</span></div>'
-            for cast in casts:
-                cast_name, role = cast[0], cast[1]
-                role_str = f"{role} " if role else ""
-                html += f'<div class="item">{role_str}{cast_name}</div>'
-
-        # 制作関連（費用項目から取得）- 名前のみ表示（金額は費用セクションで表示）
+        # 出演者セクション（役割 名前 金額の形式）
         expenses = self.db.get_expenses_by_production(production_id)
-        if expenses:
-            # 制作関連をグループ化（出演料以外）
-            production_expenses = [e for e in expenses if '出演' not in (e.get('work_type', '') or '')]
+        cast_expenses = [e for e in expenses if '出演' in (e.get('work_type', '') or '')] if expenses else []
 
-            if production_expenses:
-                # 制作会社を重複なく取得（同じ取引先が複数の費用項目を持つ場合があるため）
-                production_companies = {}
-                for expense in production_expenses:
-                    partner_name = expense.get('partner_name', '')
-                    work_type = expense.get('work_type', '')
-                    if partner_name and partner_name not in production_companies:
-                        production_companies[partner_name] = work_type
+        if cast_expenses:
+            html += '<div class="section-title">出演者</div>'
+            for expense in cast_expenses:
+                # cast_nameがあればそれを使用、なければpartner_nameまたはitem_nameから抽出
+                cast_name = expense.get('cast_name', '') or expense.get('partner_name', '')
+                role = expense.get('role', '') or 'MC'  # デフォルトはMC
+                amount = expense.get('amount', 0)
+                amount_str = f"{int(amount):,}円" if amount else "未定"
+                html += f'<div class="item">{role}　{cast_name}　{amount_str}</div>'
 
-                if production_companies:
-                    html += '<div class="info-row"><span class="label">制作</span></div>'
-                    for partner_name, work_type in production_companies.items():
-                        html += f'<div class="item">{work_type}　{partner_name}</div>'
+        # 制作セクション（項目名 会社名 金額の形式）
+        production_expenses = [e for e in expenses if '出演' not in (e.get('work_type', '') or '')] if expenses else []
 
-        html += '</div>'
-
-        # 【費用】セクション
-        if expenses:
-            html += '<div class="section">'
-            html += '<div class="section-title">費用</div>'
-
-            # 出演料
-            cast_expenses = [e for e in expenses if '出演' in (e.get('work_type', '') or '')]
-            if cast_expenses:
-                html += '<div class="category">出演料</div>'
-                for expense in cast_expenses:
-                    item_name = expense.get('item_name', '')
-                    work_type = expense.get('work_type', '')
-                    amount = expense.get('amount', 0)
-                    amount_str = f"{int(amount):,}円" if amount else "未定"
-                    html += f'<div class="item">{item_name}　{work_type}　{amount_str}</div>'
-
-            # 制作費
-            if production_expenses:
-                html += '<div class="category">制作費</div>'
-                for expense in production_expenses:
-                    partner_name = expense.get('partner_name', '')
-                    work_type = expense.get('work_type', '')
-                    amount = expense.get('amount', 0)
-                    amount_str = f"{int(amount):,}円" if amount else "未定"
-                    html += f'<div class="item">{partner_name}　{work_type}　{amount_str}</div>'
-
-            html += '</div>'
+        if production_expenses:
+            html += '<div class="section-title">制作</div>'
+            for expense in production_expenses:
+                item_name = expense.get('item_name', '')
+                partner_name = expense.get('partner_name', '')
+                amount = expense.get('amount', 0)
+                amount_str = f"{int(amount):,}円" if amount else "未定"
+                html += f'<div class="item">{item_name}　{partner_name}　{amount_str}</div>'
 
         html += """
         </body>
@@ -411,307 +365,203 @@ class ProductionDetailWidget(QWidget):
         return html
 
     def _generate_regular_detail_html(self, production, production_id):
-        """レギュラー番組詳細のHTMLを生成"""
+        """レギュラー番組詳細のHTMLを生成（新デザイン対応）"""
         html = """
         <html>
         <head>
             <style>
-                body { font-family: "メイリオ", "Meiryo", sans-serif; }
-                .section {
-                    border: 2px solid #333;
-                    padding: 15px;
-                    margin-bottom: 25px;
-                    background-color: #fafafa;
-                }
-                .section-title {
-                    font-size: 16px;
-                    font-weight: bold;
-                    margin-bottom: 10px;
-                    color: #333;
+                body {
+                    font-family: "メイリオ", "Meiryo", sans-serif;
+                    font-size: 14px;
+                    line-height: 1.8;
                 }
                 .info-row {
-                    margin: 5px 0;
-                    padding-left: 10px;
+                    margin: 8px 0;
                 }
                 .label {
                     font-weight: bold;
                     margin-right: 10px;
+                    display: inline-block;
+                    min-width: 80px;
                 }
-                .category {
+                .section-title {
                     font-weight: bold;
-                    color: #555;
-                    margin-top: 15px;
-                    margin-bottom: 5px;
-                }
-                .category:first-of-type {
-                    margin-top: 5px;
+                    margin-top: 20px;
+                    margin-bottom: 8px;
                 }
                 .item {
-                    margin-left: 20px;
+                    margin-left: 80px;
                     margin-top: 3px;
                 }
-                .total {
-                    font-weight: bold;
-                    font-size: 14px;
-                    margin-top: 15px;
-                    padding: 8px;
-                    background-color: #e8f5e9;
-                }
-                .corner-block {
+                .corner-section {
+                    border: 1px solid #ccc;
+                    padding: 15px;
                     margin-top: 20px;
-                    padding-top: 10px;
-                    border-top: 1px solid #ddd;
+                    background-color: #f9f9f9;
+                }
+                .corner-title {
+                    font-weight: bold;
+                    font-size: 15px;
+                    margin-bottom: 10px;
                 }
             </style>
         </head>
         <body>
         """
 
-        # 【情報】セクション
-        html += '<div class="section">'
-        html += '<div class="section-title">基本情報</div>'
-
-        # 放送開始日
+        # 放送期間
+        period_str = ""
         if production.get('start_date'):
             try:
                 date_obj = datetime.strptime(production['start_date'], '%Y-%m-%d')
-                date_str = date_obj.strftime('%Y年%m月%d日')
-                html += f'<div class="info-row"><span class="label">放送開始日</span>{date_str}</div>'
+                date_str = date_obj.strftime('%m月%d日')
+                weekday = ['月', '火', '水', '木', '金', '土', '日'][date_obj.weekday()]
+                period_str = f"{date_str}（{weekday}）〜"
             except:
-                html += f'<div class="info-row"><span class="label">放送開始日</span>{production["start_date"]}</div>'
+                period_str = f"{production['start_date']}〜"
 
-        # 放送終了日
-        if production.get('end_date'):
-            try:
-                date_obj = datetime.strptime(production['end_date'], '%Y-%m-%d')
-                date_str = date_obj.strftime('%Y年%m月%d日')
-                html += f'<div class="info-row"><span class="label">放送終了日</span>{date_str}</div>'
-            except:
-                html += f'<div class="info-row"><span class="label">放送終了日</span>{production["end_date"]}</div>'
+        # 放送中かどうか
+        status = production.get('status', '')
+        if status == 'active' or not production.get('end_date'):
+            period_str += "　放送中"
+        elif production.get('end_date'):
+            period_str += f"　{production['end_date']}"
 
-        # 放送時間
+        if period_str:
+            html += f'<div class="info-row"><span class="label">放送期間</span>{period_str}</div>'
+
+        # 放送時間（曜日別に表示）
+        broadcast_days = production.get('broadcast_days', '') or production.get('broadcast_day', '')
         start_time = production.get('start_time', '')
         end_time = production.get('end_time', '')
         broadcast_time = production.get('broadcast_time', '')
 
-        if start_time and start_time != "00:00:00" and end_time and end_time != "00:00:00":
-            time_str = f"{start_time}～{end_time}"
-            html += f'<div class="info-row"><span class="label">放送時間</span>{time_str}</div>'
-        elif broadcast_time and broadcast_time != "00:00:00":
-            html += f'<div class="info-row"><span class="label">放送時間</span>{broadcast_time}</div>'
+        if broadcast_days:
+            html += f'<div class="info-row"><span class="label">放送時間</span></div>'
 
-        # 放送曜日
-        if production.get('broadcast_day'):
-            html += f'<div class="info-row"><span class="label">放送曜日</span>{production["broadcast_day"]}</div>'
+            # 曜日ごとに分けて表示
+            days_list = broadcast_days.split(',') if ',' in broadcast_days else [broadcast_days]
 
-        # ステータス
-        if production.get('status'):
-            html += f'<div class="info-row"><span class="label">ステータス</span>{production["status"]}</div>'
+            for day in days_list:
+                day = day.strip()
+                time_str = ""
+                if start_time and start_time != "00:00:00" and end_time and end_time != "00:00:00":
+                    time_str = f"{start_time}~{end_time}"
+                elif broadcast_time and broadcast_time != "00:00:00":
+                    time_str = broadcast_time
 
-        html += '</div>'
+                html += f'<div class="item">{day}　{time_str}</div>'
 
-        # 【レギュラー出演者・制作会社】セクション
-        # 全期間の費用項目から取得（月に関係なく）
+        # 説明
+        if production.get('description'):
+            html += f'<div class="info-row"><span class="label">説明</span>{production["description"]}</div>'
+
+        # 出演者セクション（名前 金額の形式）
         all_expenses = self.db.get_expenses_by_production(production_id)
-        if all_expenses:
-            html += '<div class="section">'
-            html += '<div class="section-title">レギュラー出演者・制作会社</div>'
+        cast_expenses = [e for e in all_expenses if '出演' in (e.get('work_type', '') or '')] if all_expenses else []
 
-            # 出演者
-            cast_expenses = [e for e in all_expenses if '出演' in (e.get('work_type', '') or '')]
-            if cast_expenses:
-                html += '<div class="category">レギュラー出演者</div>'
-                # 重複を除外
-                cast_names = {}
-                for expense in cast_expenses:
-                    # 出演者名（cast_name）があればそれを使用、なければpartner_name
-                    cast_name = expense.get('cast_name', '') or expense.get('partner_name', '')
-                    work_type = expense.get('work_type', '')
-                    if cast_name and cast_name not in cast_names:
-                        cast_names[cast_name] = work_type
+        if cast_expenses:
+            html += '<div class="section-title">出演者</div>'
+            # 重複を除外して出演者と金額を表示
+            cast_dict = {}
+            for expense in cast_expenses:
+                cast_name = expense.get('cast_name', '') or expense.get('partner_name', '')
+                amount = expense.get('amount', 0)
+                if cast_name and cast_name not in cast_dict:
+                    cast_dict[cast_name] = amount
 
-                for cast_name, work_type in cast_names.items():
-                    html += f'<div class="item">{cast_name}　{work_type}</div>'
+            for cast_name, amount in cast_dict.items():
+                amount_str = f"{int(amount):,}円" if amount else "未定"
+                html += f'<div class="item">{cast_name}　{amount_str}</div>'
 
-            # 制作会社
-            production_expenses = [e for e in all_expenses if '出演' not in (e.get('work_type', '') or '')]
-            if production_expenses:
-                html += '<div class="category">制作会社</div>'
-                # 重複を除外
-                production_companies = {}
-                for expense in production_expenses:
-                    partner_name = expense.get('partner_name', '')
-                    work_type = expense.get('work_type', '')
-                    if partner_name and partner_name not in production_companies:
-                        production_companies[partner_name] = work_type
+        # 制作セクション（会社名 金額の形式）
+        production_expenses = [e for e in all_expenses if '出演' not in (e.get('work_type', '') or '')] if all_expenses else []
 
-                for partner_name, work_type in production_companies.items():
-                    html += f'<div class="item">{work_type}　{partner_name}</div>'
+        if production_expenses:
+            html += '<div class="section-title">制作</div>'
+            # 重複を除外して制作会社と金額を表示
+            company_dict = {}
+            for expense in production_expenses:
+                partner_name = expense.get('partner_name', '')
+                amount = expense.get('amount', 0)
+                if partner_name and partner_name not in company_dict:
+                    company_dict[partner_name] = amount
 
-            html += '</div>'
+            for partner_name, amount in company_dict.items():
+                amount_str = f"{int(amount):,}円" if amount else "未定"
+                html += f'<div class="item">{partner_name}　{amount_str}</div>'
 
-        # 【コーナー】セクション
+        # コーナーセクション
         corners = self.db.get_corners_by_parent_production(production_id)
         if corners:
-            html += '<div class="section">'
-            html += '<div class="section-title">コーナー</div>'
-
             for corner in corners:
                 corner_id, corner_name, corner_start_date, corner_end_date = corner
 
-                html += f'<div class="corner-block">'
-                html += f'<div class="category">{corner_name}</div>'
+                html += '<div class="corner-section">'
+                html += f'<div class="corner-title">［コーナー］<br>{corner_name}</div>'
 
-                # コーナーの期間
-                period_parts = []
-                if corner_start_date:
-                    try:
-                        date_obj = datetime.strptime(corner_start_date, '%Y-%m-%d')
-                        period_parts.append(date_obj.strftime('%Y/%m/%d'))
-                    except:
-                        period_parts.append(corner_start_date)
+                # コーナーの放送時間
+                corner_broadcast_days = None
+                corner_data = self.db.get_production_by_id(corner_id)
+                if corner_data:
+                    corner_broadcast_days = corner_data.get('broadcast_days', '') or corner_data.get('broadcast_day', '')
+                    corner_start_time = corner_data.get('start_time', '')
+                    corner_end_time = corner_data.get('end_time', '')
+                    corner_broadcast_time = corner_data.get('broadcast_time', '')
 
-                if corner_end_date:
-                    try:
-                        date_obj = datetime.strptime(corner_end_date, '%Y-%m-%d')
-                        period_parts.append(date_obj.strftime('%Y/%m/%d'))
-                    except:
-                        period_parts.append(corner_end_date)
+                    if corner_broadcast_days:
+                        html += f'<div class="info-row"><span class="label">放送時間</span></div>'
+                        days_list = corner_broadcast_days.split(',') if ',' in corner_broadcast_days else [corner_broadcast_days]
 
-                if period_parts:
-                    html += f'<div class="item">期間: {" ～ ".join(period_parts)}</div>'
+                        for day in days_list:
+                            day = day.strip()
+                            time_str = ""
+                            if corner_start_time and corner_start_time != "00:00:00" and corner_end_time and corner_end_time != "00:00:00":
+                                time_str = f"{corner_start_time}~{corner_end_time}"
+                            elif corner_broadcast_time and corner_broadcast_time != "00:00:00":
+                                time_str = corner_broadcast_time
 
-                # コーナーの月別費用を取得
-                corner_monthly_expenses = self.db.get_monthly_expenses_by_production(corner_id, self.current_month)
-                if corner_monthly_expenses:
-                    corner_total = sum(e.get('amount', 0) for e in corner_monthly_expenses if e.get('amount'))
+                            html += f'<div class="item">{day}　{time_str}</div>'
 
-                    for expense in corner_monthly_expenses:
-                        item_name = expense.get('item_name', '')
-                        partner_name = expense.get('partner_name', '')
-                        work_type = expense.get('work_type', '')
+                    # コーナーの説明
+                    if corner_data.get('description'):
+                        html += f'<div class="info-row"><span class="label">説明</span>{corner_data["description"]}</div>'
+
+                # コーナー出演者
+                corner_expenses = self.db.get_expenses_by_production(corner_id)
+                corner_cast_expenses = [e for e in corner_expenses if '出演' in (e.get('work_type', '') or '')] if corner_expenses else []
+
+                if corner_cast_expenses:
+                    html += '<div style="margin-top:10px;"></div>'
+                    # 重複を除外
+                    corner_cast_dict = {}
+                    for expense in corner_cast_expenses:
+                        cast_name = expense.get('cast_name', '') or expense.get('partner_name', '')
                         amount = expense.get('amount', 0)
-                        impl_date = expense.get('implementation_date', '')
+                        if cast_name and cast_name not in corner_cast_dict:
+                            corner_cast_dict[cast_name] = amount
+
+                    for cast_name, amount in corner_cast_dict.items():
                         amount_str = f"{int(amount):,}円" if amount else "未定"
+                        html += f'<div class="item">コーナー出演者　{cast_name}　{amount_str}</div>'
 
-                        # 日付表示
-                        date_str = ""
-                        if impl_date:
-                            try:
-                                date_obj = datetime.strptime(impl_date, '%Y-%m-%d')
-                                date_str = date_obj.strftime('%m/%d') + " "
-                            except:
-                                pass
+                # コーナー制作会社
+                corner_production_expenses = [e for e in corner_expenses if '出演' not in (e.get('work_type', '') or '')] if corner_expenses else []
 
-                        # 出演かそれ以外か
-                        if '出演' in (work_type or ''):
-                            display_name = item_name
-                        else:
-                            display_name = partner_name
+                if corner_production_expenses:
+                    # 重複を除外
+                    corner_company_dict = {}
+                    for expense in corner_production_expenses:
+                        partner_name = expense.get('partner_name', '')
+                        amount = expense.get('amount', 0)
+                        if partner_name and partner_name not in corner_company_dict:
+                            corner_company_dict[partner_name] = amount
 
-                        html += f'<div class="item">{date_str}{display_name}　{work_type}　{amount_str}</div>'
+                    for partner_name, amount in corner_company_dict.items():
+                        amount_str = f"{int(amount):,}円" if amount else "未定"
+                        html += f'<div class="item">コーナー制作会社　{partner_name}　{amount_str}</div>'
 
-                    if corner_total > 0:
-                        html += f'<div class="item" style="font-weight:bold; margin-top:5px;">コーナー月別合計: {int(corner_total):,}円</div>'
-
-                html += '</div>'  # corner-block終了
-
-            html += '</div>'
-
-        # 【月別費用】セクション
-        monthly_expenses = self.db.get_monthly_expenses_by_production(production_id, self.current_month)
-        if monthly_expenses:
-            html += '<div class="section">'
-
-            # 月表示
-            try:
-                date_obj = datetime.strptime(self.current_month, '%Y-%m')
-                month_display = date_obj.strftime('%Y年%m月')
-            except:
-                month_display = self.current_month
-
-            html += f'<div class="section-title">{month_display}の費用</div>'
-
-            # 出演料
-            cast_expenses = [e for e in monthly_expenses if '出演' in (e.get('work_type', '') or '')]
-            if cast_expenses:
-                html += '<div class="category">出演料</div>'
-                cast_total = 0
-                for expense in cast_expenses:
-                    # 出演者名（cast_name）があればそれを使用、なければpartner_name
-                    cast_name = expense.get('cast_name', '') or expense.get('partner_name', '')
-                    work_type = expense.get('work_type', '')
-                    amount = expense.get('amount', 0)
-                    impl_date = expense.get('implementation_date', '')
-                    amount_str = f"{int(amount):,}円" if amount else "未定"
-
-                    # 日付表示
-                    date_str = ""
-                    if impl_date:
-                        try:
-                            date_obj = datetime.strptime(impl_date, '%Y-%m-%d')
-                            date_str = date_obj.strftime('%m/%d') + " "
-                        except:
-                            pass
-
-                    html += f'<div class="item">{date_str}{cast_name}　{work_type}　{amount_str}</div>'
-                    if amount:
-                        cast_total += amount
-
-            # 制作費
-            production_expenses = [e for e in monthly_expenses if '出演' not in (e.get('work_type', '') or '')]
-            if production_expenses:
-                html += '<div class="category">制作費</div>'
-                production_total = 0
-                for expense in production_expenses:
-                    partner_name = expense.get('partner_name', '')
-                    work_type = expense.get('work_type', '')
-                    amount = expense.get('amount', 0)
-                    impl_date = expense.get('implementation_date', '')
-                    amount_str = f"{int(amount):,}円" if amount else "未定"
-
-                    # 日付表示
-                    date_str = ""
-                    if impl_date:
-                        try:
-                            date_obj = datetime.strptime(impl_date, '%Y-%m-%d')
-                            date_str = date_obj.strftime('%m/%d') + " "
-                        except:
-                            pass
-
-                    html += f'<div class="item">{date_str}{partner_name}　{work_type}　{amount_str}</div>'
-                    if amount:
-                        production_total += amount
-
-            # 月別合計（親番組の費用 + 全コーナーの費用）
-            total_amount = sum(e.get('amount', 0) for e in monthly_expenses if e.get('amount'))
-
-            # コーナーの費用も合計に含める
-            corner_total_sum = 0
-            if corners:
-                for corner in corners:
-                    corner_id = corner[0]
-                    corner_monthly_expenses = self.db.get_monthly_expenses_by_production(corner_id, self.current_month)
-                    corner_total_sum += sum(e.get('amount', 0) for e in corner_monthly_expenses if e.get('amount'))
-
-            total_amount += corner_total_sum
-
-            if total_amount > 0:
-                html += f'<div class="total">月別合計（コーナー含む）: {int(total_amount):,}円</div>'
-
-            html += '</div>'
-        else:
-            # 費用がない場合
-            try:
-                date_obj = datetime.strptime(self.current_month, '%Y-%m')
-                month_display = date_obj.strftime('%Y年%m月')
-            except:
-                month_display = self.current_month
-
-            html += '<div class="section">'
-            html += f'<div class="section-title">{month_display}の費用</div>'
-            html += '<div class="info-row">この月の費用データはありません</div>'
-            html += '</div>'
+                html += '</div>'  # corner-section終了
 
         html += """
         </body>
