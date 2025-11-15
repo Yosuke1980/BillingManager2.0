@@ -4585,10 +4585,11 @@ class OrderManagementDB:
             end_date = f"{next_year}-{next_month:02d}-01"
 
             # 単発番組のみ：開始日が指定月内のものを表示
+            # レギュラーとコーナーを除外（コーナーはレギュラー番組の一部）
             cursor.execute("""
                 SELECT id, name, production_type, start_date, status
                 FROM productions
-                WHERE production_type != 'レギュラー'
+                WHERE production_type NOT IN ('レギュラー', 'コーナー')
                   AND start_date >= ?
                   AND start_date < ?
                 ORDER BY start_date, name
