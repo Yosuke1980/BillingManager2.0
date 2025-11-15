@@ -5232,3 +5232,55 @@ class OrderManagementDB:
             return cursor.lastrowid
         finally:
             conn.close()
+
+    def update_production(self, production_id, production_data):
+        """番組情報を更新
+
+        Args:
+            production_id: 番組ID
+            production_data: dict with keys:
+                - name: 番組名
+                - description: 説明
+                - start_date: 開始日
+                - end_date: 終了日
+                - start_time: 開始時間
+                - end_time: 終了時間
+                - broadcast_days: 放送曜日
+                - status: ステータス
+                - その他のフィールド
+
+        Returns:
+            bool: 成功した場合True
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            # 更新するフィールドを動的に構築
+            update_fields = []
+            update_values = []
+
+            for key, value in production_data.items():
+                if key != 'id':  # idは更新しない
+                    update_fields.append(f"{key} = ?")
+                    update_values.append(value)
+
+            # updated_atを追加
+            update_fields.append("updated_at = CURRENT_TIMESTAMP")
+
+            # WHERE句のためにproduction_idを追加
+            update_values.append(production_id)
+
+            # SQL文を構築
+            sql = f"UPDATE productions SET {', '.join(update_fields)} WHERE id = ?"
+
+            cursor.execute(sql, update_values)
+            conn.commit()
+            return True
+
+        except Exception as e:
+            print(f"番組更新エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        finally:
+            conn.close()
