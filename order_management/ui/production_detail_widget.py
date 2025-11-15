@@ -279,13 +279,16 @@ class ProductionDetailWidget(QWidget):
                 weekday = ['月', '火', '水', '木', '金', '土', '日'][date_obj.weekday()]
 
                 time_str = ""
-                if production.get('broadcast_time') or production.get('start_time'):
-                    start_time = production.get('start_time', '')
-                    end_time = production.get('end_time', '')
-                    if start_time and end_time:
-                        time_str = f" {start_time}～{end_time}"
-                    elif production.get('broadcast_time'):
-                        time_str = f" {production['broadcast_time']}"
+                # 有効な時間データがあるかチェック（"00:00:00"や空文字列は除外）
+                start_time = production.get('start_time', '')
+                end_time = production.get('end_time', '')
+                broadcast_time = production.get('broadcast_time', '')
+
+                # "00:00:00"は無効な時間として扱う
+                if start_time and start_time != "00:00:00" and end_time and end_time != "00:00:00":
+                    time_str = f" {start_time}～{end_time}"
+                elif broadcast_time and broadcast_time != "00:00:00":
+                    time_str = f" {broadcast_time}"
 
                 html += f'<div class="info-row"><span class="label">日時</span>{date_str}（{weekday}）{time_str}</div>'
             except:
@@ -304,18 +307,25 @@ class ProductionDetailWidget(QWidget):
                 role_str = f"{role} " if role else ""
                 html += f'<div class="item">{role_str}{cast_name}</div>'
 
-        # 制作関連（費用項目から取得）
+        # 制作関連（費用項目から取得）- 名前のみ表示（金額は費用セクションで表示）
         expenses = self.db.get_expenses_by_production(production_id)
         if expenses:
             # 制作関連をグループ化（出演料以外）
             production_expenses = [e for e in expenses if '出演' not in (e.get('work_type', '') or '')]
 
             if production_expenses:
-                html += '<div class="info-row"><span class="label">制作</span></div>'
+                # 制作会社を重複なく取得（同じ取引先が複数の費用項目を持つ場合があるため）
+                production_companies = {}
                 for expense in production_expenses:
-                    work_type = expense.get('work_type', '')
                     partner_name = expense.get('partner_name', '')
-                    html += f'<div class="item">{work_type}　{partner_name}</div>'
+                    work_type = expense.get('work_type', '')
+                    if partner_name and partner_name not in production_companies:
+                        production_companies[partner_name] = work_type
+
+                if production_companies:
+                    html += '<div class="info-row"><span class="label">制作</span></div>'
+                    for partner_name, work_type in production_companies.items():
+                        html += f'<div class="item">{work_type}　{partner_name}</div>'
 
         html += '</div>'
 
