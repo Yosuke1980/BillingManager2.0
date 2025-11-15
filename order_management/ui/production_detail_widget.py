@@ -202,21 +202,20 @@ class ProductionDetailWidget(QWidget):
             for production in productions:
                 production_id, name, production_type, start_date = production[:4]
 
-                # 日付を整形
-                if start_date:
-                    try:
-                        date_obj = datetime.strptime(start_date, '%Y-%m-%d')
-                        date_str = date_obj.strftime('%m月%d日')
-                    except:
-                        date_str = start_date
-                else:
-                    date_str = ""
-
-                # リストアイテムを作成
-                if date_str:
-                    display_text = f"{date_str} {name}"
-                else:
+                # レギュラー番組の場合は日付を表示しない
+                if is_regular:
                     display_text = name
+                else:
+                    # 単発番組の場合は日付を整形して表示
+                    if start_date:
+                        try:
+                            date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+                            date_str = date_obj.strftime('%m月%d日')
+                            display_text = f"{date_str} {name}"
+                        except:
+                            display_text = f"{start_date} {name}"
+                    else:
+                        display_text = name
 
                 item = QListWidgetItem(display_text)
                 item.setData(Qt.UserRole, production_id)
