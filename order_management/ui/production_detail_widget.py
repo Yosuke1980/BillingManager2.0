@@ -58,7 +58,8 @@ class ProductionDetailWidget(QWidget):
         self.type_button_group.addButton(self.one_time_radio)
         self.type_button_group.addButton(self.regular_radio)
 
-        self.one_time_radio.toggled.connect(self.on_type_changed)
+        # ボタングループのクリックイベントに接続（どちらのボタンを押しても発火）
+        self.type_button_group.buttonClicked.connect(self.on_type_changed)
 
         month_layout.addWidget(self.one_time_radio)
         month_layout.addWidget(self.regular_radio)
@@ -168,10 +169,10 @@ class ProductionDetailWidget(QWidget):
             self.current_month = month_data
             self.load_productions_for_month()
 
-    def on_type_changed(self, checked):
+    def on_type_changed(self, button=None):
         """番組タイプが変更された時の処理"""
-        if checked:  # 単発番組ラジオボタンがチェックされた時のみ実行
-            self.load_productions_for_month()
+        # ラジオボタンが変更されたら常に再読み込み
+        self.load_productions_for_month()
 
     def load_productions_for_month(self):
         """指定月の番組を読み込み"""
