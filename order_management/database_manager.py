@@ -4534,17 +4534,16 @@ class OrderManagementDB:
                 payment_id, subject, project_name, payee, payee_code, amount, payment_date, status = payment
 
                 # expense_itemsテーブルで対応する費用項目を検索
-                # 照合キー: partner名 (payee) と amount の完全一致
-                # または item_name、partner名、amount の完全一致
+                # 照合キー: partner名 (payee) と amount の完全一致のみ
+                # 項目名（item_name）は無視（billing.dbとexpense_itemsで項目名が異なるため）
                 om_cursor.execute("""
                     SELECT ei.id
                     FROM expense_items ei
                     LEFT JOIN partners p ON ei.partner_id = p.id
                     WHERE p.name = ?
                       AND ei.amount = ?
-                      AND (ei.item_name = ? OR ei.item_name LIKE '%' || ? || '%' OR ? LIKE '%' || ei.item_name || '%')
                     LIMIT 1
-                """, (payee, amount, subject, subject, subject))
+                """, (payee, amount))
 
                 # 対応する費用項目が見つからない場合のみ未登録として追加
                 if om_cursor.fetchone() is None:
