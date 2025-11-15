@@ -4608,6 +4608,28 @@ class OrderManagementDB:
         finally:
             conn.close()
 
+    def get_regular_productions(self):
+        """レギュラー番組の一覧を取得
+
+        Returns:
+            list: レギュラー番組リスト [(id, name, production_type, start_date, status), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, name, production_type, start_date, status
+                FROM productions
+                WHERE production_type = 'レギュラー'
+                ORDER BY name
+            """)
+
+            return cursor.fetchall()
+
+        finally:
+            conn.close()
+
     def get_production_by_id(self, production_id):
         """番組IDから番組情報を取得
 
@@ -4710,6 +4732,66 @@ class OrderManagementDB:
                     'work_type': row[1],
                     'amount': row[2],
                     'partner_name': row[3]
+                })
+
+            return expenses
+
+        finally:
+            conn.close()
+
+    def get_monthly_expenses_by_production(self, production_id, month_str):
+        """レギュラー番組の月別費用項目を取得
+
+        Args:
+            production_id: 番組ID
+            month_str: 月文字列（例: "2025-10"）
+
+        Returns:
+            list: [{'item_name': ..., 'work_type': ..., 'amount': ..., 'implementation_date': ..., ...}, ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 月の開始日と終了日を計算
+            year, month = map(int, month_str.split('-'))
+            start_date = f"{year}-{month:02d}-01"
+
+            # 次月の1日を計算
+            if month == 12:
+                next_month = 1
+                next_year = year + 1
+            else:
+                next_month = month + 1
+                next_year = year
+            end_date = f"{next_year}-{next_month:02d}-01"
+
+            cursor.execute("""
+                SELECT ei.item_name, ei.work_type, ei.amount, p.name as partner_name,
+                       ei.implementation_date
+                FROM expense_items ei
+                LEFT JOIN partners p ON ei.partner_id = p.id
+                WHERE ei.production_id = ?
+                  AND ei.implementation_date >= ?
+                  AND ei.implementation_date < ?
+                ORDER BY
+                    CASE
+                        WHEN ei.work_type LIKE '%出演%' THEN 0
+                        ELSE 1
+                    END,
+                    ei.implementation_date,
+                    ei.id
+            """, (production_id, start_date, end_date))
+
+            rows = cursor.fetchall()
+            expenses = []
+            for row in rows:
+                expenses.append({
+                    'item_name': row[0],
+                    'work_type': row[1],
+                    'amount': row[2],
+                    'partner_name': row[3],
+                    'implementation_date': row[4]
                 })
 
             return expenses
