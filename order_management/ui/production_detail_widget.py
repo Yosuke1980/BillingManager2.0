@@ -502,9 +502,17 @@ class ProductionDetailWidget(QWidget):
 
         # 放送時間（曜日別に表示）
         broadcast_days = production.get('broadcast_days', '') or production.get('broadcast_day', '')
-        start_time = production.get('start_time', '')
-        end_time = production.get('end_time', '')
-        broadcast_time = production.get('broadcast_time', '')
+
+        # 曜日別放送時間のマッピング
+        day_mapping = {
+            '月': 'broadcast_time_mon',
+            '火': 'broadcast_time_tue',
+            '水': 'broadcast_time_wed',
+            '木': 'broadcast_time_thu',
+            '金': 'broadcast_time_fri',
+            '土': 'broadcast_time_sat',
+            '日': 'broadcast_time_sun'
+        }
 
         if broadcast_days:
             html += f'<div class="info-row"><span class="label">放送時間</span></div>'
@@ -514,11 +522,26 @@ class ProductionDetailWidget(QWidget):
 
             for day in days_list:
                 day = day.strip()
-                time_str = ""
-                if start_time and start_time != "00:00:00" and end_time and end_time != "00:00:00":
-                    time_str = f"{start_time}~{end_time}"
-                elif broadcast_time and broadcast_time != "00:00:00":
-                    time_str = broadcast_time
+
+                # 曜日別の放送時間を取得
+                col_name = day_mapping.get(day)
+                day_time = production.get(col_name, '') if col_name else ''
+
+                if day_time:
+                    # 曜日別時間が設定されている場合
+                    time_str = day_time
+                else:
+                    # 従来の方法（全曜日共通）
+                    start_time = production.get('start_time', '')
+                    end_time = production.get('end_time', '')
+                    broadcast_time = production.get('broadcast_time', '')
+
+                    if start_time and start_time != "00:00:00" and end_time and end_time != "00:00:00":
+                        time_str = f"{start_time}~{end_time}"
+                    elif broadcast_time and broadcast_time != "00:00:00":
+                        time_str = broadcast_time
+                    else:
+                        time_str = ""
 
                 html += f'<div class="item">{day}　{time_str}</div>'
 
@@ -730,6 +753,53 @@ class ProductionDetailWidget(QWidget):
         days_layout.addStretch()
         basic_layout.addRow("放送曜日:", days_layout)
 
+        # 曜日別放送時間（レギュラー用）
+        self.broadcast_times_group = QGroupBox("曜日別放送時間")
+        broadcast_times_layout = QVBoxLayout()
+
+        self.day_time_widgets = {}
+        day_names = {
+            '月': 'mon', '火': 'tue', '水': 'wed', '木': 'thu',
+            '金': 'fri', '土': 'sat', '日': 'sun'
+        }
+
+        for day_jp, day_en in day_names.items():
+            day_row = QHBoxLayout()
+
+            # チェックボックス
+            day_check = QCheckBox(f"{day_jp}曜日")
+            day_check.setFixedWidth(80)
+            day_row.addWidget(day_check)
+
+            # 開始時刻
+            start_time = QTimeEdit()
+            start_time.setDisplayFormat("HH:mm")
+            start_time.setTime(QTime(0, 0))
+            day_row.addWidget(QLabel("開始:"))
+            day_row.addWidget(start_time)
+
+            # 終了時刻
+            end_time = QTimeEdit()
+            end_time.setDisplayFormat("HH:mm")
+            end_time.setTime(QTime(0, 0))
+            day_row.addWidget(QLabel("終了:"))
+            day_row.addWidget(end_time)
+
+            day_row.addStretch()
+
+            # ウィジェットを保存
+            self.day_time_widgets[day_en] = {
+                'check': day_check,
+                'start': start_time,
+                'end': end_time
+            }
+
+            broadcast_times_layout.addLayout(day_row)
+
+        self.broadcast_times_group.setLayout(broadcast_times_layout)
+        self.broadcast_times_group.setVisible(False)  # デフォルトで非表示
+        basic_layout.addRow("", self.broadcast_times_group)
+
         # 説明
         self.description_edit = QTextEdit()
         self.description_edit.setMaximumHeight(60)
@@ -748,8 +818,8 @@ class ProductionDetailWidget(QWidget):
         cast_layout = QVBoxLayout()
 
         self.cast_table = QTableWidget()
-        self.cast_table.setColumnCount(6)
-        self.cast_table.setHorizontalHeaderLabels(['役割', '出演者名', '金額', '実施日', '支払予定日', '削除'])
+        self.cast_table.setColumnCount(7)
+        self.cast_table.setHorizontalHeaderLabels(['役割', '出演者名', '金額', '開始日', '終了日', '支払予定日', '削除'])
         self.cast_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.cast_table.setMaximumHeight(200)
         cast_layout.addWidget(self.cast_table)
@@ -766,8 +836,8 @@ class ProductionDetailWidget(QWidget):
         production_layout = QVBoxLayout()
 
         self.production_table = QTableWidget()
-        self.production_table.setColumnCount(6)
-        self.production_table.setHorizontalHeaderLabels(['項目名', '制作会社', '金額', '実施日', '支払予定日', '削除'])
+        self.production_table.setColumnCount(7)
+        self.production_table.setHorizontalHeaderLabels(['項目名', '制作会社', '金額', '開始日', '終了日', '支払予定日', '削除'])
         self.production_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.production_table.setMaximumHeight(200)
         production_layout.addWidget(self.production_table)
@@ -892,6 +962,46 @@ class ProductionDetailWidget(QWidget):
             for cb in self.day_checkboxes.values():
                 cb.setVisible(is_regular)
 
+        # 曜日別放送時間（レギュラーのみ）
+        if is_regular:
+            self.broadcast_times_group.setVisible(True)
+            day_mapping = {
+                'mon': '月', 'tue': '火', 'wed': '水', 'thu': '木',
+                'fri': '金', 'sat': '土', 'sun': '日'
+            }
+
+            for day_en, day_jp in day_mapping.items():
+                col_name = f'broadcast_time_{day_en}'
+                time_str = production.get(col_name, '')
+                widgets = self.day_time_widgets.get(day_en)
+
+                if widgets and time_str:
+                    # 時間が設定されている場合
+                    widgets['check'].setChecked(True)
+                    # HH:MM または HH:MM:SS 形式をパース
+                    if '-' in time_str:  # 範囲形式（開始-終了）
+                        parts = time_str.split('-')
+                        if len(parts) == 2:
+                            try:
+                                start_time = QTime.fromString(parts[0].strip(), 'HH:mm')
+                                end_time = QTime.fromString(parts[1].strip(), 'HH:mm')
+                                widgets['start'].setTime(start_time)
+                                widgets['end'].setTime(end_time)
+                            except:
+                                pass
+                    else:
+                        # 単一時間の場合は開始時間として設定
+                        try:
+                            time = QTime.fromString(time_str, 'HH:mm:ss')
+                            widgets['start'].setTime(time)
+                        except:
+                            pass
+                else:
+                    if widgets:
+                        widgets['check'].setChecked(False)
+        else:
+            self.broadcast_times_group.setVisible(False)
+
         # 費用項目を取得
         expenses = self.db.get_expenses_by_production(self.current_production_id)
 
@@ -939,19 +1049,34 @@ class ProductionDetailWidget(QWidget):
         amount_spin.setValue(int(data.get('amount', 0)) if data else 0)
         self.cast_table.setCellWidget(row, 2, amount_spin)
 
-        # 実施日
-        impl_date = QDateEdit()
-        impl_date.setCalendarPopup(True)
-        impl_date.setDisplayFormat("yyyy-MM-dd")
-        if data and data.get('implementation_date'):
+        # 開始日
+        start_date = QDateEdit()
+        start_date.setCalendarPopup(True)
+        start_date.setDisplayFormat("yyyy-MM-dd")
+        if data and data.get('start_date'):
             try:
-                date = QDate.fromString(data['implementation_date'], 'yyyy-MM-dd')
-                impl_date.setDate(date)
+                date = QDate.fromString(data['start_date'], 'yyyy-MM-dd')
+                start_date.setDate(date)
             except:
-                impl_date.setDate(QDate.currentDate())
+                start_date.setDate(QDate.currentDate())
         else:
-            impl_date.setDate(QDate.currentDate())
-        self.cast_table.setCellWidget(row, 3, impl_date)
+            start_date.setDate(QDate.currentDate())
+        self.cast_table.setCellWidget(row, 3, start_date)
+
+        # 終了日
+        end_date = QDateEdit()
+        end_date.setCalendarPopup(True)
+        end_date.setDisplayFormat("yyyy-MM-dd")
+        end_date.setSpecialValueText("未設定")
+        end_date.setMinimumDate(QDate(2000, 1, 1))
+        end_date.setDate(QDate(2000, 1, 1))  # デフォルトで「未設定」
+        if data and data.get('end_date'):
+            try:
+                date = QDate.fromString(data['end_date'], 'yyyy-MM-dd')
+                end_date.setDate(date)
+            except:
+                pass
+        self.cast_table.setCellWidget(row, 4, end_date)
 
         # 支払予定日
         payment_date = QDateEdit()
@@ -965,13 +1090,13 @@ class ProductionDetailWidget(QWidget):
                 payment_date.setDate(QDate.currentDate())
         else:
             payment_date.setDate(QDate.currentDate())
-        self.cast_table.setCellWidget(row, 4, payment_date)
+        self.cast_table.setCellWidget(row, 5, payment_date)
 
         # 削除ボタン
         delete_btn = QPushButton("×")
         delete_btn.setFixedWidth(30)
         delete_btn.clicked.connect(lambda: self.cast_table.removeRow(row))
-        self.cast_table.setCellWidget(row, 5, delete_btn)
+        self.cast_table.setCellWidget(row, 6, delete_btn)
 
         # expense_id を保存（更新用）
         if data and data.get('id'):
@@ -1007,19 +1132,34 @@ class ProductionDetailWidget(QWidget):
         amount_spin.setValue(int(data.get('amount', 0)) if data else 0)
         self.production_table.setCellWidget(row, 2, amount_spin)
 
-        # 実施日
-        impl_date = QDateEdit()
-        impl_date.setCalendarPopup(True)
-        impl_date.setDisplayFormat("yyyy-MM-dd")
-        if data and data.get('implementation_date'):
+        # 開始日
+        start_date = QDateEdit()
+        start_date.setCalendarPopup(True)
+        start_date.setDisplayFormat("yyyy-MM-dd")
+        if data and data.get('start_date'):
             try:
-                date = QDate.fromString(data['implementation_date'], 'yyyy-MM-dd')
-                impl_date.setDate(date)
+                date = QDate.fromString(data['start_date'], 'yyyy-MM-dd')
+                start_date.setDate(date)
             except:
-                impl_date.setDate(QDate.currentDate())
+                start_date.setDate(QDate.currentDate())
         else:
-            impl_date.setDate(QDate.currentDate())
-        self.production_table.setCellWidget(row, 3, impl_date)
+            start_date.setDate(QDate.currentDate())
+        self.production_table.setCellWidget(row, 3, start_date)
+
+        # 終了日
+        end_date = QDateEdit()
+        end_date.setCalendarPopup(True)
+        end_date.setDisplayFormat("yyyy-MM-dd")
+        end_date.setSpecialValueText("未設定")
+        end_date.setMinimumDate(QDate(2000, 1, 1))
+        end_date.setDate(QDate(2000, 1, 1))  # デフォルトで「未設定」
+        if data and data.get('end_date'):
+            try:
+                date = QDate.fromString(data['end_date'], 'yyyy-MM-dd')
+                end_date.setDate(date)
+            except:
+                pass
+        self.production_table.setCellWidget(row, 4, end_date)
 
         # 支払予定日
         payment_date = QDateEdit()
@@ -1033,13 +1173,13 @@ class ProductionDetailWidget(QWidget):
                 payment_date.setDate(QDate.currentDate())
         else:
             payment_date.setDate(QDate.currentDate())
-        self.production_table.setCellWidget(row, 4, payment_date)
+        self.production_table.setCellWidget(row, 5, payment_date)
 
         # 削除ボタン
         delete_btn = QPushButton("×")
         delete_btn.setFixedWidth(30)
         delete_btn.clicked.connect(lambda: self.production_table.removeRow(row))
-        self.production_table.setCellWidget(row, 5, delete_btn)
+        self.production_table.setCellWidget(row, 6, delete_btn)
 
         # expense_id を保存（更新用）
         if data and data.get('id'):
@@ -1068,12 +1208,30 @@ class ProductionDetailWidget(QWidget):
 
             if is_regular:
                 production_data['start_date'] = self.start_date_edit.date().toString('yyyy-MM-dd')
-                if self.end_date_edit.date().isValid():
+                # 終了日が「未設定」（最小値）の場合はNULLとして保存
+                if self.end_date_edit.date() > QDate(2000, 1, 1):
                     production_data['end_date'] = self.end_date_edit.date().toString('yyyy-MM-dd')
-                
+                else:
+                    production_data['end_date'] = None
+
                 # 放送曜日
                 checked_days = [day for day, cb in self.day_checkboxes.items() if cb.isChecked()]
                 production_data['broadcast_days'] = ','.join(checked_days)
+
+                # 曜日別放送時間を保存
+                day_mapping = {
+                    'mon': '月', 'tue': '火', 'wed': '水', 'thu': '木',
+                    'fri': '金', 'sat': '土', 'sun': '日'
+                }
+                for day_en in day_mapping.keys():
+                    widgets = self.day_time_widgets.get(day_en)
+                    if widgets and widgets['check'].isChecked():
+                        start = widgets['start'].time().toString('HH:mm')
+                        end = widgets['end'].time().toString('HH:mm')
+                        # 開始-終了 形式で保存
+                        production_data[f'broadcast_time_{day_en}'] = f"{start}-{end}"
+                    else:
+                        production_data[f'broadcast_time_{day_en}'] = None
             else:
                 production_data['start_date'] = self.date_edit.date().toString('yyyy-MM-dd')
 
@@ -1139,8 +1297,9 @@ class ProductionDetailWidget(QWidget):
             role_widget = self.cast_table.cellWidget(row, 0)
             name_widget = self.cast_table.cellWidget(row, 1)
             amount_widget = self.cast_table.cellWidget(row, 2)
-            impl_date_widget = self.cast_table.cellWidget(row, 3)
-            payment_date_widget = self.cast_table.cellWidget(row, 4)
+            start_date_widget = self.cast_table.cellWidget(row, 3)
+            end_date_widget = self.cast_table.cellWidget(row, 4)
+            payment_date_widget = self.cast_table.cellWidget(row, 5)
 
             if not name_widget or not amount_widget:
                 return None
@@ -1154,12 +1313,18 @@ class ProductionDetailWidget(QWidget):
                 except:
                     pass
 
+            # 終了日が「未設定」の場合はNone
+            end_date = None
+            if end_date_widget and end_date_widget.date() > QDate(2000, 1, 1):
+                end_date = end_date_widget.date().toString('yyyy-MM-dd')
+
             data = {
                 'id': expense_id,
                 'role': role_widget.text() if role_widget else '',
                 'cast_name': name_widget.currentText() if hasattr(name_widget, 'currentText') else '',
                 'amount': amount_widget.value() if amount_widget else 0,
-                'implementation_date': impl_date_widget.date().toString('yyyy-MM-dd') if impl_date_widget else None,
+                'start_date': start_date_widget.date().toString('yyyy-MM-dd') if start_date_widget else None,
+                'end_date': end_date,
                 'expected_payment_date': payment_date_widget.date().toString('yyyy-MM-dd') if payment_date_widget else None,
             }
 
@@ -1176,8 +1341,9 @@ class ProductionDetailWidget(QWidget):
             item_widget = self.production_table.cellWidget(row, 0)
             company_widget = self.production_table.cellWidget(row, 1)
             amount_widget = self.production_table.cellWidget(row, 2)
-            impl_date_widget = self.production_table.cellWidget(row, 3)
-            payment_date_widget = self.production_table.cellWidget(row, 4)
+            start_date_widget = self.production_table.cellWidget(row, 3)
+            end_date_widget = self.production_table.cellWidget(row, 4)
+            payment_date_widget = self.production_table.cellWidget(row, 5)
 
             if not item_widget or not company_widget or not amount_widget:
                 return None
@@ -1191,12 +1357,18 @@ class ProductionDetailWidget(QWidget):
                 except:
                     pass
 
+            # 終了日が「未設定」の場合はNone
+            end_date = None
+            if end_date_widget and end_date_widget.date() > QDate(2000, 1, 1):
+                end_date = end_date_widget.date().toString('yyyy-MM-dd')
+
             data = {
                 'id': expense_id,
                 'item_name': item_widget.text() if item_widget else '',
                 'partner_name': company_widget.currentText() if hasattr(company_widget, 'currentText') else '',
                 'amount': amount_widget.value() if amount_widget else 0,
-                'implementation_date': impl_date_widget.date().toString('yyyy-MM-dd') if impl_date_widget else None,
+                'start_date': start_date_widget.date().toString('yyyy-MM-dd') if start_date_widget else None,
+                'end_date': end_date,
                 'expected_payment_date': payment_date_widget.date().toString('yyyy-MM-dd') if payment_date_widget else None,
             }
 
@@ -1209,15 +1381,30 @@ class ProductionDetailWidget(QWidget):
     def _save_expense_item(self, data, work_type):
         """費用項目を保存（新規または更新）"""
         try:
-            expense_data = {
-                'production_id': self.current_production_id,
-                'work_type': work_type,
-                'amount': data.get('amount', 0),
-                'implementation_date': data.get('implementation_date'),
-                'expected_payment_date': data.get('expected_payment_date'),
-                'status': '発注予定',
-                'payment_status': '未払い',
-            }
+            is_regular = self.regular_radio.isChecked()
+
+            if is_regular:
+                # レギュラー番組の場合はexpense_templatesに保存
+                template_data = {
+                    'production_id': self.current_production_id,
+                    'work_type': work_type,
+                    'amount': data.get('amount', 0),
+                    'start_date': data.get('start_date'),
+                    'end_date': data.get('end_date'),
+                    'generation_type': '月次',
+                    'auto_generate_enabled': 1,
+                }
+            else:
+                # 単発番組の場合はexpense_itemsに保存
+                expense_data = {
+                    'production_id': self.current_production_id,
+                    'work_type': work_type,
+                    'amount': data.get('amount', 0),
+                    'implementation_date': data.get('start_date') or data.get('implementation_date'),
+                    'expected_payment_date': data.get('expected_payment_date'),
+                    'status': '発注予定',
+                    'payment_status': '未払い',
+                }
 
             # 出演者の場合
             if work_type == '出演':
@@ -1231,16 +1418,23 @@ class ProductionDetailWidget(QWidget):
                     print(f"出演者の取得/作成に失敗: {cast_name}")
                     return None
 
-                expense_data['cast_id'] = cast_id
-                expense_data['item_name'] = f"{data.get('role', '')} {cast_name}".strip()
-
                 # パートナー（事務所）を取得
+                partner_id = None
                 try:
                     cast_info = self.db.get_cast_by_id(cast_id)
                     if cast_info and cast_info[2]:  # partner_id
-                        expense_data['partner_id'] = cast_info[2]
+                        partner_id = cast_info[2]
                 except:
                     pass
+
+                if is_regular:
+                    template_data['cast_id'] = cast_id
+                    template_data['partner_id'] = partner_id
+                    template_data['item_name'] = f"{data.get('role', '')} {cast_name}".strip()
+                else:
+                    expense_data['cast_id'] = cast_id
+                    expense_data['partner_id'] = partner_id
+                    expense_data['item_name'] = f"{data.get('role', '')} {cast_name}".strip()
 
             # 制作の場合
             else:
@@ -1256,16 +1450,27 @@ class ProductionDetailWidget(QWidget):
                     print(f"取引先の取得/作成に失敗: {partner_name}")
                     return None
 
-                expense_data['partner_id'] = partner_id
-                expense_data['item_name'] = item_name
-
-            # 既存のIDがある場合は更新、なければ新規作成
-            if data.get('id'):
-                expense_data['id'] = data['id']
+                if is_regular:
+                    template_data['partner_id'] = partner_id
+                    template_data['item_name'] = item_name
+                else:
+                    expense_data['partner_id'] = partner_id
+                    expense_data['item_name'] = item_name
 
             # 保存
-            expense_id = self.db.save_expense_item(expense_data)
-            return expense_id
+            if is_regular:
+                # レギュラー番組：expense_templatesに保存
+                # 既存のIDがある場合は更新、なければ新規作成
+                if data.get('id'):
+                    template_data['id'] = data['id']
+                template_id = self.db.save_expense_template(template_data)
+                return template_id
+            else:
+                # 単発番組：expense_itemsに保存
+                if data.get('id'):
+                    expense_data['id'] = data['id']
+                expense_id = self.db.save_expense_item(expense_data)
+                return expense_id
 
         except Exception as e:
             print(f"費用項目保存エラー: {e}")

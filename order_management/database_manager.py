@@ -5284,3 +5284,100 @@ class OrderManagementDB:
             return False
         finally:
             conn.close()
+
+    def save_expense_template(self, template_data):
+        """費用テンプレートを保存（新規作成または更新）
+
+        Args:
+            template_data: dict with keys:
+                - id: テンプレートID（更新の場合のみ）
+                - production_id: 番組ID（必須）
+                - partner_id: 取引先ID
+                - cast_id: 出演者ID
+                - item_name: 項目名（必須）
+                - work_type: 作業種別
+                - amount: 金額（必須）
+                - generation_type: 生成タイプ（月次/イベント）
+                - generation_day: 生成日
+                - payment_timing: 支払タイミング
+                - auto_generate_enabled: 自動生成有効フラグ
+                - start_date: 開始日
+                - end_date: 終了日
+                - notes: 備考
+
+        Returns:
+            int: テンプレートID
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            template_id = template_data.get('id')
+
+            if template_id:
+                # 更新
+                update_fields = []
+                update_values = []
+
+                field_map = {
+                    'production_id': 'production_id',
+                    'partner_id': 'partner_id',
+                    'cast_id': 'cast_id',
+                    'item_name': 'item_name',
+                    'work_type': 'work_type',
+                    'amount': 'amount',
+                    'generation_type': 'generation_type',
+                    'generation_day': 'generation_day',
+                    'payment_timing': 'payment_timing',
+                    'auto_generate_enabled': 'auto_generate_enabled',
+                    'start_date': 'start_date',
+                    'end_date': 'end_date',
+                    'notes': 'notes',
+                }
+
+                for key, col_name in field_map.items():
+                    if key in template_data:
+                        update_fields.append(f"{col_name} = ?")
+                        update_values.append(template_data[key])
+
+                update_fields.append("updated_at = CURRENT_TIMESTAMP")
+                update_values.append(template_id)
+
+                sql = f"UPDATE expense_templates SET {', '.join(update_fields)} WHERE id = ?"
+                cursor.execute(sql, update_values)
+                conn.commit()
+                return template_id
+            else:
+                # 新規作成
+                cursor.execute("""
+                    INSERT INTO expense_templates (
+                        production_id, partner_id, cast_id, item_name, work_type, amount,
+                        generation_type, generation_day, payment_timing, auto_generate_enabled,
+                        start_date, end_date, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    template_data.get('production_id'),
+                    template_data.get('partner_id'),
+                    template_data.get('cast_id'),
+                    template_data.get('item_name'),
+                    template_data.get('work_type', '制作'),
+                    template_data.get('amount'),
+                    template_data.get('generation_type', '月次'),
+                    template_data.get('generation_day', 1),
+                    template_data.get('payment_timing', '翌月末払い'),
+                    template_data.get('auto_generate_enabled', 1),
+                    template_data.get('start_date'),
+                    template_data.get('end_date'),
+                    template_data.get('notes', '')
+                ))
+                conn.commit()
+                return cursor.lastrowid
+
+        except Exception as e:
+            conn.rollback()
+            print(f"費用テンプレート保存エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        finally:
+            conn.close()
