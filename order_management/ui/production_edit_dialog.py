@@ -1216,7 +1216,11 @@ class ProductionEditDialog(QDialog):
         # 2. 手動追加の費用項目を取得して表示
         expenses = self.db.get_expenses_by_production(production_id)
         for expense in expenses:
-            expense_id = expense[0]
+            # expense が辞書かタプルか判定
+            if isinstance(expense, dict):
+                expense_id = expense.get('id')
+            else:
+                expense_id = expense[0]
 
             # 詳細情報を取得
             expense_detail = self.db.get_expense_order_by_id(expense_id)
