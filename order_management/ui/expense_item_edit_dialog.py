@@ -12,7 +12,6 @@ from PyQt5.QtCore import QDate
 from order_management.database_manager import OrderManagementDB
 from order_management.ui.custom_date_edit import ImprovedDateEdit
 from order_management.ui.ui_helpers import create_button
-from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
 
 
 class ExpenseItemEditDialog(QDialog):
@@ -145,19 +144,9 @@ class ExpenseItemEditDialog(QDialog):
         layout.addWidget(buttons)
 
     def refresh_contracts(self):
-        """契約リストを更新"""
-        contracts = self.db.get_active_contracts()
-        for contract in contracts:
-            (contract_id, production_name, partner_name, item_name,
-             unit_price, spot_amount, start_date, end_date) = contract
-
-            # 表示テキスト作成
-            amount = spot_amount if spot_amount else unit_price
-            display_text = f"{production_name or '(番組なし)'} - {partner_name or '(取引先なし)'} - {item_name or ''}"
-            if amount:
-                display_text += f" (¥{int(amount):,})"
-
-            self.contract_combo.addItem(display_text, contract_id)
+        """契約リストを更新（契約機能は削除されました）"""
+        # 契約機能は削除されたため、空の実装
+        pass
 
     def refresh_productions(self):
         """番組リストを更新"""
@@ -193,91 +182,54 @@ class ExpenseItemEditDialog(QDialog):
                 self.corner_combo.addItem(corner_name, corner_id)
 
     def _on_contract_selected(self, index):
-        """契約が選択されたときの処理"""
-        if not self.link_contract_checkbox.isChecked():
-            return
-
-        contract_id = self.contract_combo.currentData()
-        if not contract_id:
-            return
-
-        # 契約情報を取得
-        conn = self.db._get_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                SELECT production_id, partner_id, item_name, unit_price, spot_amount, work_type
-                FROM contracts
-                WHERE id = ?
-            """, (contract_id,))
-            contract = cursor.fetchone()
-
-            if contract:
-                production_id, partner_id, item_name, unit_price, spot_amount, work_type = contract
-
-                # 番組を設定
-                if production_id:
-                    idx = self.production_combo.findData(production_id)
-                    if idx >= 0:
-                        self.production_combo.setCurrentIndex(idx)
-
-                # 取引先を設定
-                if partner_id:
-                    idx = self.partner_combo.findData(partner_id)
-                    if idx >= 0:
-                        self.partner_combo.setCurrentIndex(idx)
-
-                # 項目名を設定
-                if item_name:
-                    self.item_name_edit.setText(item_name)
-
-                # 業務種別を設定
-                if work_type:
-                    idx = self.work_type_combo.findText(work_type)
-                    if idx >= 0:
-                        self.work_type_combo.setCurrentIndex(idx)
-
-                # 金額を設定
-                amount = spot_amount if spot_amount else unit_price
-                if amount:
-                    self.amount_spin.setValue(amount)
-        finally:
-            conn.close()
+        """契約が選択されたときの処理（契約機能は削除されました）"""
+        # 契約機能は削除されたため、空の実装
+        pass
 
     def _load_data(self):
-        """データを読み込み"""
+        """データを読み込み（新スキーマ対応）"""
         if not self.expense_data:
             return
 
-        # データ構造: (id, contract_id, production_id, partner_id, item_name,
-        #            amount, implementation_date, order_number, order_date,
-        #            status, invoice_received_date, expected_payment_date, ...)
-
-        # 契約を設定
-        contract_id = self.expense_data[1]
-        if contract_id:
-            idx = self.contract_combo.findData(contract_id)
-            if idx >= 0:
-                self.contract_combo.setCurrentIndex(idx)
+        # データ構造（新スキーマ）:
+        # (id, production_id, partner_id, cast_id, item_name, work_type, amount,
+        #  implementation_date, order_number, order_date, status, invoice_received_date,
+        #  expected_payment_date, expected_payment_amount, payment_scheduled_date,
+        #  actual_payment_date, payment_status, ..., notes, created_at, updated_at,
+        #  template_id, generation_month)
 
         # 番組を設定
-        production_id = self.expense_data[2]
+        production_id = self.expense_data[1]
         if production_id:
-            idx = self.production_combo.findData(production_id)
-            if idx >= 0:
-                self.production_combo.setCurrentIndex(idx)
-            # コーナー一覧を読み込み
-            self.refresh_corners(production_id)
+            # この番組がコーナーかどうかチェック
+            conn = self.db._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute("SELECT parent_production_id FROM productions WHERE id = ?", (production_id,))
+                result = cursor.fetchone()
+                parent_id = result[0] if result else None
 
-        # コーナーを設定
-        corner_id = self.expense_data[28] if len(self.expense_data) > 28 else None
-        if corner_id:
-            idx = self.corner_combo.findData(corner_id)
-            if idx >= 0:
-                self.corner_combo.setCurrentIndex(idx)
+                if parent_id:
+                    # コーナーの場合、親番組を選択してコーナー一覧を表示
+                    idx = self.production_combo.findData(parent_id)
+                    if idx >= 0:
+                        self.production_combo.setCurrentIndex(idx)
+                    self.refresh_corners(parent_id)
+                    # コーナーを選択
+                    idx = self.corner_combo.findData(production_id)
+                    if idx >= 0:
+                        self.corner_combo.setCurrentIndex(idx)
+                else:
+                    # 通常の番組の場合
+                    idx = self.production_combo.findData(production_id)
+                    if idx >= 0:
+                        self.production_combo.setCurrentIndex(idx)
+                    self.refresh_corners(production_id)
+            finally:
+                conn.close()
 
         # 取引先を設定
-        partner_id = self.expense_data[3]
+        partner_id = self.expense_data[2]
         if partner_id:
             idx = self.partner_combo.findData(partner_id)
             if idx >= 0:
@@ -286,11 +238,17 @@ class ExpenseItemEditDialog(QDialog):
         # 項目名
         self.item_name_edit.setText(self.expense_data[4] or "")
 
+        # 業務種別
+        work_type = self.expense_data[5] or "制作"
+        idx = self.work_type_combo.findText(work_type)
+        if idx >= 0:
+            self.work_type_combo.setCurrentIndex(idx)
+
         # 金額
-        self.amount_spin.setValue(self.expense_data[5] or 0)
+        self.amount_spin.setValue(self.expense_data[6] or 0)
 
         # 実施日
-        impl_date_str = self.expense_data[6]
+        impl_date_str = self.expense_data[7]
         if impl_date_str:
             try:
                 year, month, day = impl_date_str.split('-')
@@ -299,7 +257,7 @@ class ExpenseItemEditDialog(QDialog):
                 pass
 
         # 支払予定日
-        payment_date_str = self.expense_data[11]
+        payment_date_str = self.expense_data[12]
         if payment_date_str:
             try:
                 year, month, day = payment_date_str.split('-')
@@ -308,29 +266,23 @@ class ExpenseItemEditDialog(QDialog):
                 pass
 
         # ステータス
-        status = self.expense_data[9] or "発注予定"
+        status = self.expense_data[10] or "発注予定"
         idx = self.status_combo.findText(status)
         if idx >= 0:
             self.status_combo.setCurrentIndex(idx)
 
         # 支払ステータス
-        payment_status = self.expense_data[15] or "未払い"
+        payment_status = self.expense_data[16] or "未払い"
         idx = self.payment_status_combo.findText(payment_status)
         if idx >= 0:
             self.payment_status_combo.setCurrentIndex(idx)
 
         # 備考
-        notes = self.expense_data[23] or ""
+        notes = self.expense_data[32] or ""
         self.notes_edit.setPlainText(notes)
 
-        # 業務種別
-        work_type = self.expense_data[26] if len(self.expense_data) > 26 else "制作"
-        idx = self.work_type_combo.findText(work_type or "制作")
-        if idx >= 0:
-            self.work_type_combo.setCurrentIndex(idx)
-
         # 金額未定フラグ
-        amount_pending = self.expense_data[27] if len(self.expense_data) > 27 else 0
+        amount_pending = self.expense_data[37] if len(self.expense_data) > 37 else 0
         self.amount_pending_checkbox.setChecked(amount_pending == 1)
         if amount_pending == 1:
             self.amount_spin.setEnabled(False)
@@ -360,7 +312,6 @@ class ExpenseItemEditDialog(QDialog):
         """入力されたデータを取得"""
         is_pending = self.amount_pending_checkbox.isChecked()
         data = {
-            'contract_id': self.contract_combo.currentData(),
             'production_id': self.production_combo.currentData(),
             'partner_id': self.partner_combo.currentData(),
             'corner_id': self.corner_combo.currentData(),
@@ -423,76 +374,8 @@ class ExpenseItemEditDialog(QDialog):
                         break
 
     def create_new_contract(self):
-        """新規契約を作成"""
-        # 番組が選択されているか確認
-        production_id = self.production_combo.currentData()
-        if not production_id:
-            QMessageBox.warning(
-                self, "番組未選択",
-                "契約を作成するには、まず番組を選択してください。"
-            )
-            return
+        """新規契約作成（契約機能は削除されました）"""
+        # 契約機能は削除されたため、空の実装
+        pass
 
-        # 現在の選択値を取得
-        partner_id = self.partner_combo.currentData()
-        work_type = self.work_type_combo.currentText()
-
-        # 契約編集ダイアログを開く
-        dialog = OrderContractEditDialog(
-            self,
-            production_id=production_id,
-            partner_id=partner_id,
-            work_type=work_type
-        )
-
-        if dialog.exec_() == QDialog.Accepted:
-            # 契約リストを更新
-            self.refresh_contracts()
-
-            # 新規作成された契約を選択
-            # 最新の契約を取得（番組と取引先でフィルタ）
-            try:
-                conn = self.db._get_connection()
-                cursor = conn.cursor()
-
-                # 最新の契約IDを取得
-                if partner_id:
-                    cursor.execute("""
-                        SELECT id FROM contracts
-                        WHERE production_id = ? AND partner_id = ?
-                        ORDER BY id DESC
-                        LIMIT 1
-                    """, (production_id, partner_id))
-                else:
-                    cursor.execute("""
-                        SELECT id FROM contracts
-                        WHERE production_id = ?
-                        ORDER BY id DESC
-                        LIMIT 1
-                    """, (production_id,))
-
-                result = cursor.fetchone()
-                conn.close()
-
-                if result:
-                    new_contract_id = result[0]
-                    # 契約コンボボックスで新規契約を選択
-                    idx = self.contract_combo.findData(new_contract_id)
-                    if idx >= 0:
-                        self.contract_combo.setCurrentIndex(idx)
-                        # 契約情報を自動入力
-                        self._on_contract_selected(idx)
-                        QMessageBox.information(
-                            self, "成功",
-                            "契約を作成しました。契約情報が自動入力されています。"
-                        )
-                    else:
-                        QMessageBox.information(
-                            self, "成功",
-                            "契約を作成しました。"
-                        )
-            except Exception as e:
-                QMessageBox.warning(
-                    self, "警告",
-                    f"契約を作成しましたが、自動選択に失敗しました:\n{e}"
-                )
+    # 契約機能は削除されました（将来的に費用テンプレート機能に置き換え予定）

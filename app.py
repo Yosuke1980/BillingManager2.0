@@ -4,7 +4,6 @@
 """
 import sys
 import os
-from datetime import datetime
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -24,7 +23,6 @@ from ui import MenuBuilder, ToolbarBuilder, StatusBarManager
 from database import DatabaseManager
 from order_management.database_manager import OrderManagementDB
 from payment_tab import PaymentTab
-from order_management.ui.order_contract_widget import OrderContractWidget
 from order_management.ui.expense_items_widget import ExpenseItemsWidget
 from order_management.ui.production_expense_detail_widget import ProductionExpenseDetailWidget
 from order_management.ui.production_master_widget import ProductionMasterWidget
@@ -161,28 +159,17 @@ class RadioBillingApp(QMainWindow):
         self.master_management_tab = MasterManagementTab(tab_control, self)
         tab_control.addTab(self.master_management_tab, self.config.TAB_NAMES['master_management'])
 
-        # メインタブ7: 発注管理 - 契約一覧（たまに使う）
-        self.order_contract_widget = OrderContractWidget()
-        self.order_management_tab_index = tab_control.addTab(self.order_contract_widget, self.config.TAB_NAMES['order_management'])
-
-        # メインタブ8: データ管理（たまに使う、サブタブあり）
+        # メインタブ7: データ管理（たまに使う、サブタブあり）
         self.data_management_tab = DataManagementTab(tab_control, self)
         tab_control.addTab(self.data_management_tab, self.config.TAB_NAMES['data_management'])
-
-        # シグナル接続：発注追加時に発注書マスタを更新
-        self.data_management_tab.order_check_tab.order_added.connect(
-            self.order_contract_widget.load_contracts
-        )
-
-        # Phase 4.2: データ更新時にバッジを更新するシグナル接続
-        self.data_management_tab.order_check_tab.order_added.connect(
-            self.update_tab_badges
-        )
 
     def _load_initial_data(self):
         """初期データの読み込み"""
         # 起動時はダイアログを表示せずに追記モードでインポート
         self.import_latest_csv(show_dialog=False)
+
+        # 【新機能】費用項目の自動生成（月次）
+        self._auto_generate_monthly_expenses()
 
         # 支払いデータと費用項目の自動照合
         self._auto_reconcile_payments()
@@ -191,12 +178,6 @@ class RadioBillingApp(QMainWindow):
         # データ管理タブ内のサブタブのデータを更新
         self.data_management_tab.expense_tab.refresh_data()
         self.data_management_tab.master_tab.refresh_data()
-
-        # 契約自動延長チェック（起動時）
-        self._check_auto_renewal_on_startup()
-
-        # 起動時アラートとバッジ更新を統合（パフォーマンス最適化）
-        self._check_and_update_urgent_status()
 
     def _auto_reconcile_payments(self):
         """支払いデータと費用項目を自動照合
@@ -222,130 +203,28 @@ class RadioBillingApp(QMainWindow):
             import traceback
             log_message(traceback.format_exc())
 
-    def _check_auto_renewal_on_startup(self):
-        """起動時に契約自動延長をチェック（通知のみ、自動実行はしない）"""
+    def _auto_generate_monthly_expenses(self):
+        """月次費用項目の自動生成（起動時実行）"""
         try:
-            # 自動延長対象の契約を取得
-            contracts = self.order_db.get_contracts_for_auto_renewal()
+            from expense_auto_generator import ExpenseAutoGenerator
 
-            if contracts and len(contracts) > 0:
-                # 確認メッセージを表示
-                message = f"📝 <b>契約自動延長の通知</b><br><br>"
-                message += f"以下の{len(contracts)}件の契約が自動延長の対象です:<br><br>"
+            log_message("💰 月次費用項目の自動生成を開始...")
+            generator = ExpenseAutoGenerator(self.order_db)
+            result = generator.generate_monthly_expenses()  # 当月分
 
-                for i, contract in enumerate(contracts[:3], 1):  # 最初の3件のみ表示
-                    program_name = contract[1]
-                    partner_name = contract[2]
-                    end_date = contract[3]
-                    message += f"{i}. {program_name} - {partner_name}<br>"
-                    message += f"   終了日: {end_date}<br>"
+            if result['generated'] > 0:
+                log_message(f"✓ {result['generated']}件の費用項目を自動生成しました")
 
-                if len(contracts) > 3:
-                    message += f"<br>... 他{len(contracts) - 3}件<br>"
+            if result['skipped'] > 0:
+                log_message(f"→ {result['skipped']}件は既に生成済みのためスキップしました")
 
-                message += "<br>発注管理タブの「自動延長チェック」ボタンから実行できます。"
-
-                msg_box = QMessageBox(self)
-                msg_box.setIcon(QMessageBox.Information)
-                msg_box.setWindowTitle("契約自動延長の通知")
-                msg_box.setTextFormat(Qt.RichText)
-                msg_box.setText(message)
-                msg_box.exec_()
+            if result['failed'] > 0:
+                log_message(f"⚠ {result['failed']}件の生成に失敗しました")
 
         except Exception as e:
-            log_message(f"契約自動延長チェックエラー: {e}")
-
-    def _check_and_update_urgent_status(self):
-        """起動時アラートとバッジ更新を統合（パフォーマンス最適化版）
-
-        データ取得を1回だけ行い、アラート表示とバッジ更新の両方で使用することで
-        起動時のパフォーマンスを向上させる。
-        """
-        try:
-            # データを一度だけ取得
-            contracts = self.order_db.get_order_contracts()
-
-            # 発注契約の緊急件数を計算
-            urgent_contracts = 0
-            for contract in contracts:
-                end_date_str = contract[7] if len(contract) > 7 else None
-                if end_date_str:
-                    try:
-                        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-                        days_until_expiry = (end_date - datetime.now()).days
-                        if days_until_expiry <= 7 or days_until_expiry < 0:
-                            urgent_contracts += 1
-                    except:
-                        pass
-
-            # 1. 緊急アラート表示
-            if urgent_contracts > 0:
-                alert_message = "🚨 <b>緊急対応が必要な項目があります</b><br><br>"
-
-                if urgent_contracts > 0:
-                    alert_message += f"📝 <b>発注契約:</b> {urgent_contracts}件（期限切れ・間近）<br>"
-
-                alert_message += "<br>詳細は各タブで確認してください。"
-
-                msg_box = QMessageBox(self)
-                msg_box.setIcon(QMessageBox.Warning)
-                msg_box.setWindowTitle("起動時アラート")
-                msg_box.setText(alert_message)
-                msg_box.setStandardButtons(QMessageBox.Ok)
-                msg_box.exec_()
-
-            # 2. タブバッジを更新
-            self._update_tab_badges_with_counts(urgent_contracts)
-
-        except Exception as e:
-            log_message(f"起動時チェックでエラー: {e}")
-
-    def _update_tab_badges_with_counts(self, urgent_contracts: int):
-        """タブタイトルのバッジを更新（計算済みの件数を使用）
-
-        Args:
-            urgent_contracts: 緊急対応が必要な発注契約の件数
-        """
-        try:
-            base_order_management_title = self.config.TAB_NAMES['order_management']
-
-            # 発注管理タブのバッジ
-            if urgent_contracts > 0:
-                self.tab_control.setTabText(
-                    self.order_management_tab_index,
-                    f"{base_order_management_title} ⚠️ {urgent_contracts}"
-                )
-            else:
-                self.tab_control.setTabText(self.order_management_tab_index, base_order_management_title)
-
-        except Exception as e:
-            log_message(f"タブバッジ更新でエラー: {e}")
-
-    def update_tab_badges(self):
-        """タブバッジを更新（外部から呼ばれる用）
-
-        データ更新時などに呼ばれる。起動時は _check_and_update_urgent_status() を使用。
-        """
-        try:
-            # データを取得して件数を計算
-            contracts = self.order_db.get_order_contracts()
-            urgent_contracts = 0
-            for contract in contracts:
-                end_date_str = contract[7] if len(contract) > 7 else None
-                if end_date_str:
-                    try:
-                        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-                        days_until_expiry = (end_date - datetime.now()).days
-                        if days_until_expiry <= 7 or days_until_expiry < 0:
-                            urgent_contracts += 1
-                    except:
-                        pass
-
-            # バッジを更新
-            self._update_tab_badges_with_counts(urgent_contracts)
-
-        except Exception as e:
-            log_message(f"タブバッジ更新でエラー: {e}")
+            log_message(f"費用自動生成中にエラーが発生しました: {e}")
+            import traceback
+            log_message(traceback.format_exc())
 
     # ========================================
     # データ管理メソッド

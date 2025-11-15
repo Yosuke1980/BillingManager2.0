@@ -3596,21 +3596,23 @@ class OrderManagementDB:
             expense_id: 費用項目ID
 
         Returns:
-            tuple: 費用項目データ
+            tuple: 費用項目データ（新スキーマ対応）
         """
         conn = self._get_connection()
         cursor = conn.cursor()
 
         try:
             cursor.execute("""
-                SELECT id, contract_id, production_id, partner_id, item_name,
-                       amount, implementation_date, order_number, order_date,
+                SELECT id, production_id, partner_id, cast_id, item_name,
+                       work_type, amount, implementation_date, order_number, order_date,
                        status, invoice_received_date, expected_payment_date,
-                       expected_payment_amount, payment_scheduled_date, payment_date,
+                       expected_payment_amount, payment_scheduled_date, actual_payment_date,
                        payment_status, payment_verified_date, payment_matched_id,
-                       payment_difference, gmail_draft_id, gmail_message_id,
-                       email_sent_at, contact_person, notes, created_at, updated_at,
-                       work_type, amount_pending, corner_id
+                       payment_difference, invoice_number, withholding_tax, consumption_tax,
+                       payment_amount, invoice_file_path, payment_method, approver,
+                       approval_date, gmail_draft_id, gmail_message_id, email_sent_at,
+                       contact_person, notes, created_at, updated_at,
+                       template_id, generation_month, amount_pending
                 FROM expense_items
                 WHERE id = ?
             """, (expense_id,))
@@ -3619,16 +3621,19 @@ class OrderManagementDB:
             conn.close()
 
     def save_expense_item(self, expense_data):
-        """費用項目を保存（新規/更新）
+        """費用項目を保存（新規/更新）（新スキーマ対応）
 
         Args:
             expense_data: dict with keys:
                 - id (optional): 更新時のID
-                - contract_id: 契約ID
                 - production_id: 番組ID
                 - partner_id: 取引先ID
+                - cast_id: 出演者ID (optional)
+                - corner_id: コーナーID (optional) - production_idを上書き
                 - item_name: 項目名
+                - work_type: 業務種別
                 - amount: 金額
+                - amount_pending: 金額未定フラグ
                 - implementation_date: 実施日
                 - expected_payment_date: 支払予定日
                 - status: 状態
@@ -3644,13 +3649,16 @@ class OrderManagementDB:
         try:
             expense_id = expense_data.get('id')
 
+            # corner_idが指定されている場合はproduction_idを上書き
+            production_id = expense_data.get('corner_id') or expense_data.get('production_id')
+
             if expense_id:
                 # 更新
                 cursor.execute("""
                     UPDATE expense_items SET
-                        contract_id = ?,
                         production_id = ?,
                         partner_id = ?,
+                        cast_id = ?,
                         item_name = ?,
                         work_type = ?,
                         amount = ?,
@@ -3663,9 +3671,9 @@ class OrderManagementDB:
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                 """, (
-                    expense_data.get('contract_id'),
-                    expense_data.get('production_id'),
+                    production_id,
                     expense_data.get('partner_id'),
+                    expense_data.get('cast_id'),
                     expense_data.get('item_name'),
                     expense_data.get('work_type', '制作'),
                     expense_data.get('amount', 0),
@@ -3681,14 +3689,14 @@ class OrderManagementDB:
                 # 新規作成
                 cursor.execute("""
                     INSERT INTO expense_items (
-                        contract_id, production_id, partner_id, item_name, work_type,
+                        production_id, partner_id, cast_id, item_name, work_type,
                         amount, amount_pending, implementation_date, expected_payment_date,
                         status, payment_status, notes
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    expense_data.get('contract_id'),
-                    expense_data.get('production_id'),
+                    production_id,
                     expense_data.get('partner_id'),
+                    expense_data.get('cast_id'),
                     expense_data.get('item_name'),
                     expense_data.get('work_type', '制作'),
                     expense_data.get('amount', 0),
@@ -4828,6 +4836,330 @@ class OrderManagementDB:
                 })
 
             return expenses
+
+        finally:
+            conn.close()
+
+    # ========================================
+    # 費用テンプレート関連メソッド
+    # ========================================
+
+    def get_expense_templates(self, production_id=None, auto_generate_only=False):
+        """費用テンプレートを取得
+
+        Args:
+            production_id: 番組IDでフィルタ（Noneなら全て）
+            auto_generate_only: Trueなら自動生成有効のみ
+
+        Returns:
+            List[Tuple]: テンプレートリスト
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            sql = """
+                SELECT
+                    t.id, t.production_id, t.partner_id, t.cast_id,
+                    t.item_name, t.work_type, t.amount,
+                    t.generation_type, t.generation_day, t.payment_timing,
+                    t.auto_generate_enabled, t.start_date, t.end_date, t.notes,
+                    t.created_at, t.updated_at,
+                    p.name as production_name,
+                    pa.name as partner_name,
+                    c.name as cast_name
+                FROM expense_templates t
+                LEFT JOIN productions p ON t.production_id = p.id
+                LEFT JOIN partners pa ON t.partner_id = pa.id
+                LEFT JOIN cast c ON t.cast_id = c.id
+                WHERE 1=1
+            """
+
+            params = []
+
+            if production_id is not None:
+                sql += " AND t.production_id = ?"
+                params.append(production_id)
+
+            if auto_generate_only:
+                sql += " AND t.auto_generate_enabled = 1"
+
+            sql += " ORDER BY t.production_id, t.id"
+
+            cursor.execute(sql, params)
+            return cursor.fetchall()
+
+        finally:
+            conn.close()
+
+    def get_expense_template_by_id(self, template_id):
+        """テンプレートをIDで取得"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT
+                    id, production_id, partner_id, cast_id,
+                    item_name, work_type, amount,
+                    generation_type, generation_day, payment_timing,
+                    auto_generate_enabled, start_date, end_date, notes,
+                    created_at, updated_at
+                FROM expense_templates
+                WHERE id = ?
+            """, (template_id,))
+
+            return cursor.fetchone()
+
+        finally:
+            conn.close()
+
+    def add_expense_template(self, data: dict) -> int:
+        """費用テンプレートを追加"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO expense_templates (
+                    production_id, partner_id, cast_id,
+                    item_name, work_type, amount,
+                    generation_type, generation_day, payment_timing,
+                    auto_generate_enabled, start_date, end_date, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                data['production_id'],
+                data['partner_id'],
+                data.get('cast_id'),
+                data['item_name'],
+                data.get('work_type', '制作'),
+                data['amount'],
+                data.get('generation_type', '月次'),
+                data.get('generation_day', 1),
+                data.get('payment_timing', '翌月末払い'),
+                data.get('auto_generate_enabled', 1),
+                data.get('start_date'),
+                data.get('end_date'),
+                data.get('notes')
+            ))
+
+            template_id = cursor.lastrowid
+            conn.commit()
+            return template_id
+
+        finally:
+            conn.close()
+
+    def update_expense_template(self, template_id: int, data: dict):
+        """費用テンプレートを更新"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE expense_templates SET
+                    production_id = ?,
+                    partner_id = ?,
+                    cast_id = ?,
+                    item_name = ?,
+                    work_type = ?,
+                    amount = ?,
+                    generation_type = ?,
+                    generation_day = ?,
+                    payment_timing = ?,
+                    auto_generate_enabled = ?,
+                    start_date = ?,
+                    end_date = ?,
+                    notes = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (
+                data['production_id'],
+                data['partner_id'],
+                data.get('cast_id'),
+                data['item_name'],
+                data.get('work_type', '制作'),
+                data['amount'],
+                data.get('generation_type', '月次'),
+                data.get('generation_day', 1),
+                data.get('payment_timing', '翌月末払い'),
+                data.get('auto_generate_enabled', 1),
+                data.get('start_date'),
+                data.get('end_date'),
+                data.get('notes'),
+                template_id
+            ))
+
+            conn.commit()
+
+        finally:
+            conn.close()
+
+    def delete_expense_template(self, template_id: int):
+        """費用テンプレートを削除"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("DELETE FROM expense_templates WHERE id = ?", (template_id,))
+            conn.commit()
+
+        finally:
+            conn.close()
+
+    # ========================================
+    # 番組-制作会社関連メソッド
+    # ========================================
+
+    def get_production_partners(self, production_id: int):
+        """番組の制作会社リストを取得"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT
+                    pp.id, pp.production_id, pp.partner_id,
+                    pa.name as partner_name,
+                    pp.role, pp.start_date, pp.end_date
+                FROM production_partners pp
+                LEFT JOIN partners pa ON pp.partner_id = pa.id
+                WHERE pp.production_id = ?
+                ORDER BY pp.id
+            """, (production_id,))
+
+            return cursor.fetchall()
+
+        finally:
+            conn.close()
+
+    def add_production_partner(self, production_id: int, partner_id: int, role: str = '制作'):
+        """番組に制作会社を追加"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO production_partners (production_id, partner_id, role)
+                VALUES (?, ?, ?)
+            """, (production_id, partner_id, role))
+
+            pp_id = cursor.lastrowid
+            conn.commit()
+            return pp_id
+
+        finally:
+            conn.close()
+
+    def delete_production_partner(self, pp_id: int):
+        """番組-制作会社関連を削除"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("DELETE FROM production_partners WHERE id = ?", (pp_id,))
+            conn.commit()
+
+        finally:
+            conn.close()
+
+    # ========================================
+    # 自動生成関連メソッド
+    # ========================================
+
+    def get_active_monthly_templates(self, target_month: str):
+        """自動生成対象の月次テンプレートを取得"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            target_date = f"{target_month}-01"
+
+            cursor.execute("""
+                SELECT
+                    id, production_id, partner_id, cast_id,
+                    item_name, work_type, amount,
+                    generation_type, generation_day, payment_timing,
+                    auto_generate_enabled, start_date, end_date, notes
+                FROM expense_templates
+                WHERE auto_generate_enabled = 1
+                  AND generation_type = '月次'
+                  AND (start_date IS NULL OR start_date <= ?)
+                  AND (end_date IS NULL OR end_date >= ?)
+                ORDER BY id
+            """, (target_date, target_date))
+
+            return cursor.fetchall()
+
+        finally:
+            conn.close()
+
+    def check_generation_log(self, template_id: int, month: str) -> bool:
+        """指定月のテンプレートが既に生成済みかチェック"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM expense_generation_log
+                WHERE template_id = ? AND generation_month = ?
+            """, (template_id, month))
+
+            count = cursor.fetchone()[0]
+            return count > 0
+
+        finally:
+            conn.close()
+
+    def record_generation_log(self, template_id: int, month: str, expense_id: int):
+        """費用生成ログを記録"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO expense_generation_log (template_id, generation_month, expense_item_id)
+                VALUES (?, ?, ?)
+            """, (template_id, month, expense_id))
+
+            conn.commit()
+
+        finally:
+            conn.close()
+
+    def add_expense_item(self, data: dict) -> int:
+        """費用項目を追加（自動生成用）"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO expense_items (
+                    production_id, partner_id, cast_id,
+                    item_name, work_type, amount,
+                    implementation_date, expected_payment_date,
+                    payment_status, status,
+                    template_id, generation_month, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                data['production_id'],
+                data.get('partner_id'),
+                data.get('cast_id'),
+                data['item_name'],
+                data.get('work_type', '制作'),
+                data['amount'],
+                data.get('implementation_date'),
+                data.get('expected_payment_date'),
+                data.get('payment_status', '未払い'),
+                data.get('status', '発注予定'),
+                data.get('template_id'),
+                data.get('generation_month'),
+                data.get('notes')
+            ))
+
+            expense_id = cursor.lastrowid
+            conn.commit()
+            return expense_id
 
         finally:
             conn.close()
