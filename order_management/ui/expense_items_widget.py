@@ -113,7 +113,7 @@ class ExpenseItemsWidget(QWidget):
 
         filter_layout.addWidget(QLabel("データ種別:"))
         self.data_type_filter = QComboBox()
-        self.data_type_filter.addItems(["登録済み費用項目のみ", "未登録支払いのみ", "すべて"])
+        self.data_type_filter.addItems(["すべて", "登録済み費用項目のみ", "未登録支払いのみ"])
         self.data_type_filter.currentTextChanged.connect(self.load_expense_items)
         filter_layout.addWidget(self.data_type_filter)
 
@@ -151,6 +151,9 @@ class ExpenseItemsWidget(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setSelectionMode(QTableWidget.ExtendedSelection)  # 複数選択を許可
         self.table.doubleClicked.connect(self.edit_expense_item)
+
+        # ソート機能を有効化
+        self.table.setSortingEnabled(True)
 
         layout.addWidget(self.table)
 
@@ -406,7 +409,12 @@ class ExpenseItemsWidget(QWidget):
             self.table.setItem(current_row, 2, QTableWidgetItem(partner_name))
             self.table.setItem(current_row, 3, QTableWidgetItem(item_name))
             self.table.setItem(current_row, 4, QTableWidgetItem(work_type))
-            self.table.setItem(current_row, 5, QTableWidgetItem(amount_text))
+
+            # 金額列：ソート用に数値データを設定
+            amount_item = QTableWidgetItem(amount_text)
+            amount_item.setData(Qt.UserRole, amount)  # ソート用の数値データ
+            self.table.setItem(current_row, 5, amount_item)
+
             self.table.setItem(current_row, 6, QTableWidgetItem(implementation_date))
             self.table.setItem(current_row, 7, QTableWidgetItem(expected_payment_date))
             self.table.setItem(current_row, 8, QTableWidgetItem(item_status))
@@ -453,9 +461,12 @@ class ExpenseItemsWidget(QWidget):
             # 業務種別
             self.table.setItem(current_row, 4, QTableWidgetItem(""))
 
-            # 金額
+            # 金額：ソート用に数値データを設定
             amount_text = f"¥{int(amount):,}" if amount else "¥0"
-            self.table.setItem(current_row, 5, QTableWidgetItem(amount_text))
+            amount_value = amount if amount else 0
+            unmatched_amount_item = QTableWidgetItem(amount_text)
+            unmatched_amount_item.setData(Qt.UserRole, amount_value)  # ソート用の数値データ
+            self.table.setItem(current_row, 5, unmatched_amount_item)
 
             # 実施日
             self.table.setItem(current_row, 6, QTableWidgetItem(""))
