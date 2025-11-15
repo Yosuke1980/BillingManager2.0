@@ -420,7 +420,7 @@ class ProductionDetailWidget(QWidget):
                 .section {
                     border: 2px solid #333;
                     padding: 15px;
-                    margin-bottom: 20px;
+                    margin-bottom: 25px;
                     background-color: #fafafa;
                 }
                 .section-title {
@@ -440,7 +440,11 @@ class ProductionDetailWidget(QWidget):
                 .category {
                     font-weight: bold;
                     color: #555;
-                    margin-top: 8px;
+                    margin-top: 15px;
+                    margin-bottom: 5px;
+                }
+                .category:first-of-type {
+                    margin-top: 5px;
                 }
                 .item {
                     margin-left: 20px;
@@ -449,9 +453,14 @@ class ProductionDetailWidget(QWidget):
                 .total {
                     font-weight: bold;
                     font-size: 14px;
-                    margin-top: 10px;
+                    margin-top: 15px;
                     padding: 8px;
                     background-color: #e8f5e9;
+                }
+                .corner-block {
+                    margin-top: 20px;
+                    padding-top: 10px;
+                    border-top: 1px solid #ddd;
                 }
             </style>
         </head>
@@ -549,6 +558,7 @@ class ProductionDetailWidget(QWidget):
             for corner in corners:
                 corner_id, corner_name, corner_start_date, corner_end_date = corner
 
+                html += f'<div class="corner-block">'
                 html += f'<div class="category">{corner_name}</div>'
 
                 # コーナーの期間
@@ -602,6 +612,8 @@ class ProductionDetailWidget(QWidget):
 
                     if corner_total > 0:
                         html += f'<div class="item" style="font-weight:bold; margin-top:5px;">コーナー月別合計: {int(corner_total):,}円</div>'
+
+                html += '</div>'  # corner-block終了
 
             html += '</div>'
 
@@ -669,10 +681,21 @@ class ProductionDetailWidget(QWidget):
                     if amount:
                         production_total += amount
 
-            # 月別合計
+            # 月別合計（親番組の費用 + 全コーナーの費用）
             total_amount = sum(e.get('amount', 0) for e in monthly_expenses if e.get('amount'))
+
+            # コーナーの費用も合計に含める
+            corner_total_sum = 0
+            if corners:
+                for corner in corners:
+                    corner_id = corner[0]
+                    corner_monthly_expenses = self.db.get_monthly_expenses_by_production(corner_id, self.current_month)
+                    corner_total_sum += sum(e.get('amount', 0) for e in corner_monthly_expenses if e.get('amount'))
+
+            total_amount += corner_total_sum
+
             if total_amount > 0:
-                html += f'<div class="total">月別合計: {int(total_amount):,}円</div>'
+                html += f'<div class="total">月別合計（コーナー含む）: {int(total_amount):,}円</div>'
 
             html += '</div>'
         else:
