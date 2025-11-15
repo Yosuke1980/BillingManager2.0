@@ -4584,23 +4584,14 @@ class OrderManagementDB:
                 next_year = year
             end_date = f"{next_year}-{next_month:02d}-01"
 
-            # レギュラー番組：番組名を1回だけ表示（放送中のもの）
-            # 単発番組：開始日が指定月内のものを表示
+            # 単発番組のみ：開始日が指定月内のものを表示
             cursor.execute("""
                 SELECT id, name, production_type, start_date, status
                 FROM productions
-                WHERE (
-                    (production_type = 'レギュラー' AND status = '放送中')
-                    OR
-                    (production_type != 'レギュラー' AND start_date >= ? AND start_date < ?)
-                )
-                ORDER BY
-                    CASE
-                        WHEN production_type = 'レギュラー' THEN 0
-                        ELSE 1
-                    END,
-                    start_date,
-                    name
+                WHERE production_type != 'レギュラー'
+                  AND start_date >= ?
+                  AND start_date < ?
+                ORDER BY start_date, name
             """, (start_date, end_date))
 
             return cursor.fetchall()
@@ -4624,6 +4615,31 @@ class OrderManagementDB:
                 WHERE production_type = 'レギュラー'
                 ORDER BY name
             """)
+
+            return cursor.fetchall()
+
+        finally:
+            conn.close()
+
+    def get_corners_by_parent_production(self, parent_production_id):
+        """親番組IDでコーナー一覧を取得
+
+        Args:
+            parent_production_id: 親番組ID
+
+        Returns:
+            list: コーナーリスト [(id, name, start_date, end_date), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, name, start_date, end_date
+                FROM productions
+                WHERE parent_production_id = ?
+                ORDER BY name
+            """, (parent_production_id,))
 
             return cursor.fetchall()
 

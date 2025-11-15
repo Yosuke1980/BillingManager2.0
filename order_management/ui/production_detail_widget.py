@@ -462,6 +462,24 @@ class ProductionDetailWidget(QWidget):
         html += '<div class="section">'
         html += '<div class="section-title">基本情報</div>'
 
+        # 放送開始日
+        if production.get('start_date'):
+            try:
+                date_obj = datetime.strptime(production['start_date'], '%Y-%m-%d')
+                date_str = date_obj.strftime('%Y年%m月%d日')
+                html += f'<div class="info-row"><span class="label">放送開始日</span>{date_str}</div>'
+            except:
+                html += f'<div class="info-row"><span class="label">放送開始日</span>{production["start_date"]}</div>'
+
+        # 放送終了日
+        if production.get('end_date'):
+            try:
+                date_obj = datetime.strptime(production['end_date'], '%Y-%m-%d')
+                date_str = date_obj.strftime('%Y年%m月%d日')
+                html += f'<div class="info-row"><span class="label">放送終了日</span>{date_str}</div>'
+            except:
+                html += f'<div class="info-row"><span class="label">放送終了日</span>{production["end_date"]}</div>'
+
         # 放送時間
         start_time = production.get('start_time', '')
         end_time = production.get('end_time', '')
@@ -519,6 +537,71 @@ class ProductionDetailWidget(QWidget):
 
                 for partner_name, work_type in production_companies.items():
                     html += f'<div class="item">{work_type}　{partner_name}</div>'
+
+            html += '</div>'
+
+        # 【コーナー】セクション
+        corners = self.db.get_corners_by_parent_production(production_id)
+        if corners:
+            html += '<div class="section">'
+            html += '<div class="section-title">コーナー</div>'
+
+            for corner in corners:
+                corner_id, corner_name, corner_start_date, corner_end_date = corner
+
+                html += f'<div class="category">{corner_name}</div>'
+
+                # コーナーの期間
+                period_parts = []
+                if corner_start_date:
+                    try:
+                        date_obj = datetime.strptime(corner_start_date, '%Y-%m-%d')
+                        period_parts.append(date_obj.strftime('%Y/%m/%d'))
+                    except:
+                        period_parts.append(corner_start_date)
+
+                if corner_end_date:
+                    try:
+                        date_obj = datetime.strptime(corner_end_date, '%Y-%m-%d')
+                        period_parts.append(date_obj.strftime('%Y/%m/%d'))
+                    except:
+                        period_parts.append(corner_end_date)
+
+                if period_parts:
+                    html += f'<div class="item">期間: {" ～ ".join(period_parts)}</div>'
+
+                # コーナーの月別費用を取得
+                corner_monthly_expenses = self.db.get_monthly_expenses_by_production(corner_id, self.current_month)
+                if corner_monthly_expenses:
+                    corner_total = sum(e.get('amount', 0) for e in corner_monthly_expenses if e.get('amount'))
+
+                    for expense in corner_monthly_expenses:
+                        item_name = expense.get('item_name', '')
+                        partner_name = expense.get('partner_name', '')
+                        work_type = expense.get('work_type', '')
+                        amount = expense.get('amount', 0)
+                        impl_date = expense.get('implementation_date', '')
+                        amount_str = f"{int(amount):,}円" if amount else "未定"
+
+                        # 日付表示
+                        date_str = ""
+                        if impl_date:
+                            try:
+                                date_obj = datetime.strptime(impl_date, '%Y-%m-%d')
+                                date_str = date_obj.strftime('%m/%d') + " "
+                            except:
+                                pass
+
+                        # 出演かそれ以外か
+                        if '出演' in (work_type or ''):
+                            display_name = item_name
+                        else:
+                            display_name = partner_name
+
+                        html += f'<div class="item">{date_str}{display_name}　{work_type}　{amount_str}</div>'
+
+                    if corner_total > 0:
+                        html += f'<div class="item" style="font-weight:bold; margin-top:5px;">コーナー月別合計: {int(corner_total):,}円</div>'
 
             html += '</div>'
 
