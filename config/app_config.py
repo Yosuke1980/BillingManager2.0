@@ -46,10 +46,10 @@ class AppConfig:
     # タブ名称
     TAB_NAMES = {
         'payment': '💰 支払い情報',
-        'payment_order_check': '📋 支払い・発注チェック',
         'order_management': '📄 発注管理',
         'master_management': '📚 マスター管理',
-        'data_management': '⚙️ データ管理',
+        'production_management': '🎬 番組・イベント管理',
+        'data_management': '📂 データ管理',
     }
 
     # UI設定

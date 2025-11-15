@@ -24,10 +24,10 @@ from ui import MenuBuilder, ToolbarBuilder, StatusBarManager
 from database import DatabaseManager
 from order_management.database_manager import OrderManagementDB
 from payment_tab import PaymentTab
-from payment_order_check_tab import PaymentOrderCheckTab
 from order_management.ui.order_contract_widget import OrderContractWidget
 from order_management.ui.expense_items_widget import ExpenseItemsWidget
 from order_management.ui.production_expense_detail_widget import ProductionExpenseDetailWidget
+from order_management.ui.production_master_widget import ProductionMasterWidget
 from master_management_tab import MasterManagementTab
 from data_management_tab import DataManagementTab
 from utils import get_latest_csv_file, log_message
@@ -140,17 +140,17 @@ class RadioBillingApp(QMainWindow):
         self.payment_tab = PaymentTab(tab_control, self)
         tab_control.addTab(self.payment_tab, self.config.TAB_NAMES['payment'])
 
-        # メインタブ2: 支払い・発注チェック（毎日使う）
-        self.payment_order_check_tab = PaymentOrderCheckTab()
-        self.payment_check_tab_index = tab_control.addTab(self.payment_order_check_tab, self.config.TAB_NAMES['payment_order_check'])
-
-        # メインタブ3: 費用項目管理（毎日使う - 番組・イベント管理）
+        # メインタブ2: 費用項目管理（毎日使う）
         self.expense_items_widget = ExpenseItemsWidget()
         self.expense_items_tab_index = tab_control.addTab(self.expense_items_widget, "📺 費用項目管理")
 
-        # メインタブ4: 番組別費用詳細（毎日使う - 番組・イベント管理）
+        # メインタブ3: 番組別費用詳細（毎日使う）
         self.production_expense_detail_widget = ProductionExpenseDetailWidget()
         self.production_expense_tab_index = tab_control.addTab(self.production_expense_detail_widget, "📊 番組別費用詳細")
+
+        # メインタブ4: 番組・イベント管理（毎日使う）
+        self.production_master_widget = ProductionMasterWidget()
+        tab_control.addTab(self.production_master_widget, self.config.TAB_NAMES['production_management'])
 
         # メインタブ5: マスター管理（たまに使う）
         self.master_management_tab = MasterManagementTab(tab_control, self)
@@ -259,8 +259,6 @@ class RadioBillingApp(QMainWindow):
         try:
             # データを一度だけ取得
             contracts = self.order_db.get_order_contracts()
-            current_month = datetime.now().strftime("%Y-%m")
-            payment_check_data = self.db_manager.check_payments_against_schedule(current_month)
 
             # 発注契約の緊急件数を計算
             urgent_contracts = 0
@@ -275,18 +273,12 @@ class RadioBillingApp(QMainWindow):
                     except:
                         pass
 
-            # 支払いチェックの問題件数を計算
-            unpaid_count = sum(1 for item in payment_check_data if item['payment_status'] != "✓")
-
             # 1. 緊急アラート表示
-            if urgent_contracts > 0 or unpaid_count > 0:
+            if urgent_contracts > 0:
                 alert_message = "🚨 <b>緊急対応が必要な項目があります</b><br><br>"
 
                 if urgent_contracts > 0:
                     alert_message += f"📝 <b>発注契約:</b> {urgent_contracts}件（期限切れ・間近）<br>"
-
-                if unpaid_count > 0:
-                    alert_message += f"💰 <b>支払未完了:</b> {unpaid_count}件<br>"
 
                 alert_message += "<br>詳細は各タブで確認してください。"
 
@@ -298,30 +290,19 @@ class RadioBillingApp(QMainWindow):
                 msg_box.exec_()
 
             # 2. タブバッジを更新
-            self._update_tab_badges_with_counts(urgent_contracts, unpaid_count)
+            self._update_tab_badges_with_counts(urgent_contracts)
 
         except Exception as e:
             log_message(f"起動時チェックでエラー: {e}")
 
-    def _update_tab_badges_with_counts(self, urgent_contracts: int, unpaid_count: int):
+    def _update_tab_badges_with_counts(self, urgent_contracts: int):
         """タブタイトルのバッジを更新（計算済みの件数を使用）
 
         Args:
             urgent_contracts: 緊急対応が必要な発注契約の件数
-            unpaid_count: 支払未完了の件数
         """
         try:
-            base_payment_check_title = self.config.TAB_NAMES['payment_order_check']
             base_order_management_title = self.config.TAB_NAMES['order_management']
-
-            # 支払いチェックタブのバッジ
-            if unpaid_count > 0:
-                self.tab_control.setTabText(
-                    self.payment_check_tab_index,
-                    f"{base_payment_check_title} 🚨 {unpaid_count}"
-                )
-            else:
-                self.tab_control.setTabText(self.payment_check_tab_index, base_payment_check_title)
 
             # 発注管理タブのバッジ
             if urgent_contracts > 0:
@@ -355,12 +336,8 @@ class RadioBillingApp(QMainWindow):
                     except:
                         pass
 
-            current_month = datetime.now().strftime("%Y-%m")
-            payment_check_data = self.db_manager.check_payments_against_schedule(current_month)
-            unpaid_count = sum(1 for item in payment_check_data if item['payment_status'] != "✓")
-
             # バッジを更新
-            self._update_tab_badges_with_counts(urgent_contracts, unpaid_count)
+            self._update_tab_badges_with_counts(urgent_contracts)
 
         except Exception as e:
             log_message(f"タブバッジ更新でエラー: {e}")
