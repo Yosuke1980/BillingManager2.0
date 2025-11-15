@@ -4525,3 +4525,162 @@ class OrderManagementDB:
 
         finally:
             billing_conn.close()
+
+    def get_productions_for_month(self, month_str):
+        """指定月の番組を取得
+
+        Args:
+            month_str: 月文字列（例: "2025-10"）
+
+        Returns:
+            list: 番組リスト [(id, name, production_type, start_date, ...), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 月の開始日と終了日を計算
+            year, month = map(int, month_str.split('-'))
+            start_date = f"{year}-{month:02d}-01"
+
+            # 次月の1日を計算
+            if month == 12:
+                next_month = 1
+                next_year = year + 1
+            else:
+                next_month = month + 1
+                next_year = year
+            end_date = f"{next_year}-{next_month:02d}-01"
+
+            # レギュラー番組：番組名を1回だけ表示（放送中のもの）
+            # 単発番組：開始日が指定月内のものを表示
+            cursor.execute("""
+                SELECT id, name, production_type, start_date, status
+                FROM productions
+                WHERE (
+                    (production_type = 'レギュラー' AND status = '放送中')
+                    OR
+                    (production_type != 'レギュラー' AND start_date >= ? AND start_date < ?)
+                )
+                ORDER BY
+                    CASE
+                        WHEN production_type = 'レギュラー' THEN 0
+                        ELSE 1
+                    END,
+                    start_date,
+                    name
+            """, (start_date, end_date))
+
+            return cursor.fetchall()
+
+        finally:
+            conn.close()
+
+    def get_production_by_id(self, production_id):
+        """番組IDから番組情報を取得
+
+        Args:
+            production_id: 番組ID
+
+        Returns:
+            dict: 番組情報
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT id, name, description, production_type, start_date, end_date,
+                       start_time, end_time, broadcast_time, broadcast_days, status, location
+                FROM productions
+                WHERE id = ?
+            """, (production_id,))
+
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            return {
+                'id': row[0],
+                'name': row[1],
+                'description': row[2],
+                'production_type': row[3],
+                'start_date': row[4],
+                'end_date': row[5],
+                'start_time': row[6],
+                'end_time': row[7],
+                'broadcast_time': row[8],
+                'broadcast_days': row[9],
+                'status': row[10],
+                'location': row[11]
+            }
+
+        finally:
+            conn.close()
+
+    def get_production_casts(self, production_id):
+        """番組の出演者を取得
+
+        Args:
+            production_id: 番組ID
+
+        Returns:
+            list: [(cast_name, role), ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT c.name, pc.role
+                FROM production_cast pc
+                JOIN cast c ON pc.cast_id = c.id
+                WHERE pc.production_id = ?
+                ORDER BY pc.id
+            """, (production_id,))
+
+            return cursor.fetchall()
+
+        finally:
+            conn.close()
+
+    def get_expenses_by_production(self, production_id):
+        """番組の費用項目を取得
+
+        Args:
+            production_id: 番組ID
+
+        Returns:
+            list: [{'item_name': ..., 'work_type': ..., 'amount': ..., ...}, ...]
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT ei.item_name, ei.work_type, ei.amount, p.name as partner_name
+                FROM expense_items ei
+                LEFT JOIN partners p ON ei.partner_id = p.id
+                WHERE ei.production_id = ?
+                ORDER BY
+                    CASE
+                        WHEN ei.work_type LIKE '%出演%' THEN 0
+                        ELSE 1
+                    END,
+                    ei.id
+            """, (production_id,))
+
+            rows = cursor.fetchall()
+            expenses = []
+            for row in rows:
+                expenses.append({
+                    'item_name': row[0],
+                    'work_type': row[1],
+                    'amount': row[2],
+                    'partner_name': row[3]
+                })
+
+            return expenses
+
+        finally:
+            conn.close()

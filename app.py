@@ -28,6 +28,7 @@ from order_management.ui.order_contract_widget import OrderContractWidget
 from order_management.ui.expense_items_widget import ExpenseItemsWidget
 from order_management.ui.production_expense_detail_widget import ProductionExpenseDetailWidget
 from order_management.ui.production_master_widget import ProductionMasterWidget
+from order_management.ui.production_detail_widget import ProductionDetailWidget
 from master_management_tab import MasterManagementTab
 from data_management_tab import DataManagementTab
 from utils import get_latest_csv_file, log_message
@@ -152,15 +153,19 @@ class RadioBillingApp(QMainWindow):
         self.production_master_widget = ProductionMasterWidget()
         tab_control.addTab(self.production_master_widget, self.config.TAB_NAMES['production_management'])
 
-        # メインタブ5: マスター管理（たまに使う）
+        # メインタブ5: 番組詳細（毎日使う）
+        self.production_detail_widget = ProductionDetailWidget()
+        tab_control.addTab(self.production_detail_widget, "📋 番組詳細")
+
+        # メインタブ6: マスター管理（たまに使う）
         self.master_management_tab = MasterManagementTab(tab_control, self)
         tab_control.addTab(self.master_management_tab, self.config.TAB_NAMES['master_management'])
 
-        # メインタブ6: 発注管理 - 契約一覧（たまに使う）
+        # メインタブ7: 発注管理 - 契約一覧（たまに使う）
         self.order_contract_widget = OrderContractWidget()
         self.order_management_tab_index = tab_control.addTab(self.order_contract_widget, self.config.TAB_NAMES['order_management'])
 
-        # メインタブ7: データ管理（たまに使う、サブタブあり）
+        # メインタブ8: データ管理（たまに使う、サブタブあり）
         self.data_management_tab = DataManagementTab(tab_control, self)
         tab_control.addTab(self.data_management_tab, self.config.TAB_NAMES['data_management'])
 
