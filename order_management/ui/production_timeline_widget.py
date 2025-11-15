@@ -19,7 +19,6 @@ from order_management.database_manager import OrderManagementDB
 from order_management.ui.custom_date_edit import ImprovedDateEdit
 from order_management.ui.production_edit_dialog import ProductionEditDialog
 from order_management.ui.expense_edit_dialog import ExpenseEditDialog
-from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
 
 
 class ProductionTimelineWidget(QWidget):
@@ -516,10 +515,13 @@ class ProductionTimelineWidget(QWidget):
                     self.load_timeline()
 
         elif data_type == "contract":
-            # 契約編集
-            dialog = OrderContractEditDialog(self, contract_id=data_id)
-            if dialog.exec_():
-                self.load_timeline()
+            # 契約機能は削除されました
+            QMessageBox.information(
+                self, "機能削除済み",
+                "契約機能は削除されました。\n"
+                "テンプレートベースの費用生成機能を使用してください。"
+            )
+            return
 
         elif data_type == "expense":
             # 費用項目編集

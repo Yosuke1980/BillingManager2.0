@@ -663,33 +663,8 @@ class ProductionEditDialog(QDialog):
                 production_id = self._get_production_field('id', 0)
                 self.db.save_production_cast(production_id, self.cast_data)
 
-                # 契約作成確認
-                reply = QMessageBox.question(
-                    self, "契約の作成",
-                    f"出演者「{cast['name']}」を追加しました。\n\nこの出演者の契約も作成しますか？",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
-                )
-
-                if reply == QMessageBox.Yes:
-                    # 契約編集ダイアログを開く
-                    from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
-                    # 出演者の事務所（partner_id）を取得
-                    cast_info = self.db.get_cast_by_id(cast['id'])
-                    if cast_info:
-                        partner_id = cast_info[2]  # cast: (id, name, partner_id, notes, created_at, updated_at)
-                        contract_dialog = OrderContractEditDialog(
-                            self,
-                            production_id=production_id,
-                            partner_id=partner_id,
-                            work_type='出演'
-                        )
-                        if contract_dialog.exec_():
-                            QMessageBox.information(self, "成功", "契約を作成しました")
-                elif reply == QMessageBox.Cancel:
-                    # キャンセルの場合、出演者も削除
-                    self.cast_data.remove(cast_data)
-                    self.db.save_production_cast(production_id, self.cast_data)
-                    continue
+                # 契約機能は削除されました
+                # テンプレートベースの費用生成を使用してください
 
                 # データを再読み込み
                 self._load_cast_data()
@@ -814,52 +789,23 @@ class ProductionEditDialog(QDialog):
         production_id = self._get_production_field('id', 0)
         partner_id = data['partner_id']
 
-        # 番組種別と実施日を取得
-        production_type = self.production[3] if len(self.production) > 3 else 'レギュラー'
-        implementation_date = self.production[4] if len(self.production) > 4 else None
-
-        # 契約編集ダイアログを開く
-        from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
-        contract_dialog = OrderContractEditDialog(
-            self,
-            production_id=production_id,
-            partner_id=partner_id,
-            work_type='出演',
-            production_type=production_type,
-            implementation_date=implementation_date
+        # 契約機能は削除されました
+        QMessageBox.information(
+            self, "機能削除済み",
+            "契約機能は削除されました。\n"
+            "テンプレートベースの費用生成機能を使用してください。"
         )
-        if contract_dialog.exec_():
-            QMessageBox.information(self, "成功", "契約を作成しました")
-            # データを再読み込み
-            self._load_cast_data()
-            self._load_expenses()
+        return
 
     def edit_cast_contract(self):
         """選択された契約を編集"""
-        current_row = self.cast_table.currentRow()
-        if current_row < 0:
-            QMessageBox.warning(self, "警告", "編集する契約を選択してください")
-            return
-
-        item = self.cast_table.item(current_row, 0)
-        if not item:
-            return
-
-        data = item.data(Qt.UserRole)
-        contract_id = data.get('contract_id')
-
-        if not contract_id:
-            QMessageBox.warning(self, "警告", "契約が選択されていません")
-            return
-
-        # 契約編集ダイアログを開く
-        from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
-        contract_dialog = OrderContractEditDialog(self, contract_id=contract_id)
-        if contract_dialog.exec_():
-            QMessageBox.information(self, "成功", "契約を更新しました")
-            # データを再読み込み
-            self._load_cast_data()
-            self._load_expenses()
+        # 契約機能は削除されました
+        QMessageBox.information(
+            self, "機能削除済み",
+            "契約機能は削除されました。\n"
+            "テンプレートベースの費用生成機能を使用してください。"
+        )
+        return
 
     def delete_cast(self):
         """出演者削除（契約も削除、複数選択対応）"""
@@ -974,30 +920,8 @@ class ProductionEditDialog(QDialog):
                 producer_ids = [p['id'] for p in self.producer_data]
                 self.db.save_production_producers(production_id, producer_ids)
 
-                # 契約作成確認
-                reply = QMessageBox.question(
-                    self, "契約の作成",
-                    f"制作会社「{partner['name']}」を追加しました。\n\nこの制作会社の契約も作成しますか？",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel
-                )
-
-                if reply == QMessageBox.Yes:
-                    # 契約編集ダイアログを開く
-                    from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
-                    contract_dialog = OrderContractEditDialog(
-                        self,
-                        production_id=production_id,
-                        partner_id=partner['id'],
-                        work_type='制作'
-                    )
-                    if contract_dialog.exec_():
-                        QMessageBox.information(self, "成功", "契約を作成しました")
-                elif reply == QMessageBox.Cancel:
-                    # キャンセルの場合、制作会社も削除
-                    self.producer_data.remove(partner)
-                    producer_ids = [p['id'] for p in self.producer_data]
-                    self.db.save_production_producers(production_id, producer_ids)
-                    continue
+                # 契約機能は削除されました
+                # テンプレートベースの費用生成を使用してください
 
                 # データを再読み込み
                 self._load_producer_data()
@@ -1022,52 +946,23 @@ class ProductionEditDialog(QDialog):
         production_id = self._get_production_field('id', 0)
         partner_id = data['partner_id']
 
-        # 番組種別と実施日を取得
-        production_type = self.production[3] if len(self.production) > 3 else 'レギュラー'
-        implementation_date = self.production[4] if len(self.production) > 4 else None
-
-        # 契約編集ダイアログを開く
-        from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
-        contract_dialog = OrderContractEditDialog(
-            self,
-            production_id=production_id,
-            partner_id=partner_id,
-            work_type='制作',
-            production_type=production_type,
-            implementation_date=implementation_date
+        # 契約機能は削除されました
+        QMessageBox.information(
+            self, "機能削除済み",
+            "契約機能は削除されました。\n"
+            "テンプレートベースの費用生成機能を使用してください。"
         )
-        if contract_dialog.exec_():
-            QMessageBox.information(self, "成功", "契約を作成しました")
-            # データを再読み込み
-            self._load_producer_data()
-            self._load_expenses()
+        return
 
     def edit_producer_contract(self):
         """選択された契約を編集"""
-        current_row = self.producer_table.currentRow()
-        if current_row < 0:
-            QMessageBox.warning(self, "警告", "編集する契約を選択してください")
-            return
-
-        item = self.producer_table.item(current_row, 0)
-        if not item:
-            return
-
-        data = item.data(Qt.UserRole)
-        contract_id = data.get('contract_id')
-
-        if not contract_id:
-            QMessageBox.warning(self, "警告", "契約が選択されていません")
-            return
-
-        # 契約編集ダイアログを開く
-        from order_management.ui.order_contract_edit_dialog import OrderContractEditDialog
-        contract_dialog = OrderContractEditDialog(self, contract_id=contract_id)
-        if contract_dialog.exec_():
-            QMessageBox.information(self, "成功", "契約を更新しました")
-            # データを再読み込み
-            self._load_producer_data()
-            self._load_expenses()
+        # 契約機能は削除されました
+        QMessageBox.information(
+            self, "機能削除済み",
+            "契約機能は削除されました。\n"
+            "テンプレートベースの費用生成機能を使用してください。"
+        )
+        return
 
     def delete_producer(self):
         """制作会社削除（契約も削除、複数選択対応）"""
