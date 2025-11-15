@@ -3392,6 +3392,9 @@ class OrderManagementDB:
             """
             params = []
 
+            # 番組名が空のレコードを除外（削除された番組を参照している不正データ）
+            query += " AND prod.name IS NOT NULL AND prod.name != ''"
+
             # アーカイブフィルタ
             if not show_archived:
                 query += " AND (ei.archived = 0 OR ei.archived IS NULL)"
