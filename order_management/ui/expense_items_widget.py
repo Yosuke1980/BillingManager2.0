@@ -113,7 +113,7 @@ class ExpenseItemsWidget(QWidget):
 
         filter_layout.addWidget(QLabel("データ種別:"))
         self.data_type_filter = QComboBox()
-        self.data_type_filter.addItems(["登録済み費用項目のみ", "未登録支払いのみ"])
+        self.data_type_filter.addItems(["登録済み費用項目のみ", "未登録支払いのみ", "すべて"])
         self.data_type_filter.currentTextChanged.connect(self.load_expense_items)
         filter_layout.addWidget(self.data_type_filter)
 
@@ -257,7 +257,40 @@ class ExpenseItemsWidget(QWidget):
                 expense_items = [item for item in expense_items if item[11] is None or item[11] == "" or item[11] == 0]
 
         elif data_type_filter == "未登録支払いのみ":
-            # billing.dbから未登録支払いデータを取得（このケースのみ）
+            # billing.dbから未登録支払いデータを取得
+            try:
+                all_unmatched = self.db.get_unmatched_payments_from_billing('billing.db')
+                # 検索フィルタを適用
+                if search_term:
+                    unmatched_payments = [
+                        p for p in all_unmatched
+                        if (p[3] and search_term.lower() in p[3].lower()) or  # payee
+                           (p[2] and search_term.lower() in p[2].lower())     # project_name
+                    ]
+                else:
+                    unmatched_payments = all_unmatched
+            except Exception as e:
+                print(f"未登録支払いデータ取得エラー: {e}")
+                unmatched_payments = []
+
+        elif data_type_filter == "すべて":
+            # 両方のデータを取得
+            # 1. 費用項目を取得
+            expense_items = self.db.get_expense_items_with_details(
+                search_term=search_term,
+                payment_status=payment_status,
+                status=status,
+                payment_month=payment_month,
+                show_archived=show_archived
+            )
+
+            # 契約フィルターを適用
+            if contract_filter == "契約あり":
+                expense_items = [item for item in expense_items if item[11] is not None and item[11] != "" and item[11] != 0]
+            elif contract_filter == "契約なし":
+                expense_items = [item for item in expense_items if item[11] is None or item[11] == "" or item[11] == 0]
+
+            # 2. 未登録支払いデータを取得
             try:
                 all_unmatched = self.db.get_unmatched_payments_from_billing('billing.db')
                 # 検索フィルタを適用
