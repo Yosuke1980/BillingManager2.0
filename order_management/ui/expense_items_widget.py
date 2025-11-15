@@ -113,7 +113,7 @@ class ExpenseItemsWidget(QWidget):
 
         filter_layout.addWidget(QLabel("データ種別:"))
         self.data_type_filter = QComboBox()
-        self.data_type_filter.addItems(["すべて", "登録済み費用項目のみ", "未登録支払いのみ"])
+        self.data_type_filter.addItems(["登録済み費用項目のみ", "未登録支払いのみ"])
         self.data_type_filter.currentTextChanged.connect(self.load_expense_items)
         filter_layout.addWidget(self.data_type_filter)
 
@@ -240,7 +240,7 @@ class ExpenseItemsWidget(QWidget):
         expense_items = []
         unmatched_payments = []
 
-        if data_type_filter != "未登録支払いのみ":
+        if data_type_filter == "登録済み費用項目のみ":
             # データベースから費用項目を取得
             expense_items = self.db.get_expense_items_with_details(
                 search_term=search_term,
@@ -256,8 +256,8 @@ class ExpenseItemsWidget(QWidget):
             elif contract_filter == "契約なし":
                 expense_items = [item for item in expense_items if item[11] is None or item[11] == "" or item[11] == 0]
 
-        if data_type_filter != "登録済み費用項目のみ":
-            # billing.dbから未登録支払いデータを取得
+        elif data_type_filter == "未登録支払いのみ":
+            # billing.dbから未登録支払いデータを取得（このケースのみ）
             try:
                 all_unmatched = self.db.get_unmatched_payments_from_billing('billing.db')
                 # 検索フィルタを適用
