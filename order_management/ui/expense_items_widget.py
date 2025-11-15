@@ -449,14 +449,15 @@ class ExpenseItemsWidget(QWidget):
             id_item.setData(Qt.UserRole, f"unmatched_{payment_id}")  # 未登録支払いを識別
             self.table.setItem(current_row, 0, id_item)
 
-            # 番組名
-            self.table.setItem(current_row, 1, QTableWidgetItem(project_name or ""))
+            # 番組名（billing.dbのproject_nameは番組名ではなく詳細説明なので空欄にする）
+            self.table.setItem(current_row, 1, QTableWidgetItem(""))
 
             # 取引先名
             self.table.setItem(current_row, 2, QTableWidgetItem(payee or ""))
 
-            # 項目名
-            self.table.setItem(current_row, 3, QTableWidgetItem("（未登録支払い）"))
+            # 項目名（subjectが空の場合はproject_nameを使用）
+            item_name_display = subject if subject else (project_name or "（項目名なし）")
+            self.table.setItem(current_row, 3, QTableWidgetItem(item_name_display))
 
             # 業務種別
             self.table.setItem(current_row, 4, QTableWidgetItem(""))
@@ -483,8 +484,9 @@ class ExpenseItemsWidget(QWidget):
             # 契約
             self.table.setItem(current_row, 10, QTableWidgetItem("―"))
 
-            # 備考（件名を表示）
-            self.table.setItem(current_row, 11, QTableWidgetItem(subject or ""))
+            # 備考（project_nameを表示。subjectが空の場合は空欄）
+            notes_display = project_name if subject else ""
+            self.table.setItem(current_row, 11, QTableWidgetItem(notes_display))
 
             # 行全体に背景色を適用（薄いオレンジ）
             for col in range(self.table.columnCount()):
