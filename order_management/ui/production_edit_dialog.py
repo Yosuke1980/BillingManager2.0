@@ -416,14 +416,29 @@ class ProductionEditDialog(QDialog):
             production_type = production[3] if len(production) > 3 else "レギュラー"
 
             # 自分自身を除外（編集時）
-            if self.is_edit and production[0] == self.production[0]:
-                continue
+            if self.is_edit:
+                # self.productionがタプルか辞書か判定
+                if isinstance(self.production, dict):
+                    if production[0] == self.production.get('id'):
+                        continue
+                else:
+                    if production[0] == self.production[0]:
+                        continue
 
             # レギュラー番組のみ親になれる（新旧両方の名称に対応）
             if production_type not in ["レギュラー番組", "レギュラー"]:
                 continue
 
             self.parent_production_combo.addItem(production[1], production[0])
+
+    def _get_production_field(self, key, index=None):
+        """番組データから指定フィールドを取得（辞書/タプル両対応）"""
+        if isinstance(self.production, dict):
+            return self.production.get(key)
+        else:
+            if index is not None and len(self.production) > index:
+                return self.production[index]
+            return None
 
     def _load_production_data(self):
         """制作物データを読み込み"""
@@ -432,12 +447,12 @@ class ProductionEditDialog(QDialog):
 
         # get_production_by_id returns: (id, name, description, production_type, start_date, end_date,
         #                                 start_time, end_time, broadcast_time, broadcast_days, status, parent_production_id)
-        self.name_edit.setText(self.production[1] or "")
-        self.description_edit.setPlainText(self.production[2] or "")
+        self.name_edit.setText(self._get_production_field('name', 1) or "")
+        self.description_edit.setPlainText(self._get_production_field('description', 2) or "")
 
         # 種別を設定（インデックス3: production_type）
-        if len(self.production) > 3 and self.production[3]:
-            production_type = self.production[3]
+        production_type = self._get_production_field('production_type', 3)
+        if production_type:
             # 新旧両方の名称に対応
             if production_type in ["特別番組", "特番"]:
                 self.type_special.setChecked(True)
@@ -455,46 +470,52 @@ class ProductionEditDialog(QDialog):
                 self.type_regular.setChecked(True)
 
         # 開始日・終了日を設定（インデックス4, 5）
-        if len(self.production) > 4 and self.production[4]:
-            self.start_date_edit.setDate(QDate.fromString(self.production[4], "yyyy-MM-dd"))
-        if len(self.production) > 5 and self.production[5]:
-            self.end_date_edit.setDate(QDate.fromString(self.production[5], "yyyy-MM-dd"))
+        start_date = self._get_production_field('start_date', 4)
+        if start_date:
+            self.start_date_edit.setDate(QDate.fromString(start_date, "yyyy-MM-dd"))
+
+        end_date = self._get_production_field('end_date', 5)
+        if end_date:
+            self.end_date_edit.setDate(QDate.fromString(end_date, "yyyy-MM-dd"))
         else:
             # 終了日が未定の場合
             self.end_date_edit.setDate(QDate(2000, 1, 1))
 
         # 実施時間を設定（インデックス6, 7: start_time, end_time）
-        if len(self.production) > 6 and self.production[6]:
-            self.start_time_edit.setTime(QTime.fromString(self.production[6], "HH:mm:ss"))
-        if len(self.production) > 7 and self.production[7]:
-            self.end_time_edit.setTime(QTime.fromString(self.production[7], "HH:mm:ss"))
+        start_time = self._get_production_field('start_time', 6)
+        if start_time:
+            self.start_time_edit.setTime(QTime.fromString(start_time, "HH:mm:ss"))
+
+        end_time = self._get_production_field('end_time', 7)
+        if end_time:
+            self.end_time_edit.setTime(QTime.fromString(end_time, "HH:mm:ss"))
 
         # 放送時間を設定（インデックス8: broadcast_time）
-        if len(self.production) > 8:
-            self.broadcast_time_edit.setText(self.production[8] or "")
+        broadcast_time = self._get_production_field('broadcast_time', 8)
+        self.broadcast_time_edit.setText(broadcast_time or "")
 
         # 放送曜日を設定（インデックス9: broadcast_days）
-        if len(self.production) > 9:
-            broadcast_days = self.production[9] or ""
-            if broadcast_days:
-                for day in broadcast_days.split(","):
-                    if day in self.day_checkboxes:
-                        self.day_checkboxes[day].setChecked(True)
+        broadcast_days = self._get_production_field('broadcast_days', 9) or ""
+        if broadcast_days:
+            for day in broadcast_days.split(","):
+                if day in self.day_checkboxes:
+                    self.day_checkboxes[day].setChecked(True)
 
         # ステータスを設定（インデックス10: status）
-        if len(self.production) > 10 and self.production[10] == "終了":
+        status = self._get_production_field('status', 10)
+        if status == "終了":
             self.status_ended.setChecked(True)
 
         # 親制作物を設定（インデックス11: parent_production_id）
-        if len(self.production) > 11 and self.production[11]:
-            parent_production_id = self.production[11]
+        parent_production_id = self._get_production_field('parent_production_id', 11)
+        if parent_production_id:
             for i in range(self.parent_production_combo.count()):
                 if self.parent_production_combo.itemData(i) == parent_production_id:
                     self.parent_production_combo.setCurrentIndex(i)
                     break
 
         # 出演者を読み込み
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
         self._load_cast_data()
 
         # 制作会社を読み込み
@@ -508,7 +529,7 @@ class ProductionEditDialog(QDialog):
         if not self.is_edit:
             return
 
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
         cast_with_contracts = self.db.get_production_cast_with_contracts(production_id)
 
         self.cast_data = []
@@ -639,7 +660,7 @@ class ProductionEditDialog(QDialog):
                 # 出演者を保存
                 cast_data = {'cast_id': cast['id'], 'role': role}
                 self.cast_data.append(cast_data)
-                production_id = self.production[0]
+                production_id = self._get_production_field('id', 0)
                 self.db.save_production_cast(production_id, self.cast_data)
 
                 # 契約作成確認
@@ -680,7 +701,7 @@ class ProductionEditDialog(QDialog):
         if not self.is_edit:
             return
 
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
         producer_with_contracts = self.db.get_production_producers_with_contracts(production_id)
 
         self.producer_data = []
@@ -790,7 +811,7 @@ class ProductionEditDialog(QDialog):
             return
 
         data = item.data(Qt.UserRole)
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
         partner_id = data['partner_id']
 
         # 番組種別と実施日を取得
@@ -850,7 +871,7 @@ class ProductionEditDialog(QDialog):
             QMessageBox.warning(self, "警告", "削除する出演者を選択してください")
             return
 
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
 
         # 選択された出演者のデータを取得
         casts_to_delete = []
@@ -949,7 +970,7 @@ class ProductionEditDialog(QDialog):
 
                 # 制作会社を保存
                 self.producer_data.append(partner)
-                production_id = self.production[0]
+                production_id = self._get_production_field('id', 0)
                 producer_ids = [p['id'] for p in self.producer_data]
                 self.db.save_production_producers(production_id, producer_ids)
 
@@ -998,7 +1019,7 @@ class ProductionEditDialog(QDialog):
             return
 
         data = item.data(Qt.UserRole)
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
         partner_id = data['partner_id']
 
         # 番組種別と実施日を取得
@@ -1058,7 +1079,7 @@ class ProductionEditDialog(QDialog):
             QMessageBox.warning(self, "警告", "削除する制作会社を選択してください")
             return
 
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
 
         # 選択された制作会社のデータを取得
         producers_to_delete = []
@@ -1139,7 +1160,7 @@ class ProductionEditDialog(QDialog):
         if not self.is_edit:
             return
 
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
         self.expense_data = []
         self.expense_table.setRowCount(0)
 
@@ -1268,7 +1289,7 @@ class ProductionEditDialog(QDialog):
             QMessageBox.warning(self, "警告", "番組を保存してから費用項目を追加してください")
             return
 
-        production_id = self.production[0]
+        production_id = self._get_production_field('id', 0)
         dialog = ExpenseEditDialog(self, production_id=production_id)
         if dialog.exec_():
             # データを保存
