@@ -1002,8 +1002,15 @@ class ProductionDetailWidget(QWidget):
         else:
             self.broadcast_times_group.setVisible(False)
 
-        # 費用項目を取得
-        expenses = self.db.get_expenses_by_production(self.current_production_id)
+        # 費用項目を取得（レギュラー番組はテンプレートから、単発は費用項目から）
+        if is_regular:
+            # レギュラー番組：テンプレートから読み込み
+            templates = self.db.get_expense_templates(production_id=self.current_production_id)
+            # タプルを辞書に変換
+            expenses = [self.db.convert_template_tuple_to_dict(t) for t in templates] if templates else []
+        else:
+            # 単発番組：費用項目から読み込み
+            expenses = self.db.get_expenses_by_production(self.current_production_id)
 
         # 出演者テーブルをクリアして読み込み
         self.cast_table.setRowCount(0)
@@ -1242,36 +1249,46 @@ class ProductionDetailWidget(QWidget):
             # 番組情報を更新
             self.db.update_production(self.current_production_id, production_data)
 
-            # 既存の費用項目を取得
-            existing_expenses = self.db.get_expenses_by_production(self.current_production_id)
-            existing_expense_ids = set(e.get('id') for e in existing_expenses if e.get('id'))
+            # 既存の費用項目/テンプレートを取得
+            if is_regular:
+                # レギュラー番組：テンプレートを取得
+                templates = self.db.get_expense_templates(production_id=self.current_production_id)
+                existing_items = [self.db.convert_template_tuple_to_dict(t) for t in templates] if templates else []
+            else:
+                # 単発番組：費用項目を取得
+                existing_items = self.db.get_expenses_by_production(self.current_production_id)
+
+            existing_item_ids = set(e.get('id') for e in existing_items if e.get('id'))
 
             # 保存された費用項目のIDを追跡
-            saved_expense_ids = set()
+            saved_item_ids = set()
 
             # 出演者の保存
             for row in range(self.cast_table.rowCount()):
                 expense_data = self._get_cast_row_data(row)
                 if expense_data:
-                    expense_id = self._save_expense_item(expense_data, '出演')
-                    if expense_id:
-                        saved_expense_ids.add(expense_id)
+                    item_id = self._save_expense_item(expense_data, '出演')
+                    if item_id:
+                        saved_item_ids.add(item_id)
 
             # 制作項目の保存
             for row in range(self.production_table.rowCount()):
                 expense_data = self._get_production_row_data(row)
                 if expense_data:
-                    expense_id = self._save_expense_item(expense_data, '制作')
-                    if expense_id:
-                        saved_expense_ids.add(expense_id)
+                    item_id = self._save_expense_item(expense_data, '制作')
+                    if item_id:
+                        saved_item_ids.add(item_id)
 
-            # 削除された費用項目を削除
-            deleted_ids = existing_expense_ids - saved_expense_ids
-            for expense_id in deleted_ids:
+            # 削除された費用項目/テンプレートを削除
+            deleted_ids = existing_item_ids - saved_item_ids
+            for item_id in deleted_ids:
                 try:
-                    self.db.delete_expense_item(expense_id)
+                    if is_regular:
+                        self.db.delete_expense_template(item_id)
+                    else:
+                        self.db.delete_expense_item(item_id)
                 except Exception as e:
-                    print(f"費用項目削除エラー (ID: {expense_id}): {e}")
+                    print(f"費用項目削除エラー (ID: {item_id}): {e}")
 
             QMessageBox.information(self, "保存完了", "変更を保存しました")
 

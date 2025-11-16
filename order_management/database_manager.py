@@ -5381,3 +5381,60 @@ class OrderManagementDB:
             return None
         finally:
             conn.close()
+
+    def delete_expense_template(self, template_id):
+        """費用テンプレートを削除
+
+        Args:
+            template_id: 削除するテンプレートID
+
+        Returns:
+            bool: 削除成功時True
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("DELETE FROM expense_templates WHERE id = ?", (template_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"費用テンプレート削除エラー (ID: {template_id}): {e}")
+            return False
+        finally:
+            conn.close()
+
+    def convert_template_tuple_to_dict(self, template_tuple):
+        """テンプレートタプルを辞書に変換
+
+        Args:
+            template_tuple: get_expense_templatesの結果のタプル
+
+        Returns:
+            dict: 辞書形式のテンプレートデータ
+        """
+        if not template_tuple:
+            return None
+
+        return {
+            'id': template_tuple[0],
+            'production_id': template_tuple[1],
+            'partner_id': template_tuple[2],
+            'cast_id': template_tuple[3],
+            'item_name': template_tuple[4],
+            'work_type': template_tuple[5],
+            'amount': template_tuple[6],
+            'generation_type': template_tuple[7],
+            'generation_day': template_tuple[8],
+            'payment_timing': template_tuple[9],
+            'auto_generate_enabled': template_tuple[10],
+            'start_date': template_tuple[11],
+            'end_date': template_tuple[12],
+            'notes': template_tuple[13],
+            'created_at': template_tuple[14],
+            'updated_at': template_tuple[15],
+            'production_name': template_tuple[16],
+            'partner_name': template_tuple[17],
+            'cast_name': template_tuple[18],
+        }
